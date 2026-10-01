@@ -1,0 +1,191 @@
+@import "tailwindcss";
+
+/* =============================================================================
+   PROMETHEUS · DESIGN TOKENS
+   Cores e tipografia do Brand Kit v1.0. Use sempre os tokens (ex.: bg-volt,
+   text-ink, border-linha) em vez de valores soltos.
+   ============================================================================= */
+
+@theme {
+  /* Marca */
+  --color-volt: #2bde94;
+  --color-volt-600: #1fc282;
+  --color-volt-700: #149a66;
+  --color-volt-100: #d5f8e9;
+  --color-volt-50: #ecfcf5;
+
+  --color-ink: #0a0e14;
+  --color-ink-900: #0f141c;
+  --color-ink-800: #161c26;
+  --color-ink-700: #212937;
+  --color-ink-600: #343e4f;
+
+  /* Superfícies e texto */
+  --color-papel: #f5f6f8;
+  --color-superficie: #ffffff;
+  --color-linha: #e6e8ec;
+  --color-linha-forte: #d5d9df;
+  --color-suave: #6b7280;
+  --color-sutil: #9aa1ad;
+
+  /* Canais */
+  --color-shopify: #5b8def;
+  --color-shopify-50: #edf3fe;
+  --color-shopify-700: #2f5fc4;
+  --color-app: #8b7cf6;
+  --color-app-50: #f1effe;
+  --color-app-700: #5b48d6;
+  --color-vip: #e8b53e;
+  --color-vip-50: #fcf6e4;
+  --color-vip-700: #8a6510;
+  --color-whatsapp: #25d366;
+  --color-whatsapp-50: #e9fbf0;
+  --color-whatsapp-700: #128c4a;
+
+  /* Estados */
+  --color-sucesso: #1fa36b;
+  --color-sucesso-50: #e7f7ef;
+  --color-alerta: #e8890c;
+  --color-alerta-50: #fdf1e1;
+  --color-perigo: #e5484d;
+  --color-perigo-50: #fdeced;
+
+  --radius-cartao: 18px;
+  --shadow-cartao: 0 1px 2px rgb(10 14 20 / 0.04);
+  --shadow-flutuante: 0 12px 32px -12px rgb(10 14 20 / 0.25);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-archivo), var(--font-geist), sans-serif;
+}
+
+/* -----------------------------------------------------------------------------
+   Escala tipográfica do Brand Kit
+   Display 72/72 · Título 1 40/44 · Título 2 28/34 · Título 3 18/26
+   Corpo 15/24 · Dado 14/20 (mono) · Rótulo 11 caixa alta +8% (mono)
+   ----------------------------------------------------------------------------- */
+
+@utility tipo-display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 72px;
+  line-height: 72px;
+  font-stretch: 108%;
+  font-variation-settings: "wdth" 108;
+  letter-spacing: -0.02em;
+}
+
+@utility tipo-h1 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 40px;
+  line-height: 44px;
+  font-stretch: 108%;
+  font-variation-settings: "wdth" 108;
+  letter-spacing: -0.015em;
+}
+
+@utility tipo-h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 28px;
+  line-height: 34px;
+  font-stretch: 108%;
+  font-variation-settings: "wdth" 108;
+  letter-spacing: -0.01em;
+}
+
+@utility tipo-h3 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 18px;
+  line-height: 26px;
+}
+
+@utility tipo-numero {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-stretch: 108%;
+  font-variation-settings: "wdth" 108;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+@utility tipo-dado {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+@utility tipo-rotulo {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* -----------------------------------------------------------------------------
+   Base
+   ----------------------------------------------------------------------------- */
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background: var(--color-papel);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 24px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--color-volt);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-volt-600);
+    outline-offset: 2px;
+  }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+}
+
+/* -----------------------------------------------------------------------------
+   Impressão (relatórios do Grupo VIP, pedidos)
+   ----------------------------------------------------------------------------- */
+
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+
+  body {
+    background: #fff;
+    font-size: 11pt;
+    line-height: 1.35;
+  }
+
+  .quebra-antes {
+    break-before: page;
+  }
+
+  .evitar-quebra {
+    break-inside: avoid;
+  }
+}

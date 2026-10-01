@@ -1,0 +1,19 @@
+<!-- Prometheus CRM · E-mail de convite da equipe (Supabase Auth › Email Templates › Invite user) -->
+<div style="background:#f5f6f8;padding:32px 16px;font-family:Arial,Helvetica,sans-serif;color:#0a0e14">
+  <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:18px;padding:32px;border:1px solid #e6e8ec">
+    <div style="display:inline-block;background:#2bde94;color:#0a0e14;font-weight:800;border-radius:10px;padding:6px 12px;letter-spacing:1px">
+      PROMETHEUS
+    </div>
+    <h1 style="font-size:24px;line-height:30px;margin:24px 0 8px">Você foi convidado(a) para o CRM</h1>
+    <p style="font-size:15px;line-height:24px;color:#6b7280;margin:0 0 24px">
+      Clique no botão abaixo para criar sua senha e acessar o Prometheus CRM.
+    </p>
+    <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite&next=/redefinir-senha"
+       style="display:inline-block;background:#2bde94;color:#0a0e14;text-decoration:none;font-weight:700;padding:14px 22px;border-radius:12px">
+      Criar minha senha
+    </a>
+    <p style="font-size:12px;line-height:18px;color:#9aa1ad;margin:24px 0 0">
+      Se você não esperava este convite, ignore este e-mail.
+    </p>
+  </div>
+</div>

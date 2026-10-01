@@ -1,0 +1,19 @@
+<!-- Prometheus CRM · E-mail de recuperação de senha (Supabase Auth › Email Templates › Reset password) -->
+<div style="background:#f5f6f8;padding:32px 16px;font-family:Arial,Helvetica,sans-serif;color:#0a0e14">
+  <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:18px;padding:32px;border:1px solid #e6e8ec">
+    <div style="display:inline-block;background:#2bde94;color:#0a0e14;font-weight:800;border-radius:10px;padding:6px 12px;letter-spacing:1px">
+      PROMETHEUS
+    </div>
+    <h1 style="font-size:24px;line-height:30px;margin:24px 0 8px">Redefinir sua senha</h1>
+    <p style="font-size:15px;line-height:24px;color:#6b7280;margin:0 0 24px">
+      Recebemos um pedido para criar uma nova senha no Prometheus CRM.
+    </p>
+    <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/redefinir-senha"
+       style="display:inline-block;background:#2bde94;color:#0a0e14;text-decoration:none;font-weight:700;padding:14px 22px;border-radius:12px">
+      Criar nova senha
+    </a>
+    <p style="font-size:12px;line-height:18px;color:#9aa1ad;margin:24px 0 0">
+      Se não foi você, ignore este e-mail — sua senha continua a mesma.
+    </p>
+  </div>
+</div>
