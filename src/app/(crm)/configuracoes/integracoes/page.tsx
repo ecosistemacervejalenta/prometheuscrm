@@ -18,6 +18,8 @@ import {
 import { CabecalhoConfiguracoes } from '@/features/configuracoes/components/cabecalho'
 import { FormularioWebhook } from '@/features/configuracoes/components/formularios'
 import { listarEventosRecentes, listarWebhooks } from '@/features/configuracoes/queries'
+import { CartaoWhatsapp } from '@/features/atendimento/components/cartao-whatsapp'
+import { configAtendimento, statusWhatsapp } from '@/features/atendimento/queries'
 import { AVISOS_OLIST, CartaoOlist } from '@/features/olist/components/cartao-olist'
 import { statusOlist } from '@/features/olist/queries'
 import { exigirEquipe } from '@/lib/auth'
@@ -59,11 +61,13 @@ function Endpoint({ metodo, caminho, descricao }: { metodo: string; caminho: str
 export default async function PaginaIntegracoes({ searchParams }: PageProps<'/configuracoes/integracoes'>) {
   const { perfil } = await exigirEquipe()
   const aviso = AVISOS_OLIST[param((await searchParams).olist) ?? '']
-  const [webhooks, eventos, site, olist] = await Promise.all([
+  const [webhooks, eventos, site, olist, whatsapp, configWhatsapp] = await Promise.all([
     listarWebhooks(),
     listarEventosRecentes(),
     urlDoSite(),
     statusOlist(),
+    statusWhatsapp(),
+    configAtendimento(),
   ])
 
   return (
@@ -72,6 +76,9 @@ export default async function PaginaIntegracoes({ searchParams }: PageProps<'/co
 
       <div className="space-y-5 lg:space-y-6">
         {aviso && <Alert tom={aviso.tom}>{aviso.texto}</Alert>}
+
+        {/* WhatsApp (uazapi) */}
+        <CartaoWhatsapp status={whatsapp} config={configWhatsapp} ehAdmin={perfil.papel === 'admin'} />
 
         {/* Olist ERP */}
         <CartaoOlist status={olist} site={site} ehAdmin={perfil.papel === 'admin'} />

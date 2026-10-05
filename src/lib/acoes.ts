@@ -45,6 +45,8 @@ const RESTRICOES: Record<string, string> = {
   produtos_shopify_variant_id_key: 'Já existe um produto com esta variante da Shopify.',
   pre_vendas_slug_key: 'Este endereço de link já está em uso. Escolha outro.',
   pre_vendas_slug_formato: 'Link inválido: use letras minúsculas, números e hífens.',
+  atendimentos_aberto_por_contato: 'Este contato já tem outro atendimento aberto. Continue por ele.',
+  atendimento_eventos_texto_check: 'A nota deve ter de 1 a 4.000 caracteres.',
 }
 
 /** Traduz erros do Supabase/Postgres em mensagens claras em português. */

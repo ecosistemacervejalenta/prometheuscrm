@@ -28,6 +28,7 @@ create schema storage;
 create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
 create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);
 alter table storage.objects enable row level security;
+create publication supabase_realtime;
 `
 await db.exec(stub)
 
@@ -463,6 +464,106 @@ await expectError('anon importa leads', `select importar_leads(gen_random_uuid()
 await expectError('anon consulta séries do ERP', `select * from vendas_erp_por_dia('2026-09-01', '2026-09-30')`)
 await expectError('anon consulta séries do CRM', `select * from vendas_crm_por_dia('grupo_vip', '2026-09-01', '2026-09-30')`)
 await db.exec(`reset role;`)
+
+// Atendimento WhatsApp ----------------------------------------------------------
+{
+  let seq = 0
+  const base = Date.now()
+  const msg = (chatid, extra = {}) => {
+    seq++
+    return {
+      wa_id: `5511991866186:M${seq}`, wa_messageid: `M${seq}`, chatid, whatsapp: chatid.split('@')[0],
+      nome_whatsapp: 'Ju', direcao: 'entrada', tipo: 'texto', texto: `mensagem ${seq}`,
+      enviada_em: new Date(base + seq * 1000).toISOString(), ...extra,
+    }
+  }
+  const reg = async (m) => (await um(`select registrar_mensagem_whatsapp($1::jsonb) r`, [JSON.stringify(m)])).r
+  const atend = (id) => um(`select numero, status, nao_lidas, responsavel_id, ultima_mensagem_previa, ultima_mensagem_direcao from atendimentos where id = $1`, [id])
+  const JU = '553187001122@s.whatsapp.net' // Juliana (cliente do seed) — o WhatsApp manda sem o 9
+
+  await db.exec(`set role service_role;`)
+  const r1 = await reg(msg(JU))
+  expectEq('webhook: contato novo abre atendimento na fila', { novo: r1.contato_novo, aberto: r1.atendimento_aberto }, { novo: true, aberto: true })
+  expectEq('contato: número ganha o 9º dígito e casa com o cliente', await um(`select whatsapp, contato_nome, cliente_nome from vw_atendimentos where id = $1`, [r1.atendimento_id]),
+    { whatsapp: '5531987001122', contato_nome: 'Juliana Alves', cliente_nome: 'Juliana Alves' })
+  const repetida = msg(JU)
+  await reg(repetida)
+  expectEq('webhook repetido não duplica', (await reg(repetida)).duplicada, true)
+  expectEq('fila com 2 não lidas', await atend(r1.atendimento_id), { numero: 1, status: 'fila', nao_lidas: 2, responsavel_id: null, ultima_mensagem_previa: `mensagem ${seq}`, ultima_mensagem_direcao: 'entrada' })
+  expectEq('lead automático na pasta "Clientes WhatsApp" › lista "WhatsApp"', await um(`select l.nome, l.whatsapp, ll.nome lista, p.nome pasta, ll.total
+    from whatsapp_contatos c join leads l on l.id = c.lead_id join leads_listas ll on ll.id = l.lista_id join leads_pastas p on p.id = ll.pasta_id where c.id = $1`, [r1.contato_id]),
+    { nome: 'Juliana Alves', whatsapp: '5531987001122', lista: 'WhatsApp', pasta: 'Clientes WhatsApp', total: 1 })
+  const foto = await reg(msg(JU, { tipo: 'imagem', texto: 'olha essa', midia_mime: 'image/jpeg' }))
+  expectEq('mídia fica pendente de download', await um(`select midia_status, tipo from whatsapp_mensagens where id = $1`, [foto.mensagem_id]), { midia_status: 'pendente', tipo: 'imagem' })
+  expectEq('prévia da foto', (await atend(r1.atendimento_id)).ultima_mensagem_previa, '📷 olha essa')
+  await expectError('grupo/sem chatid é recusado', `select registrar_mensagem_whatsapp('{"wa_id":"x","direcao":"entrada"}'::jsonb)`)
+
+  // A equipe responde pelo CRM
+  await db.exec(`reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${uid}', false);`)
+  const envio = await um(`select preparar_envio_whatsapp($1, '*Ana:* Temos sim!') r`, [r1.atendimento_id])
+  expectEq('responder da fila assume o atendimento', await atend(r1.atendimento_id).then((a) => ({ status: a.status, eu: a.responsavel_id === uid, nao_lidas: a.nao_lidas })),
+    { status: 'em_atendimento', eu: true, nao_lidas: 0 })
+  expectEq('envio devolve o chatid de destino', envio.r.chatid, JU)
+  await db.exec(`reset role; set role service_role;`)
+  const eco = await reg(msg(JU, { direcao: 'saida', texto: '*Ana:* Temos sim!', status: 'enviada', track_id: envio.r.mensagem_id }))
+  expectEq('eco do envio (track_id) não duplica', { duplicada: eco.duplicada, mesma: eco.mensagem_id === envio.r.mensagem_id }, { duplicada: true, mesma: true })
+  expectEq('eco grava o id e o status', await um(`select wa_id is not null tem_id, status, enviada_por = $2 autor from whatsapp_mensagens where id = $1`, [envio.r.mensagem_id, uid]),
+    { tem_id: true, status: 'enviada', autor: true })
+  const mid = (await um(`select wa_messageid from whatsapp_mensagens where id = $1`, [envio.r.mensagem_id])).wa_messageid
+  expectEq('recibo de leitura', (await um(`select atualizar_status_whatsapp(array[$1], 'lida') n`, [mid])).n, 1)
+  await q(`select atualizar_status_whatsapp(array[$1], 'entregue')`, [mid])
+  expectEq('recibo atrasado não regride o status', (await um(`select status from whatsapp_mensagens where id = $1`, [envio.r.mensagem_id])).status, 'lida')
+  const celular = await reg(msg(JU, { direcao: 'saida', texto: 'respondi pelo celular' }))
+  expectEq('resposta pelo celular entra no atendimento sem autor', await um(`select atendimento_id = $2 mesmo, enviada_por from whatsapp_mensagens where id = $1`, [celular.mensagem_id, r1.atendimento_id]),
+    { mesmo: true, enviada_por: null })
+
+  // Status
+  await db.exec(`reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${uid}', false);`)
+  await q(`select alterar_status_atendimento($1, 'aguardando_cliente')`, [r1.atendimento_id])
+  await db.exec(`reset role; set role service_role;`)
+  await reg(msg(JU))
+  expectEq('cliente responde: "aguardando" volta para "em atendimento"', (await atend(r1.atendimento_id)).status, 'em_atendimento')
+  await db.exec(`reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${uid2}', false);`)
+  await expectError('outro membro não "assume" atendimento de alguém', `select assumir_atendimento($1)`, [r1.atendimento_id])
+  await db.exec(`select set_config('request.jwt.claim.sub', '${uid}', false);`)
+  await q(`select transferir_atendimento($1, $2)`, [r1.atendimento_id, uid2])
+  expectEq('transferência troca o responsável', (await atend(r1.atendimento_id)).responsavel_id, uid2)
+  await q(`insert into atendimento_eventos (atendimento_id, tipo, texto) values ($1, 'nota', 'Gosta de IPA e Stout')`, [r1.atendimento_id])
+  await q(`select alterar_status_atendimento($1, 'resolvido')`, [r1.atendimento_id])
+  await expectError('não envia em atendimento resolvido', `select preparar_envio_whatsapp($1, 'oi')`, [r1.atendimento_id])
+  expectEq('linha do tempo registrada', (await q(`select tipo, autor_id is null automatico from atendimento_eventos where atendimento_id = $1 order by criado_em`, [r1.atendimento_id])).map((e) => `${e.tipo}${e.automatico ? '*' : ''}`),
+    ['aberto*', 'assumido', 'status', 'status*', 'transferido', 'nota', 'resolvido'])
+
+  // Cliente volta depois de resolvido
+  await db.exec(`reset role; set role service_role;`)
+  const volta = await reg(msg(JU))
+  expectEq('depois de resolvido, novo atendimento na fila', { novo: volta.atendimento_id !== r1.atendimento_id, aberto: volta.atendimento_aberto, contato: volta.contato_id === r1.contato_id }, { novo: true, aberto: true, contato: true })
+  expectEq('novo atendimento #2 sem responsável', await atend(volta.atendimento_id).then((a) => ({ numero: a.numero, status: a.status, resp: a.responsavel_id })), { numero: 2, status: 'fila', resp: null })
+  expectEq('histórico do contato inteiro continua disponível', Number((await um(`select count(*) n from whatsapp_mensagens where contato_id = $1`, [r1.contato_id])).n), 7)
+  expectEq('lead não é duplicado', Number((await um(`select count(*) n from leads where whatsapp = '5531987001122'`)).n), 1)
+  const antiga = await reg(msg(JU, { enviada_em: new Date(base - 2 * 86400000).toISOString() }))
+  expectEq('mensagem antiga (sincronização) só entra no histórico', { atendimento: antiga.atendimento_id, aberto: antiga.atendimento_aberto }, { atendimento: null, aberto: false })
+  expectEq('…e não mexe nas não lidas', (await atend(volta.atendimento_id)).nao_lidas, 1)
+
+  await db.exec(`reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${uid}', false);`)
+  await expectError('reabrir com outro atendimento aberto', `select alterar_status_atendimento($1, 'em_atendimento')`, [r1.atendimento_id])
+  await db.exec(`reset role; set role service_role;`)
+  const lid = await reg(msg('99887766554433@lid', { whatsapp: null }))
+  await db.exec(`reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${uid}', false);`)
+  expectEq('contato sem número (@lid) entra, mas sem lead', await um(`select whatsapp, lead_id from whatsapp_contatos where id = $1`, [lid.contato_id]), { whatsapp: null, lead_id: null })
+  await expectError('salvar como lead sem número', `select salvar_lead_whatsapp($1)`, [lid.contato_id])
+  expectEq('membro vê a caixa de entrada', Number((await um(`select count(*) n from vw_atendimentos where status <> 'resolvido'`)).n), 2)
+  await db.exec(`reset role;`)
+
+  const intruso = (await q(`insert into auth.users (email) values ('intruso@prometheus.beer') returning id`))[0].id
+  await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${intruso}', false);`)
+  expectEq('inativo não vê atendimentos nem mensagens', await um(`select (select count(*)::int from vw_atendimentos) a, (select count(*)::int from whatsapp_mensagens) m`), { a: 0, m: 0 })
+  await expectError('inativo não envia mensagem', `select preparar_envio_whatsapp($1, 'oi')`, [volta.atendimento_id])
+  await db.exec(`reset role; set role anon; select set_config('request.jwt.claim.sub', '', false);`)
+  await expectError('anon não registra mensagem', `select registrar_mensagem_whatsapp('{}'::jsonb)`)
+  await expectError('anon não lê atendimentos', `select * from vw_atendimentos`)
+  await db.exec(`reset role;`)
+}
 
 await db.exec(`set role service_role;`)
 show('service_role identifica cliente', (await q(`select identificar_cliente_pre_venda('11987654321') r`))[0].r)

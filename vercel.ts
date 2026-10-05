@@ -19,5 +19,10 @@ export const config: VercelConfig = {
       path: hora === 5 ? '/api/cron/olist?modo=completa' : `/api/cron/olist?h=${hora}`,
       schedule: `0 ${hora} * * *`,
     })),
+    // WhatsApp (uazapi): reconcilia mensagens de webhooks perdidos — a cada 2 h, mesma técnica.
+    ...[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22].map((hora) => ({
+      path: `/api/cron/whatsapp?h=${hora}`,
+      schedule: `30 ${hora} * * *`,
+    })),
   ],
 }

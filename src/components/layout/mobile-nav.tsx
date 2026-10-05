@@ -9,6 +9,7 @@ import {
   HandCoins,
   LayoutDashboard,
   LogOut,
+  MessagesSquare,
   Rocket,
   Settings,
   ShoppingBag,
@@ -39,14 +40,15 @@ type Aba = { href: string; rotulo: string; icone: LucideIcon }
 
 const ABAS: Aba[] = [
   { href: '/', rotulo: 'Início', icone: LayoutDashboard },
+  { href: '/atendimento', rotulo: 'Atendimento', icone: MessagesSquare },
   { href: '/clientes', rotulo: 'Clientes', icone: Users },
   { href: '/pre-vendas', rotulo: 'Pré-vendas', icone: Rocket },
-  { href: '/grupo-vip', rotulo: 'VIP', icone: Crown },
 ]
 
 type ItemMais = { href: string; rotulo: string; icone: LucideIcon; cor: string; contagem?: number }
 
 const TITULOS: Array<[string, string]> = [
+  ['/atendimento', 'Atendimento'],
   ['/clientes', 'Clientes'],
   ['/leads', 'Banco de Leads'],
   ['/pedidos', 'Pedidos'],
@@ -70,6 +72,7 @@ export function MobileNav({ perfil, contagens }: PropsSidebar) {
 
   const itensMais: ItemMais[] = [
     { href: '/pedidos', rotulo: 'Pedidos', icone: ShoppingBag, cor: '#2a78d6', contagem: contagens.aReceber },
+    { href: '/grupo-vip', rotulo: 'Grupo VIP', icone: Crown, cor: '#c8930a' },
     { href: '/leads', rotulo: 'Banco de Leads', icone: BookUser, cor: '#0f8a8a' },
     { href: '/produtos', rotulo: 'Produtos', icone: Beer, cor: '#eda100' },
     { href: '/fornecedores', rotulo: 'Fornecedores', icone: Building2, cor: '#4a3aa7' },
@@ -147,7 +150,7 @@ export function MobileNav({ perfil, contagens }: PropsSidebar) {
                 rotulo={aba.rotulo}
                 icone={aba.icone}
                 ativo={ativo(caminho, aba.href)}
-                selo={aba.href === '/pre-vendas' ? contagens.preVendasAtivas : undefined}
+                selo={aba.href === '/pre-vendas' ? contagens.preVendasAtivas : aba.href === '/atendimento' ? contagens.atendimentos : undefined}
               />
             </li>
           ))}

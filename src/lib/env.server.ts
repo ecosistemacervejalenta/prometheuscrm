@@ -16,4 +16,7 @@ export const envServidor = {
   /** Aplicativo da API v3 do Olist ERP (Menu › Configurações › Geral › Aplicativos). */
   olistClientId: process.env.OLIST_CLIENT_ID || undefined,
   olistClientSecret: process.env.OLIST_CLIENT_SECRET || undefined,
+  /** WhatsApp da loja (uazapi): Server URL e token da instância (não o admin token). */
+  uazapiUrl: process.env.UAZAPI_URL?.trim().replace(/\/+$/, '') || undefined,
+  uazapiToken: process.env.UAZAPI_TOKEN?.trim() || undefined,
 }

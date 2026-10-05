@@ -8,6 +8,7 @@ import {
   HandCoins,
   LayoutDashboard,
   LogOut,
+  MessagesSquare,
   Rocket,
   Settings,
   ShoppingBag,
@@ -36,12 +37,13 @@ type ItemMenu = {
 
 export type PropsSidebar = {
   perfil: { nome: string; cargo: string | null; papel: string }
-  contagens: { clientes: number; aReceber: number; preVendasAtivas: number }
+  contagens: { clientes: number; aReceber: number; preVendasAtivas: number; atendimentos: number }
 }
 
 function itensMenu(contagens: PropsSidebar['contagens']): ItemMenu[] {
   return [
     { href: '/', rotulo: 'Visão geral', icone: LayoutDashboard },
+    { href: '/atendimento', rotulo: 'Atendimento', icone: MessagesSquare, destaque: contagens.atendimentos },
     { href: '/clientes', rotulo: 'Clientes', icone: Users, contagem: contagens.clientes },
     { href: '/leads', rotulo: 'Banco de Leads', icone: BookUser },
     { href: '/pedidos', rotulo: 'Pedidos', icone: ShoppingBag, contagem: contagens.aReceber },

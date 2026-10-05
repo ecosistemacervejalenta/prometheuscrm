@@ -3,6 +3,7 @@ import type {
   OrigemCliente,
   StatusPagamento,
   StatusPedido,
+  StatusAtendimento,
   StatusPreVenda,
 } from '@/types'
 
@@ -55,6 +56,13 @@ export const ORIGEM_CLIENTE: Record<OrigemCliente, { rotulo: string; tom: Tom }>
   shopify: { rotulo: 'Shopify', tom: 'shopify' },
   app: { rotulo: 'App', tom: 'app' },
   importacao: { rotulo: 'Importação', tom: 'neutro' },
+}
+
+export const STATUS_ATENDIMENTO: Record<StatusAtendimento, { rotulo: string; tom: Tom }> = {
+  fila: { rotulo: 'Na fila', tom: 'alerta' },
+  em_atendimento: { rotulo: 'Em atendimento', tom: 'shopify' },
+  aguardando_cliente: { rotulo: 'Aguardando cliente', tom: 'app' },
+  resolvido: { rotulo: 'Resolvido', tom: 'sucesso' },
 }
 
 export const SITUACAO_CONTA: Record<string, { rotulo: string; tom: Tom }> = {

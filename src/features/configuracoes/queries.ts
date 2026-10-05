@@ -14,6 +14,9 @@ const PADRAO: Configuracoes = {
   mensagem_pre_venda: '🍺 *{titulo}*\n\n{descricao}\n\nGaranta a sua pelo link 👇\n{link}',
   mensagem_cobranca: 'Olá, {nome}! Segue o pedido *#{pedido}*:\n{itens}\n\n*Total: {total}*\n\n{pagamento}',
   atualizado_em: new Date(0).toISOString(),
+  whatsapp_assinatura: true,
+  whatsapp_leads_automatico: true,
+  whatsapp_pasta_leads_id: null,
 }
 
 /** Configurações da loja (linha única). */

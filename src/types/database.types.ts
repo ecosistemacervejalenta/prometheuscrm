@@ -1,9 +1,3 @@
-// =============================================================================
-// Tipos do banco de dados (gerado a partir das migrations).
-// Para regenerar a partir do seu projeto Supabase:
-//   npm run db:types
-// =============================================================================
-
 export type Json =
   | string
   | number
@@ -13,41 +7,174 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
-      atividades: {
+      atendimento_eventos: {
         Row: {
-          id: string
-          cliente_id: string | null
-          pedido_id: string | null
-          tipo: string
-          descricao: string
-          dados: Json
+          atendimento_id: string
           autor_id: string | null
           criado_em: string
+          id: string
+          para_id: string | null
+          status: Database["public"]["Enums"]["status_atendimento"] | null
+          texto: string | null
+          tipo: string
         }
         Insert: {
-          id?: string
-          cliente_id?: string | null
-          pedido_id?: string | null
-          tipo: string
-          descricao: string
-          dados?: Json
+          atendimento_id: string
           autor_id?: string | null
           criado_em?: string
+          id?: string
+          para_id?: string | null
+          status?: Database["public"]["Enums"]["status_atendimento"] | null
+          texto?: string | null
+          tipo: string
         }
         Update: {
-          id?: string
-          cliente_id?: string | null
-          pedido_id?: string | null
-          tipo?: string
-          descricao?: string
-          dados?: Json
+          atendimento_id?: string
           autor_id?: string | null
           criado_em?: string
+          id?: string
+          para_id?: string | null
+          status?: Database["public"]["Enums"]["status_atendimento"] | null
+          texto?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "atendimento_eventos_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimento_eventos_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "vw_atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimento_eventos_autor_id_fkey"
+            columns: ["autor_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimento_eventos_para_id_fkey"
+            columns: ["para_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      atendimentos: {
+        Row: {
+          atualizado_em: string
+          contato_id: string
+          criado_em: string
+          id: string
+          nao_lidas: number
+          numero: number
+          primeira_resposta_em: string | null
+          resolvido_em: string | null
+          responsavel_id: string | null
+          status: Database["public"]["Enums"]["status_atendimento"]
+          ultima_mensagem_direcao:
+            | Database["public"]["Enums"]["direcao_mensagem"]
+            | null
+          ultima_mensagem_em: string | null
+          ultima_mensagem_previa: string | null
+        }
+        Insert: {
+          atualizado_em?: string
+          contato_id: string
+          criado_em?: string
+          id?: string
+          nao_lidas?: number
+          numero?: never
+          primeira_resposta_em?: string | null
+          resolvido_em?: string | null
+          responsavel_id?: string | null
+          status?: Database["public"]["Enums"]["status_atendimento"]
+          ultima_mensagem_direcao?:
+            | Database["public"]["Enums"]["direcao_mensagem"]
+            | null
+          ultima_mensagem_em?: string | null
+          ultima_mensagem_previa?: string | null
+        }
+        Update: {
+          atualizado_em?: string
+          contato_id?: string
+          criado_em?: string
+          id?: string
+          nao_lidas?: number
+          numero?: never
+          primeira_resposta_em?: string | null
+          resolvido_em?: string | null
+          responsavel_id?: string | null
+          status?: Database["public"]["Enums"]["status_atendimento"]
+          ultima_mensagem_direcao?:
+            | Database["public"]["Enums"]["direcao_mensagem"]
+            | null
+          ultima_mensagem_em?: string | null
+          ultima_mensagem_previa?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "atendimentos_contato_id_fkey"
+            columns: ["contato_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimentos_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      atividades: {
+        Row: {
+          autor_id: string | null
+          cliente_id: string | null
+          criado_em: string
+          dados: Json
+          descricao: string
+          id: string
+          pedido_id: string | null
+          tipo: string
+        }
+        Insert: {
+          autor_id?: string | null
+          cliente_id?: string | null
+          criado_em?: string
+          dados?: Json
+          descricao: string
+          id?: string
+          pedido_id?: string | null
+          tipo: string
+        }
+        Update: {
+          autor_id?: string | null
+          cliente_id?: string | null
+          criado_em?: string
+          dados?: Json
+          descricao?: string
+          id?: string
+          pedido_id?: string | null
+          tipo?: string
         }
         Relationships: [
           {
@@ -65,185 +192,230 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "atividades_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "vw_atendimentos"
+            referencedColumns: ["cliente_id"]
+          },
+          {
+            foreignKeyName: "atividades_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "vw_clientes"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "atividades_pedido_id_fkey"
             columns: ["pedido_id"]
             isOneToOne: false
             referencedRelation: "pedidos"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "atividades_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "vw_pedidos"
+            referencedColumns: ["id"]
+          },
         ]
       }
       categorias_financeiras: {
         Row: {
+          criado_em: string
           id: string
           natureza: Database["public"]["Enums"]["natureza_financeira"]
           nome: string
-          criado_em: string
         }
         Insert: {
+          criado_em?: string
           id?: string
           natureza: Database["public"]["Enums"]["natureza_financeira"]
           nome: string
-          criado_em?: string
         }
         Update: {
+          criado_em?: string
           id?: string
           natureza?: Database["public"]["Enums"]["natureza_financeira"]
           nome?: string
-          criado_em?: string
         }
         Relationships: []
       }
       clientes: {
         Row: {
-          id: string
-          nome: string
-          whatsapp: string | null
-          email: string | null
-          cpf: string | null
-          data_nascimento: string | null
-          cep: string | null
-          logradouro: string | null
-          numero: string | null
-          complemento: string | null
-          bairro: string | null
-          cidade: string | null
-          uf: string | null
-          referencia: string | null
-          vip: boolean
-          tags: string[]
-          origem: Database["public"]["Enums"]["origem_cliente"]
-          observacoes: string | null
-          shopify_customer_id: string | null
           app_usuario_id: string | null
-          criado_em: string
           atualizado_em: string
+          bairro: string | null
+          cep: string | null
+          cidade: string | null
+          complemento: string | null
+          cpf: string | null
+          criado_em: string
+          data_nascimento: string | null
+          email: string | null
+          id: string
+          logradouro: string | null
+          nome: string
+          numero: string | null
+          observacoes: string | null
+          origem: Database["public"]["Enums"]["origem_cliente"]
+          referencia: string | null
+          shopify_customer_id: string | null
+          tags: string[]
+          uf: string | null
+          vip: boolean
+          whatsapp: string | null
         }
         Insert: {
-          id?: string
-          nome: string
-          whatsapp?: string | null
-          email?: string | null
-          cpf?: string | null
-          data_nascimento?: string | null
-          cep?: string | null
-          logradouro?: string | null
-          numero?: string | null
-          complemento?: string | null
-          bairro?: string | null
-          cidade?: string | null
-          uf?: string | null
-          referencia?: string | null
-          vip?: boolean
-          tags?: string[]
-          origem?: Database["public"]["Enums"]["origem_cliente"]
-          observacoes?: string | null
-          shopify_customer_id?: string | null
           app_usuario_id?: string | null
-          criado_em?: string
           atualizado_em?: string
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          complemento?: string | null
+          cpf?: string | null
+          criado_em?: string
+          data_nascimento?: string | null
+          email?: string | null
+          id?: string
+          logradouro?: string | null
+          nome: string
+          numero?: string | null
+          observacoes?: string | null
+          origem?: Database["public"]["Enums"]["origem_cliente"]
+          referencia?: string | null
+          shopify_customer_id?: string | null
+          tags?: string[]
+          uf?: string | null
+          vip?: boolean
+          whatsapp?: string | null
         }
         Update: {
-          id?: string
-          nome?: string
-          whatsapp?: string | null
-          email?: string | null
-          cpf?: string | null
-          data_nascimento?: string | null
-          cep?: string | null
-          logradouro?: string | null
-          numero?: string | null
-          complemento?: string | null
-          bairro?: string | null
-          cidade?: string | null
-          uf?: string | null
-          referencia?: string | null
-          vip?: boolean
-          tags?: string[]
-          origem?: Database["public"]["Enums"]["origem_cliente"]
-          observacoes?: string | null
-          shopify_customer_id?: string | null
           app_usuario_id?: string | null
-          criado_em?: string
           atualizado_em?: string
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
+          complemento?: string | null
+          cpf?: string | null
+          criado_em?: string
+          data_nascimento?: string | null
+          email?: string | null
+          id?: string
+          logradouro?: string | null
+          nome?: string
+          numero?: string | null
+          observacoes?: string | null
+          origem?: Database["public"]["Enums"]["origem_cliente"]
+          referencia?: string | null
+          shopify_customer_id?: string | null
+          tags?: string[]
+          uf?: string | null
+          vip?: boolean
+          whatsapp?: string | null
         }
         Relationships: []
       }
       configuracoes: {
         Row: {
-          id: number
-          nome_loja: string
-          whatsapp_loja: string | null
-          chave_pix: string | null
-          nome_recebedor_pix: string | null
-          mensagem_pre_venda: string
-          mensagem_cobranca: string
           atualizado_em: string
+          chave_pix: string | null
+          id: number
+          mensagem_cobranca: string
+          mensagem_pre_venda: string
+          nome_loja: string
+          nome_recebedor_pix: string | null
+          whatsapp_assinatura: boolean
+          whatsapp_leads_automatico: boolean
+          whatsapp_loja: string | null
+          whatsapp_pasta_leads_id: string | null
         }
         Insert: {
-          id?: number
-          nome_loja?: string
-          whatsapp_loja?: string | null
-          chave_pix?: string | null
-          nome_recebedor_pix?: string | null
-          mensagem_pre_venda?: string
-          mensagem_cobranca?: string
           atualizado_em?: string
+          chave_pix?: string | null
+          id?: number
+          mensagem_cobranca?: string
+          mensagem_pre_venda?: string
+          nome_loja?: string
+          nome_recebedor_pix?: string | null
+          whatsapp_assinatura?: boolean
+          whatsapp_leads_automatico?: boolean
+          whatsapp_loja?: string | null
+          whatsapp_pasta_leads_id?: string | null
         }
         Update: {
-          id?: number
-          nome_loja?: string
-          whatsapp_loja?: string | null
-          chave_pix?: string | null
-          nome_recebedor_pix?: string | null
-          mensagem_pre_venda?: string
-          mensagem_cobranca?: string
           atualizado_em?: string
+          chave_pix?: string | null
+          id?: number
+          mensagem_cobranca?: string
+          mensagem_pre_venda?: string
+          nome_loja?: string
+          nome_recebedor_pix?: string | null
+          whatsapp_assinatura?: boolean
+          whatsapp_leads_automatico?: boolean
+          whatsapp_loja?: string | null
+          whatsapp_pasta_leads_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "configuracoes_whatsapp_pasta_leads_id_fkey"
+            columns: ["whatsapp_pasta_leads_id"]
+            isOneToOne: false
+            referencedRelation: "leads_pastas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "configuracoes_whatsapp_pasta_leads_id_fkey"
+            columns: ["whatsapp_pasta_leads_id"]
+            isOneToOne: false
+            referencedRelation: "vw_leads_pastas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       contas_fixas: {
         Row: {
-          id: string
-          descricao: string
-          categoria: string
-          fornecedor_id: string | null
-          valor: number
-          dia_vencimento: number
-          inicio_em: string
-          fim_em: string | null
           ativa: boolean
-          observacoes: string | null
-          criado_em: string
           atualizado_em: string
+          categoria: string
+          criado_em: string
+          descricao: string
+          dia_vencimento: number
+          fim_em: string | null
+          fornecedor_id: string | null
+          id: string
+          inicio_em: string
+          observacoes: string | null
+          valor: number
         }
         Insert: {
-          id?: string
-          descricao: string
-          categoria?: string
-          fornecedor_id?: string | null
-          valor: number
-          dia_vencimento: number
-          inicio_em?: string
-          fim_em?: string | null
           ativa?: boolean
-          observacoes?: string | null
-          criado_em?: string
           atualizado_em?: string
+          categoria?: string
+          criado_em?: string
+          descricao: string
+          dia_vencimento: number
+          fim_em?: string | null
+          fornecedor_id?: string | null
+          id?: string
+          inicio_em?: string
+          observacoes?: string | null
+          valor: number
         }
         Update: {
-          id?: string
-          descricao?: string
-          categoria?: string
-          fornecedor_id?: string | null
-          valor?: number
-          dia_vencimento?: number
-          inicio_em?: string
-          fim_em?: string | null
           ativa?: boolean
-          observacoes?: string | null
-          criado_em?: string
           atualizado_em?: string
+          categoria?: string
+          criado_em?: string
+          descricao?: string
+          dia_vencimento?: number
+          fim_em?: string | null
+          fornecedor_id?: string | null
+          id?: string
+          inicio_em?: string
+          observacoes?: string | null
+          valor?: number
         }
         Relationships: [
           {
@@ -257,58 +429,58 @@ export type Database = {
       }
       contas_pagar: {
         Row: {
-          id: string
-          descricao: string
-          categoria: string
-          tipo: Database["public"]["Enums"]["tipo_conta"]
-          fornecedor_id: string | null
-          conta_fixa_id: string | null
-          competencia: string
-          vencimento: string
-          valor: number
-          status: Database["public"]["Enums"]["status_conta"]
-          pago_em: string | null
-          valor_pago: number | null
-          forma_pagamento: string | null
-          observacoes: string | null
-          criado_em: string
           atualizado_em: string
+          categoria: string
+          competencia: string
+          conta_fixa_id: string | null
+          criado_em: string
+          descricao: string
+          forma_pagamento: string | null
+          fornecedor_id: string | null
+          id: string
+          observacoes: string | null
+          pago_em: string | null
+          status: Database["public"]["Enums"]["status_conta"]
+          tipo: Database["public"]["Enums"]["tipo_conta"]
+          valor: number
+          valor_pago: number | null
+          vencimento: string
         }
         Insert: {
-          id?: string
-          descricao: string
-          categoria?: string
-          tipo?: Database["public"]["Enums"]["tipo_conta"]
-          fornecedor_id?: string | null
-          conta_fixa_id?: string | null
-          competencia: string
-          vencimento: string
-          valor: number
-          status?: Database["public"]["Enums"]["status_conta"]
-          pago_em?: string | null
-          valor_pago?: number | null
-          forma_pagamento?: string | null
-          observacoes?: string | null
-          criado_em?: string
           atualizado_em?: string
+          categoria?: string
+          competencia: string
+          conta_fixa_id?: string | null
+          criado_em?: string
+          descricao: string
+          forma_pagamento?: string | null
+          fornecedor_id?: string | null
+          id?: string
+          observacoes?: string | null
+          pago_em?: string | null
+          status?: Database["public"]["Enums"]["status_conta"]
+          tipo?: Database["public"]["Enums"]["tipo_conta"]
+          valor: number
+          valor_pago?: number | null
+          vencimento: string
         }
         Update: {
-          id?: string
-          descricao?: string
-          categoria?: string
-          tipo?: Database["public"]["Enums"]["tipo_conta"]
-          fornecedor_id?: string | null
-          conta_fixa_id?: string | null
-          competencia?: string
-          vencimento?: string
-          valor?: number
-          status?: Database["public"]["Enums"]["status_conta"]
-          pago_em?: string | null
-          valor_pago?: number | null
-          forma_pagamento?: string | null
-          observacoes?: string | null
-          criado_em?: string
           atualizado_em?: string
+          categoria?: string
+          competencia?: string
+          conta_fixa_id?: string | null
+          criado_em?: string
+          descricao?: string
+          forma_pagamento?: string | null
+          fornecedor_id?: string | null
+          id?: string
+          observacoes?: string | null
+          pago_em?: string | null
+          status?: Database["public"]["Enums"]["status_conta"]
+          tipo?: Database["public"]["Enums"]["tipo_conta"]
+          valor?: number
+          valor_pago?: number | null
+          vencimento?: string
         }
         Relationships: [
           {
@@ -329,112 +501,112 @@ export type Database = {
       }
       contas_receber: {
         Row: {
-          id: string
-          descricao: string
-          categoria: string
-          pagador: string | null
-          competencia: string
-          vencimento: string
-          valor: number
-          status: Database["public"]["Enums"]["status_recebimento"]
-          recebido_em: string | null
-          valor_recebido: number | null
-          forma_pagamento: string | null
-          observacoes: string | null
-          criado_em: string
           atualizado_em: string
+          categoria: string
+          competencia: string
+          criado_em: string
+          descricao: string
+          forma_pagamento: string | null
+          id: string
+          observacoes: string | null
+          pagador: string | null
+          recebido_em: string | null
+          status: Database["public"]["Enums"]["status_recebimento"]
+          valor: number
+          valor_recebido: number | null
+          vencimento: string
         }
         Insert: {
-          id?: string
-          descricao: string
-          categoria?: string
-          pagador?: string | null
-          competencia: string
-          vencimento: string
-          valor: number
-          status?: Database["public"]["Enums"]["status_recebimento"]
-          recebido_em?: string | null
-          valor_recebido?: number | null
-          forma_pagamento?: string | null
-          observacoes?: string | null
-          criado_em?: string
           atualizado_em?: string
+          categoria?: string
+          competencia: string
+          criado_em?: string
+          descricao: string
+          forma_pagamento?: string | null
+          id?: string
+          observacoes?: string | null
+          pagador?: string | null
+          recebido_em?: string | null
+          status?: Database["public"]["Enums"]["status_recebimento"]
+          valor: number
+          valor_recebido?: number | null
+          vencimento: string
         }
         Update: {
-          id?: string
-          descricao?: string
-          categoria?: string
-          pagador?: string | null
-          competencia?: string
-          vencimento?: string
-          valor?: number
-          status?: Database["public"]["Enums"]["status_recebimento"]
-          recebido_em?: string | null
-          valor_recebido?: number | null
-          forma_pagamento?: string | null
-          observacoes?: string | null
-          criado_em?: string
           atualizado_em?: string
+          categoria?: string
+          competencia?: string
+          criado_em?: string
+          descricao?: string
+          forma_pagamento?: string | null
+          id?: string
+          observacoes?: string | null
+          pagador?: string | null
+          recebido_em?: string | null
+          status?: Database["public"]["Enums"]["status_recebimento"]
+          valor?: number
+          valor_recebido?: number | null
+          vencimento?: string
         }
         Relationships: []
       }
       eventos_integracao: {
         Row: {
-          id: string
-          tipo: string
+          criado_em: string
           entidade: string | null
           entidade_id: string | null
+          id: string
           payload: Json
+          processado_em: string | null
+          proxima_tentativa_em: string
           status: Database["public"]["Enums"]["status_evento"]
           tentativas: number
+          tipo: string
           ultimo_erro: string | null
-          proxima_tentativa_em: string
-          criado_em: string
-          processado_em: string | null
         }
         Insert: {
-          id?: string
-          tipo: string
+          criado_em?: string
           entidade?: string | null
           entidade_id?: string | null
+          id?: string
           payload?: Json
+          processado_em?: string | null
+          proxima_tentativa_em?: string
           status?: Database["public"]["Enums"]["status_evento"]
           tentativas?: number
+          tipo: string
           ultimo_erro?: string | null
-          proxima_tentativa_em?: string
-          criado_em?: string
-          processado_em?: string | null
         }
         Update: {
-          id?: string
-          tipo?: string
+          criado_em?: string
           entidade?: string | null
           entidade_id?: string | null
+          id?: string
           payload?: Json
+          processado_em?: string | null
+          proxima_tentativa_em?: string
           status?: Database["public"]["Enums"]["status_evento"]
           tentativas?: number
+          tipo?: string
           ultimo_erro?: string | null
-          proxima_tentativa_em?: string
-          criado_em?: string
-          processado_em?: string | null
         }
         Relationships: []
       }
       fornecedor_vendedores: {
         Row: {
+          criado_em: string
           fornecedor_id: string
           vendedor_id: string
-          criado_em: string
         }
         Insert: {
+          criado_em?: string
           fornecedor_id: string
           vendedor_id: string
-          criado_em?: string
         }
         Update: {
+          criado_em?: string
           fornecedor_id?: string
           vendedor_id?: string
-          criado_em?: string
         }
         Relationships: [
           {
@@ -455,94 +627,94 @@ export type Database = {
       }
       fornecedores: {
         Row: {
+          ativo: boolean
+          atualizado_em: string
+          cidade: string | null
+          cnpj: string | null
+          criado_em: string
+          email: string | null
           id: string
           nome: string
-          razao_social: string | null
-          cnpj: string | null
-          telefone: string | null
-          email: string | null
-          site: string | null
-          cidade: string | null
-          uf: string | null
           observacoes: string | null
-          ativo: boolean
-          criado_em: string
-          atualizado_em: string
+          razao_social: string | null
+          site: string | null
+          telefone: string | null
+          uf: string | null
         }
         Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          cidade?: string | null
+          cnpj?: string | null
+          criado_em?: string
+          email?: string | null
           id?: string
           nome: string
-          razao_social?: string | null
-          cnpj?: string | null
-          telefone?: string | null
-          email?: string | null
-          site?: string | null
-          cidade?: string | null
-          uf?: string | null
           observacoes?: string | null
-          ativo?: boolean
-          criado_em?: string
-          atualizado_em?: string
+          razao_social?: string | null
+          site?: string | null
+          telefone?: string | null
+          uf?: string | null
         }
         Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          cidade?: string | null
+          cnpj?: string | null
+          criado_em?: string
+          email?: string | null
           id?: string
           nome?: string
-          razao_social?: string | null
-          cnpj?: string | null
-          telefone?: string | null
-          email?: string | null
-          site?: string | null
-          cidade?: string | null
-          uf?: string | null
           observacoes?: string | null
-          ativo?: boolean
-          criado_em?: string
-          atualizado_em?: string
+          razao_social?: string | null
+          site?: string | null
+          telefone?: string | null
+          uf?: string | null
         }
         Relationships: []
       }
       integracao_olist: {
         Row: {
-          id: number
-          access_token: string | null
-          refresh_token: string | null
           access_expira_em: string | null
-          refresh_expira_em: string | null
+          access_token: string | null
+          atualizado_em: string
           conectado_em: string | null
           conectado_por: string | null
-          ultima_sincronizacao: string | null
+          id: number
+          refresh_expira_em: string | null
+          refresh_token: string | null
           sincronizado_ate: string | null
           sincronizando_desde: string | null
+          ultima_sincronizacao: string | null
           ultimo_erro: string | null
-          atualizado_em: string
         }
         Insert: {
-          id?: number
-          access_token?: string | null
-          refresh_token?: string | null
           access_expira_em?: string | null
-          refresh_expira_em?: string | null
+          access_token?: string | null
+          atualizado_em?: string
           conectado_em?: string | null
           conectado_por?: string | null
-          ultima_sincronizacao?: string | null
+          id?: number
+          refresh_expira_em?: string | null
+          refresh_token?: string | null
           sincronizado_ate?: string | null
           sincronizando_desde?: string | null
+          ultima_sincronizacao?: string | null
           ultimo_erro?: string | null
-          atualizado_em?: string
         }
         Update: {
-          id?: number
-          access_token?: string | null
-          refresh_token?: string | null
           access_expira_em?: string | null
-          refresh_expira_em?: string | null
+          access_token?: string | null
+          atualizado_em?: string
           conectado_em?: string | null
           conectado_por?: string | null
-          ultima_sincronizacao?: string | null
+          id?: number
+          refresh_expira_em?: string | null
+          refresh_token?: string | null
           sincronizado_ate?: string | null
           sincronizando_desde?: string | null
+          ultima_sincronizacao?: string | null
           ultimo_erro?: string | null
-          atualizado_em?: string
         }
         Relationships: [
           {
@@ -556,37 +728,37 @@ export type Database = {
       }
       leads: {
         Row: {
+          busca: string | null
+          criado_em: string
+          dados: Json
+          email: string | null
           id: string
-          lista_id: string
           linha: number
+          lista_id: string
           nome: string | null
           whatsapp: string | null
-          email: string | null
-          dados: Json
-          busca: string
-          criado_em: string
         }
         Insert: {
+          busca?: string | null
+          criado_em?: string
+          dados?: Json
+          email?: string | null
           id?: string
-          lista_id: string
           linha: number
+          lista_id: string
           nome?: string | null
           whatsapp?: string | null
-          email?: string | null
-          dados?: Json
-          busca?: never
-          criado_em?: string
         }
         Update: {
+          busca?: string | null
+          criado_em?: string
+          dados?: Json
+          email?: string | null
           id?: string
-          lista_id?: string
           linha?: number
+          lista_id?: string
           nome?: string | null
           whatsapp?: string | null
-          email?: string | null
-          dados?: Json
-          busca?: never
-          criado_em?: string
         }
         Relationships: [
           {
@@ -600,57 +772,64 @@ export type Database = {
       }
       leads_listas: {
         Row: {
-          id: string
-          pasta_id: string
-          nome: string
-          origem: string | null
           arquivo_nome: string | null
-          colunas: Json
+          atualizado_em: string
+          coluna_email: string | null
           coluna_nome: string | null
           coluna_whatsapp: string | null
-          coluna_email: string | null
+          colunas: Json
+          com_whatsapp: number
+          criado_em: string
+          criado_por: string | null
+          id: string
+          nome: string
+          origem: string | null
+          pasta_id: string
           status: Database["public"]["Enums"]["status_lista_leads"]
           total: number
-          com_whatsapp: number
-          criado_por: string | null
-          criado_em: string
-          atualizado_em: string
         }
         Insert: {
+          arquivo_nome?: string | null
+          atualizado_em?: string
+          coluna_email?: string | null
+          coluna_nome?: string | null
+          coluna_whatsapp?: string | null
+          colunas?: Json
+          com_whatsapp?: number
+          criado_em?: string
+          criado_por?: string | null
           id?: string
-          pasta_id: string
           nome: string
           origem?: string | null
-          arquivo_nome?: string | null
-          colunas?: Json
-          coluna_nome?: string | null
-          coluna_whatsapp?: string | null
-          coluna_email?: string | null
+          pasta_id: string
           status?: Database["public"]["Enums"]["status_lista_leads"]
           total?: number
-          com_whatsapp?: number
-          criado_por?: string | null
-          criado_em?: string
-          atualizado_em?: string
         }
         Update: {
-          id?: string
-          pasta_id?: string
-          nome?: string
-          origem?: string | null
           arquivo_nome?: string | null
-          colunas?: Json
+          atualizado_em?: string
+          coluna_email?: string | null
           coluna_nome?: string | null
           coluna_whatsapp?: string | null
-          coluna_email?: string | null
+          colunas?: Json
+          com_whatsapp?: number
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          nome?: string
+          origem?: string | null
+          pasta_id?: string
           status?: Database["public"]["Enums"]["status_lista_leads"]
           total?: number
-          com_whatsapp?: number
-          criado_por?: string | null
-          criado_em?: string
-          atualizado_em?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "leads_listas_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "leads_listas_pasta_id_fkey"
             columns: ["pasta_id"]
@@ -669,58 +848,66 @@ export type Database = {
       }
       leads_pastas: {
         Row: {
+          atualizado_em: string
+          criado_em: string
+          criado_por: string | null
+          descricao: string | null
           id: string
           nome: string
-          descricao: string | null
-          criado_por: string | null
-          criado_em: string
-          atualizado_em: string
         }
         Insert: {
+          atualizado_em?: string
+          criado_em?: string
+          criado_por?: string | null
+          descricao?: string | null
           id?: string
           nome: string
-          descricao?: string | null
-          criado_por?: string | null
-          criado_em?: string
-          atualizado_em?: string
         }
         Update: {
+          atualizado_em?: string
+          criado_em?: string
+          criado_por?: string | null
+          descricao?: string | null
           id?: string
           nome?: string
-          descricao?: string | null
-          criado_por?: string | null
-          criado_em?: string
-          atualizado_em?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leads_pastas_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pedido_itens: {
         Row: {
+          descricao: string
           id: string
           pedido_id: string
-          produto_id: string | null
-          descricao: string
           preco_unitario: number
+          produto_id: string | null
           quantidade: number
           total: number
         }
         Insert: {
+          descricao: string
           id?: string
           pedido_id: string
-          produto_id?: string | null
-          descricao: string
           preco_unitario: number
+          produto_id?: string | null
           quantidade: number
-          total?: never
+          total?: number
         }
         Update: {
+          descricao?: string
           id?: string
           pedido_id?: string
-          produto_id?: string | null
-          descricao?: string
           preco_unitario?: number
+          produto_id?: string | null
           quantidade?: number
-          total?: never
+          total?: number
         }
         Relationships: [
           {
@@ -728,6 +915,13 @@ export type Database = {
             columns: ["pedido_id"]
             isOneToOne: false
             referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedido_itens_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "vw_pedidos"
             referencedColumns: ["id"]
           },
           {
@@ -741,76 +935,76 @@ export type Database = {
       }
       pedidos: {
         Row: {
+          atualizado_em: string
+          canal: Database["public"]["Enums"]["canal_venda"]
+          cliente_id: string
+          cobrancas_enviadas: number
+          criado_em: string
+          criado_por: string | null
+          desconto: number
+          endereco_entrega: Json | null
+          forma_pagamento: string | null
           id: string
           numero: number
-          cliente_id: string
-          pre_venda_id: string | null
-          canal: Database["public"]["Enums"]["canal_venda"]
+          observacoes: string | null
           origem: Database["public"]["Enums"]["origem_pedido"]
+          pago_em: string | null
+          pre_venda_id: string | null
+          shopify_order_id: string | null
           status: Database["public"]["Enums"]["status_pedido"]
           status_pagamento: Database["public"]["Enums"]["status_pagamento"]
           subtotal: number
           taxa_entrega: number
-          desconto: number
           total: number
-          endereco_entrega: Json | null
-          observacoes: string | null
-          cobrancas_enviadas: number
           ultima_cobranca_em: string | null
-          pago_em: string | null
-          forma_pagamento: string | null
-          shopify_order_id: string | null
-          criado_por: string | null
-          criado_em: string
-          atualizado_em: string
         }
         Insert: {
+          atualizado_em?: string
+          canal?: Database["public"]["Enums"]["canal_venda"]
+          cliente_id: string
+          cobrancas_enviadas?: number
+          criado_em?: string
+          criado_por?: string | null
+          desconto?: number
+          endereco_entrega?: Json | null
+          forma_pagamento?: string | null
           id?: string
           numero?: never
-          cliente_id: string
-          pre_venda_id?: string | null
-          canal?: Database["public"]["Enums"]["canal_venda"]
+          observacoes?: string | null
           origem?: Database["public"]["Enums"]["origem_pedido"]
+          pago_em?: string | null
+          pre_venda_id?: string | null
+          shopify_order_id?: string | null
           status?: Database["public"]["Enums"]["status_pedido"]
           status_pagamento?: Database["public"]["Enums"]["status_pagamento"]
           subtotal?: number
           taxa_entrega?: number
-          desconto?: number
-          total?: never
-          endereco_entrega?: Json | null
-          observacoes?: string | null
-          cobrancas_enviadas?: number
+          total?: number
           ultima_cobranca_em?: string | null
-          pago_em?: string | null
-          forma_pagamento?: string | null
-          shopify_order_id?: string | null
-          criado_por?: string | null
-          criado_em?: string
-          atualizado_em?: string
         }
         Update: {
+          atualizado_em?: string
+          canal?: Database["public"]["Enums"]["canal_venda"]
+          cliente_id?: string
+          cobrancas_enviadas?: number
+          criado_em?: string
+          criado_por?: string | null
+          desconto?: number
+          endereco_entrega?: Json | null
+          forma_pagamento?: string | null
           id?: string
           numero?: never
-          cliente_id?: string
-          pre_venda_id?: string | null
-          canal?: Database["public"]["Enums"]["canal_venda"]
+          observacoes?: string | null
           origem?: Database["public"]["Enums"]["origem_pedido"]
+          pago_em?: string | null
+          pre_venda_id?: string | null
+          shopify_order_id?: string | null
           status?: Database["public"]["Enums"]["status_pedido"]
           status_pagamento?: Database["public"]["Enums"]["status_pagamento"]
           subtotal?: number
           taxa_entrega?: number
-          desconto?: number
-          total?: never
-          endereco_entrega?: Json | null
-          observacoes?: string | null
-          cobrancas_enviadas?: number
+          total?: number
           ultima_cobranca_em?: string | null
-          pago_em?: string | null
-          forma_pagamento?: string | null
-          shopify_order_id?: string | null
-          criado_por?: string | null
-          criado_em?: string
-          atualizado_em?: string
         }
         Relationships: [
           {
@@ -818,6 +1012,20 @@ export type Database = {
             columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedidos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "vw_atendimentos"
+            referencedColumns: ["cliente_id"]
+          },
+          {
+            foreignKeyName: "pedidos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "vw_clientes"
             referencedColumns: ["id"]
           },
           {
@@ -834,101 +1042,108 @@ export type Database = {
             referencedRelation: "pre_vendas"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "pedidos_pre_venda_id_fkey"
+            columns: ["pre_venda_id"]
+            isOneToOne: false
+            referencedRelation: "vw_pre_vendas"
+            referencedColumns: ["id"]
+          },
         ]
       }
       pedidos_erp: {
         Row: {
+          canal: string
+          data_pedido: string
+          ecommerce: string | null
           id: number
           numero: number | null
-          canal: string
-          ecommerce: string | null
-          situacao: number
-          data_pedido: string
-          valor: number
           sincronizado_em: string
+          situacao: number
+          valor: number
         }
         Insert: {
+          canal: string
+          data_pedido: string
+          ecommerce?: string | null
           id: number
           numero?: number | null
-          canal: string
-          ecommerce?: string | null
-          situacao?: number
-          data_pedido: string
-          valor?: number
           sincronizado_em?: string
+          situacao?: number
+          valor?: number
         }
         Update: {
+          canal?: string
+          data_pedido?: string
+          ecommerce?: string | null
           id?: number
           numero?: number | null
-          canal?: string
-          ecommerce?: string | null
-          situacao?: number
-          data_pedido?: string
-          valor?: number
           sincronizado_em?: string
+          situacao?: number
+          valor?: number
         }
         Relationships: []
       }
       perfis: {
         Row: {
+          ativo: boolean
+          atualizado_em: string
+          cargo: string | null
+          criado_em: string
+          email: string | null
           id: string
           nome: string
-          email: string | null
-          cargo: string | null
           papel: Database["public"]["Enums"]["papel_usuario"]
-          ativo: boolean
-          criado_em: string
-          atualizado_em: string
         }
         Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          cargo?: string | null
+          criado_em?: string
+          email?: string | null
           id: string
           nome?: string
-          email?: string | null
-          cargo?: string | null
           papel?: Database["public"]["Enums"]["papel_usuario"]
-          ativo?: boolean
-          criado_em?: string
-          atualizado_em?: string
         }
         Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          cargo?: string | null
+          criado_em?: string
+          email?: string | null
           id?: string
           nome?: string
-          email?: string | null
-          cargo?: string | null
           papel?: Database["public"]["Enums"]["papel_usuario"]
-          ativo?: boolean
-          criado_em?: string
-          atualizado_em?: string
         }
         Relationships: []
       }
       pre_venda_itens: {
         Row: {
           id: string
-          pre_venda_id: string
-          produto_id: string
-          preco: number
           limite_por_cliente: number | null
-          quantidade_disponivel: number | null
           ordem: number
+          pre_venda_id: string
+          preco: number
+          produto_id: string
+          quantidade_disponivel: number | null
         }
         Insert: {
           id?: string
-          pre_venda_id: string
-          produto_id: string
-          preco: number
           limite_por_cliente?: number | null
-          quantidade_disponivel?: number | null
           ordem?: number
+          pre_venda_id: string
+          preco: number
+          produto_id: string
+          quantidade_disponivel?: number | null
         }
         Update: {
           id?: string
-          pre_venda_id?: string
-          produto_id?: string
-          preco?: number
           limite_por_cliente?: number | null
-          quantidade_disponivel?: number | null
           ordem?: number
+          pre_venda_id?: string
+          preco?: number
+          produto_id?: string
+          quantidade_disponivel?: number | null
         }
         Relationships: [
           {
@@ -936,6 +1151,13 @@ export type Database = {
             columns: ["pre_venda_id"]
             isOneToOne: false
             referencedRelation: "pre_vendas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pre_venda_itens_pre_venda_id_fkey"
+            columns: ["pre_venda_id"]
+            isOneToOne: false
+            referencedRelation: "vw_pre_vendas"
             referencedColumns: ["id"]
           },
           {
@@ -949,46 +1171,46 @@ export type Database = {
       }
       pre_vendas: {
         Row: {
-          id: string
-          titulo: string
-          descricao: string | null
-          slug: string
-          canal: Database["public"]["Enums"]["canal_venda"]
-          status: Database["public"]["Enums"]["status_pre_venda"]
-          encerra_em: string | null
-          previsao_entrega: string | null
-          taxa_entrega: number
-          criado_por: string | null
-          criado_em: string
           atualizado_em: string
+          canal: Database["public"]["Enums"]["canal_venda"]
+          criado_em: string
+          criado_por: string | null
+          descricao: string | null
+          encerra_em: string | null
+          id: string
+          previsao_entrega: string | null
+          slug: string
+          status: Database["public"]["Enums"]["status_pre_venda"]
+          taxa_entrega: number
+          titulo: string
         }
         Insert: {
-          id?: string
-          titulo: string
-          descricao?: string | null
-          slug?: string
-          canal?: Database["public"]["Enums"]["canal_venda"]
-          status?: Database["public"]["Enums"]["status_pre_venda"]
-          encerra_em?: string | null
-          previsao_entrega?: string | null
-          taxa_entrega?: number
-          criado_por?: string | null
-          criado_em?: string
           atualizado_em?: string
+          canal?: Database["public"]["Enums"]["canal_venda"]
+          criado_em?: string
+          criado_por?: string | null
+          descricao?: string | null
+          encerra_em?: string | null
+          id?: string
+          previsao_entrega?: string | null
+          slug?: string
+          status?: Database["public"]["Enums"]["status_pre_venda"]
+          taxa_entrega?: number
+          titulo: string
         }
         Update: {
-          id?: string
-          titulo?: string
-          descricao?: string | null
-          slug?: string
-          canal?: Database["public"]["Enums"]["canal_venda"]
-          status?: Database["public"]["Enums"]["status_pre_venda"]
-          encerra_em?: string | null
-          previsao_entrega?: string | null
-          taxa_entrega?: number
-          criado_por?: string | null
-          criado_em?: string
           atualizado_em?: string
+          canal?: Database["public"]["Enums"]["canal_venda"]
+          criado_em?: string
+          criado_por?: string | null
+          descricao?: string | null
+          encerra_em?: string | null
+          id?: string
+          previsao_entrega?: string | null
+          slug?: string
+          status?: Database["public"]["Enums"]["status_pre_venda"]
+          taxa_entrega?: number
+          titulo?: string
         }
         Relationships: [
           {
@@ -1002,58 +1224,58 @@ export type Database = {
       }
       produtos: {
         Row: {
-          id: string
-          nome: string
-          estilo: string | null
-          cervejaria: string | null
-          fornecedor_id: string | null
-          volume_ml: number | null
-          teor_alcoolico: number | null
-          descricao: string | null
-          preco: number
-          imagem_url: string | null
-          sku: string | null
           ativo: boolean
+          atualizado_em: string
+          cervejaria: string | null
+          criado_em: string
+          descricao: string | null
+          estilo: string | null
+          fornecedor_id: string | null
+          id: string
+          imagem_url: string | null
+          nome: string
+          preco: number
           shopify_product_id: string | null
           shopify_variant_id: string | null
-          criado_em: string
-          atualizado_em: string
+          sku: string | null
+          teor_alcoolico: number | null
+          volume_ml: number | null
         }
         Insert: {
-          id?: string
-          nome: string
-          estilo?: string | null
-          cervejaria?: string | null
-          fornecedor_id?: string | null
-          volume_ml?: number | null
-          teor_alcoolico?: number | null
-          descricao?: string | null
-          preco?: number
-          imagem_url?: string | null
-          sku?: string | null
           ativo?: boolean
+          atualizado_em?: string
+          cervejaria?: string | null
+          criado_em?: string
+          descricao?: string | null
+          estilo?: string | null
+          fornecedor_id?: string | null
+          id?: string
+          imagem_url?: string | null
+          nome: string
+          preco?: number
           shopify_product_id?: string | null
           shopify_variant_id?: string | null
-          criado_em?: string
-          atualizado_em?: string
+          sku?: string | null
+          teor_alcoolico?: number | null
+          volume_ml?: number | null
         }
         Update: {
-          id?: string
-          nome?: string
-          estilo?: string | null
-          cervejaria?: string | null
-          fornecedor_id?: string | null
-          volume_ml?: number | null
-          teor_alcoolico?: number | null
-          descricao?: string | null
-          preco?: number
-          imagem_url?: string | null
-          sku?: string | null
           ativo?: boolean
+          atualizado_em?: string
+          cervejaria?: string | null
+          criado_em?: string
+          descricao?: string | null
+          estilo?: string | null
+          fornecedor_id?: string | null
+          id?: string
+          imagem_url?: string | null
+          nome?: string
+          preco?: number
           shopify_product_id?: string | null
           shopify_variant_id?: string | null
-          criado_em?: string
-          atualizado_em?: string
+          sku?: string | null
+          teor_alcoolico?: number | null
+          volume_ml?: number | null
         }
         Relationships: [
           {
@@ -1067,299 +1289,682 @@ export type Database = {
       }
       vendedores: {
         Row: {
+          ativo: boolean
+          atualizado_em: string
+          criado_em: string
+          email: string | null
           id: string
           nome: string
-          whatsapp: string | null
-          email: string | null
           observacoes: string | null
-          ativo: boolean
-          criado_em: string
-          atualizado_em: string
+          whatsapp: string | null
         }
         Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          email?: string | null
           id?: string
           nome: string
-          whatsapp?: string | null
-          email?: string | null
           observacoes?: string | null
-          ativo?: boolean
-          criado_em?: string
-          atualizado_em?: string
+          whatsapp?: string | null
         }
         Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          email?: string | null
           id?: string
           nome?: string
-          whatsapp?: string | null
-          email?: string | null
           observacoes?: string | null
-          ativo?: boolean
-          criado_em?: string
-          atualizado_em?: string
+          whatsapp?: string | null
         }
         Relationships: []
       }
       webhooks: {
         Row: {
+          ativo: boolean
+          atualizado_em: string
+          criado_em: string
+          eventos: string[]
           id: string
           nome: string
-          url: string
-          eventos: string[]
           segredo: string
-          ativo: boolean
-          criado_em: string
-          atualizado_em: string
+          url: string
         }
         Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          eventos?: string[]
           id?: string
           nome: string
-          url: string
-          eventos?: string[]
           segredo?: string
-          ativo?: boolean
-          criado_em?: string
-          atualizado_em?: string
+          url: string
         }
         Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          criado_em?: string
+          eventos?: string[]
           id?: string
           nome?: string
-          url?: string
-          eventos?: string[]
           segredo?: string
-          ativo?: boolean
-          criado_em?: string
-          atualizado_em?: string
+          url?: string
         }
         Relationships: []
       }
+      whatsapp_contatos: {
+        Row: {
+          anotacoes: string | null
+          atualizado_em: string
+          chatid: string
+          criado_em: string
+          id: string
+          lead_id: string | null
+          nome: string | null
+          nome_whatsapp: string | null
+          whatsapp: string | null
+        }
+        Insert: {
+          anotacoes?: string | null
+          atualizado_em?: string
+          chatid: string
+          criado_em?: string
+          id?: string
+          lead_id?: string | null
+          nome?: string | null
+          nome_whatsapp?: string | null
+          whatsapp?: string | null
+        }
+        Update: {
+          anotacoes?: string | null
+          atualizado_em?: string
+          chatid?: string
+          criado_em?: string
+          id?: string
+          lead_id?: string | null
+          nome?: string | null
+          nome_whatsapp?: string | null
+          whatsapp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_contatos_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_contatos_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "vw_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_mensagens: {
+        Row: {
+          atendimento_id: string | null
+          citada_wa_id: string | null
+          contato_id: string
+          criado_em: string
+          direcao: Database["public"]["Enums"]["direcao_mensagem"]
+          enviada_em: string
+          enviada_por: string | null
+          erro: string | null
+          id: string
+          midia_mime: string | null
+          midia_nome: string | null
+          midia_path: string | null
+          midia_segundos: number | null
+          midia_status: string | null
+          status: Database["public"]["Enums"]["status_mensagem_whatsapp"] | null
+          texto: string | null
+          tipo: string
+          wa_id: string | null
+          wa_messageid: string | null
+        }
+        Insert: {
+          atendimento_id?: string | null
+          citada_wa_id?: string | null
+          contato_id: string
+          criado_em?: string
+          direcao: Database["public"]["Enums"]["direcao_mensagem"]
+          enviada_em?: string
+          enviada_por?: string | null
+          erro?: string | null
+          id?: string
+          midia_mime?: string | null
+          midia_nome?: string | null
+          midia_path?: string | null
+          midia_segundos?: number | null
+          midia_status?: string | null
+          status?:
+            | Database["public"]["Enums"]["status_mensagem_whatsapp"]
+            | null
+          texto?: string | null
+          tipo?: string
+          wa_id?: string | null
+          wa_messageid?: string | null
+        }
+        Update: {
+          atendimento_id?: string | null
+          citada_wa_id?: string | null
+          contato_id?: string
+          criado_em?: string
+          direcao?: Database["public"]["Enums"]["direcao_mensagem"]
+          enviada_em?: string
+          enviada_por?: string | null
+          erro?: string | null
+          id?: string
+          midia_mime?: string | null
+          midia_nome?: string | null
+          midia_path?: string | null
+          midia_segundos?: number | null
+          midia_status?: string | null
+          status?:
+            | Database["public"]["Enums"]["status_mensagem_whatsapp"]
+            | null
+          texto?: string | null
+          tipo?: string
+          wa_id?: string | null
+          wa_messageid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_mensagens_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_mensagens_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "vw_atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_mensagens_contato_id_fkey"
+            columns: ["contato_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_mensagens_enviada_por_fkey"
+            columns: ["enviada_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
+      vw_atendimentos: {
+        Row: {
+          atualizado_em: string | null
+          busca: string | null
+          chatid: string | null
+          cliente_id: string | null
+          cliente_nome: string | null
+          contato_id: string | null
+          contato_nome: string | null
+          criado_em: string | null
+          id: string | null
+          lead_id: string | null
+          nao_lidas: number | null
+          nome_whatsapp: string | null
+          numero: number | null
+          primeira_resposta_em: string | null
+          resolvido_em: string | null
+          responsavel_id: string | null
+          responsavel_nome: string | null
+          status: Database["public"]["Enums"]["status_atendimento"] | null
+          ultima_mensagem_direcao:
+            | Database["public"]["Enums"]["direcao_mensagem"]
+            | null
+          ultima_mensagem_em: string | null
+          ultima_mensagem_previa: string | null
+          whatsapp: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "atendimentos_contato_id_fkey"
+            columns: ["contato_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_contatos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimentos_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_contatos_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_contatos_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "vw_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vw_clientes: {
         Row: {
-          id: string | null
-          nome: string | null
-          whatsapp: string | null
-          email: string | null
-          cpf: string | null
-          data_nascimento: string | null
-          cep: string | null
-          logradouro: string | null
-          numero: string | null
-          complemento: string | null
-          bairro: string | null
-          cidade: string | null
-          uf: string | null
-          referencia: string | null
-          vip: boolean | null
-          tags: string[] | null
-          origem: Database["public"]["Enums"]["origem_cliente"] | null
-          observacoes: string | null
-          shopify_customer_id: string | null
           app_usuario_id: string | null
-          criado_em: string | null
           atualizado_em: string | null
-          pedidos: number | null
-          total_gasto: number | null
+          bairro: string | null
+          cep: string | null
+          cidade: string | null
+          complemento: string | null
+          cpf: string | null
+          criado_em: string | null
+          data_nascimento: string | null
           em_aberto: number | null
+          email: string | null
+          id: string | null
+          logradouro: string | null
+          nome: string | null
+          numero: string | null
+          observacoes: string | null
+          origem: Database["public"]["Enums"]["origem_cliente"] | null
+          pedidos: number | null
+          referencia: string | null
+          shopify_customer_id: string | null
+          tags: string[] | null
+          total_gasto: number | null
+          uf: string | null
           ultimo_pedido_em: string | null
+          vip: boolean | null
+          whatsapp: string | null
         }
         Relationships: []
       }
       vw_contas_pagar: {
         Row: {
-          id: string | null
-          descricao: string | null
-          categoria: string | null
-          tipo: Database["public"]["Enums"]["tipo_conta"] | null
-          fornecedor_id: string | null
-          conta_fixa_id: string | null
-          competencia: string | null
-          vencimento: string | null
-          valor: number | null
-          status: Database["public"]["Enums"]["status_conta"] | null
-          pago_em: string | null
-          valor_pago: number | null
-          forma_pagamento: string | null
-          observacoes: string | null
-          criado_em: string | null
           atualizado_em: string | null
+          categoria: string | null
+          competencia: string | null
+          conta_fixa_id: string | null
+          criado_em: string | null
+          descricao: string | null
+          forma_pagamento: string | null
+          fornecedor_id: string | null
           fornecedor_nome: string | null
+          id: string | null
+          observacoes: string | null
+          pago_em: string | null
           situacao: string | null
+          status: Database["public"]["Enums"]["status_conta"] | null
+          tipo: Database["public"]["Enums"]["tipo_conta"] | null
+          valor: number | null
+          valor_pago: number | null
+          vencimento: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "contas_pagar_conta_fixa_id_fkey"
+            columns: ["conta_fixa_id"]
+            isOneToOne: false
+            referencedRelation: "contas_fixas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contas_pagar_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "fornecedores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vw_contas_receber: {
         Row: {
-          id: string | null
-          descricao: string | null
-          categoria: string | null
-          pagador: string | null
-          competencia: string | null
-          vencimento: string | null
-          valor: number | null
-          status: Database["public"]["Enums"]["status_recebimento"] | null
-          recebido_em: string | null
-          valor_recebido: number | null
-          forma_pagamento: string | null
-          observacoes: string | null
-          criado_em: string | null
           atualizado_em: string | null
+          categoria: string | null
+          competencia: string | null
+          criado_em: string | null
+          descricao: string | null
+          forma_pagamento: string | null
+          id: string | null
+          observacoes: string | null
+          pagador: string | null
+          recebido_em: string | null
           situacao: string | null
+          status: Database["public"]["Enums"]["status_recebimento"] | null
+          valor: number | null
+          valor_recebido: number | null
+          vencimento: string | null
+        }
+        Insert: {
+          atualizado_em?: string | null
+          categoria?: string | null
+          competencia?: string | null
+          criado_em?: string | null
+          descricao?: string | null
+          forma_pagamento?: string | null
+          id?: string | null
+          observacoes?: string | null
+          pagador?: string | null
+          recebido_em?: string | null
+          situacao?: never
+          status?: Database["public"]["Enums"]["status_recebimento"] | null
+          valor?: number | null
+          valor_recebido?: number | null
+          vencimento?: string | null
+        }
+        Update: {
+          atualizado_em?: string | null
+          categoria?: string | null
+          competencia?: string | null
+          criado_em?: string | null
+          descricao?: string | null
+          forma_pagamento?: string | null
+          id?: string | null
+          observacoes?: string | null
+          pagador?: string | null
+          recebido_em?: string | null
+          situacao?: never
+          status?: Database["public"]["Enums"]["status_recebimento"] | null
+          valor?: number | null
+          valor_recebido?: number | null
+          vencimento?: string | null
         }
         Relationships: []
       }
       vw_leads: {
         Row: {
-          id: string | null
-          lista_id: string | null
-          linha: number | null
-          nome: string | null
-          whatsapp: string | null
-          email: string | null
-          dados: Json | null
           busca: string | null
           criado_em: string | null
+          dados: Json | null
+          email: string | null
+          id: string | null
           ja_cliente: boolean | null
+          linha: number | null
+          lista_id: string | null
+          nome: string | null
+          whatsapp: string | null
         }
-        Relationships: []
+        Insert: {
+          busca?: string | null
+          criado_em?: string | null
+          dados?: Json | null
+          email?: string | null
+          id?: string | null
+          ja_cliente?: never
+          linha?: number | null
+          lista_id?: string | null
+          nome?: string | null
+          whatsapp?: string | null
+        }
+        Update: {
+          busca?: string | null
+          criado_em?: string | null
+          dados?: Json | null
+          email?: string | null
+          id?: string | null
+          ja_cliente?: never
+          linha?: number | null
+          lista_id?: string | null
+          nome?: string | null
+          whatsapp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_lista_id_fkey"
+            columns: ["lista_id"]
+            isOneToOne: false
+            referencedRelation: "leads_listas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vw_leads_pastas: {
         Row: {
-          id: string | null
-          nome: string | null
-          descricao: string | null
-          criado_por: string | null
-          criado_em: string | null
           atualizado_em: string | null
-          listas: number | null
-          leads: number | null
           com_whatsapp: number | null
+          criado_em: string | null
+          criado_por: string | null
+          descricao: string | null
+          id: string | null
+          leads: number | null
+          listas: number | null
+          nome: string | null
           ultima_lista_em: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leads_pastas_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vw_pedidos: {
         Row: {
-          id: string | null
-          numero: number | null
-          cliente_id: string | null
-          pre_venda_id: string | null
-          canal: Database["public"]["Enums"]["canal_venda"] | null
-          origem: Database["public"]["Enums"]["origem_pedido"] | null
-          status: Database["public"]["Enums"]["status_pedido"] | null
-          status_pagamento: Database["public"]["Enums"]["status_pagamento"] | null
-          subtotal: number | null
-          taxa_entrega: number | null
-          desconto: number | null
-          total: number | null
-          endereco_entrega: Json | null
-          observacoes: string | null
-          cobrancas_enviadas: number | null
-          ultima_cobranca_em: string | null
-          pago_em: string | null
-          forma_pagamento: string | null
-          shopify_order_id: string | null
-          criado_por: string | null
-          criado_em: string | null
           atualizado_em: string | null
+          canal: Database["public"]["Enums"]["canal_venda"] | null
+          cliente_id: string | null
           cliente_nome: string | null
           cliente_whatsapp: string | null
+          cobrancas_enviadas: number | null
+          criado_em: string | null
+          criado_por: string | null
+          desconto: number | null
+          endereco_entrega: Json | null
+          forma_pagamento: string | null
+          id: string | null
+          numero: number | null
+          observacoes: string | null
+          origem: Database["public"]["Enums"]["origem_pedido"] | null
+          pago_em: string | null
+          pre_venda_id: string | null
           pre_venda_titulo: string | null
+          shopify_order_id: string | null
+          status: Database["public"]["Enums"]["status_pedido"] | null
+          status_pagamento:
+            | Database["public"]["Enums"]["status_pagamento"]
+            | null
+          subtotal: number | null
+          taxa_entrega: number | null
+          total: number | null
+          ultima_cobranca_em: string | null
           unidades: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pedidos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedidos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "vw_atendimentos"
+            referencedColumns: ["cliente_id"]
+          },
+          {
+            foreignKeyName: "pedidos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "vw_clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedidos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedidos_pre_venda_id_fkey"
+            columns: ["pre_venda_id"]
+            isOneToOne: false
+            referencedRelation: "pre_vendas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedidos_pre_venda_id_fkey"
+            columns: ["pre_venda_id"]
+            isOneToOne: false
+            referencedRelation: "vw_pre_vendas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vw_pre_venda_itens: {
         Row: {
-          id: string | null
-          pre_venda_id: string | null
-          produto_id: string | null
-          preco: number | null
-          limite_por_cliente: number | null
-          quantidade_disponivel: number | null
-          ordem: number | null
-          nome: string | null
-          estilo: string | null
           cervejaria: string | null
-          volume_ml: number | null
-          teor_alcoolico: number | null
           descricao: string | null
+          estilo: string | null
+          id: string | null
           imagem_url: string | null
-          vendido: number | null
+          limite_por_cliente: number | null
+          nome: string | null
+          ordem: number | null
+          pre_venda_id: string | null
+          preco: number | null
+          produto_id: string | null
+          quantidade_disponivel: number | null
           restante: number | null
+          teor_alcoolico: number | null
+          vendido: number | null
+          volume_ml: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pre_venda_itens_pre_venda_id_fkey"
+            columns: ["pre_venda_id"]
+            isOneToOne: false
+            referencedRelation: "pre_vendas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pre_venda_itens_pre_venda_id_fkey"
+            columns: ["pre_venda_id"]
+            isOneToOne: false
+            referencedRelation: "vw_pre_vendas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pre_venda_itens_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vw_pre_vendas: {
         Row: {
-          id: string | null
-          titulo: string | null
-          descricao: string | null
-          slug: string | null
-          canal: Database["public"]["Enums"]["canal_venda"] | null
-          status: Database["public"]["Enums"]["status_pre_venda"] | null
-          encerra_em: string | null
-          previsao_entrega: string | null
-          taxa_entrega: number | null
-          criado_por: string | null
-          criado_em: string | null
           atualizado_em: string | null
-          status_efetivo: Database["public"]["Enums"]["status_pre_venda"] | null
+          canal: Database["public"]["Enums"]["canal_venda"] | null
+          criado_em: string | null
+          criado_por: string | null
+          descricao: string | null
+          encerra_em: string | null
+          id: string | null
           pedidos: number | null
-          total_vendido: number | null
+          previsao_entrega: string | null
+          slug: string | null
+          status: Database["public"]["Enums"]["status_pre_venda"] | null
+          status_efetivo: Database["public"]["Enums"]["status_pre_venda"] | null
+          taxa_entrega: number | null
+          titulo: string | null
           total_recebido: number | null
+          total_vendido: number | null
           unidades: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pre_vendas_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {
-      aplicar_conta_fixa_aos_pendentes: {
+      alterar_status_atendimento: {
         Args: {
-          p_conta_fixa_id: string
+          p_id: string
+          p_status: Database["public"]["Enums"]["status_atendimento"]
+        }
+        Returns: undefined
+      }
+      aplicar_conta_fixa_aos_pendentes: {
+        Args: { p_conta_fixa_id: string }
+        Returns: number
+      }
+      assumir_atendimento: { Args: { p_id: string }; Returns: undefined }
+      atualizar_status_whatsapp: {
+        Args: {
+          p_messageids: string[]
+          p_status: Database["public"]["Enums"]["status_mensagem_whatsapp"]
         }
         Returns: number
       }
       concluir_importacao_leads: {
-        Args: {
-          p_lista_id: string
-        }
+        Args: { p_lista_id: string }
         Returns: undefined
       }
       criar_pedido: {
         Args: {
-          p_cliente_id: string
-          p_itens: Json
-          p_pre_venda_id?: string
           p_canal?: Database["public"]["Enums"]["canal_venda"]
-          p_origem?: Database["public"]["Enums"]["origem_pedido"]
-          p_observacoes?: string
-          p_endereco?: Json
-          p_taxa_entrega?: number
+          p_cliente_id: string
           p_desconto?: number
+          p_endereco?: Json
+          p_itens: Json
+          p_observacoes?: string
+          p_origem?: Database["public"]["Enums"]["origem_pedido"]
+          p_pre_venda_id?: string
+          p_taxa_entrega?: number
         }
         Returns: {
+          atualizado_em: string
+          canal: Database["public"]["Enums"]["canal_venda"]
+          cliente_id: string
+          cobrancas_enviadas: number
+          criado_em: string
+          criado_por: string | null
+          desconto: number
+          endereco_entrega: Json | null
+          forma_pagamento: string | null
           id: string
           numero: number
-          cliente_id: string
-          pre_venda_id: string | null
-          canal: Database["public"]["Enums"]["canal_venda"]
+          observacoes: string | null
           origem: Database["public"]["Enums"]["origem_pedido"]
+          pago_em: string | null
+          pre_venda_id: string | null
+          shopify_order_id: string | null
           status: Database["public"]["Enums"]["status_pedido"]
           status_pagamento: Database["public"]["Enums"]["status_pagamento"]
           subtotal: number
           taxa_entrega: number
-          desconto: number
           total: number
-          endereco_entrega: Json | null
-          observacoes: string | null
-          cobrancas_enviadas: number
           ultima_cobranca_em: string | null
-          pago_em: string | null
-          forma_pagamento: string | null
-          shopify_order_id: string | null
-          criado_por: string | null
-          criado_em: string
-          atualizado_em: string
         }
         SetofOptions: {
           from: "*"
@@ -1370,122 +1975,88 @@ export type Database = {
       }
       definir_empresas_do_vendedor: {
         Args: {
-          p_vendedor_id: string
           p_fornecedor_ids?: string[]
           p_novas_empresas?: string[]
+          p_vendedor_id: string
         }
         Returns: undefined
       }
-      desconectar_olist: {
-        Args: never
-        Returns: undefined
-      }
-      eh_admin: {
-        Args: never
-        Returns: boolean
-      }
-      eh_membro_equipe: {
-        Args: never
-        Returns: boolean
-      }
+      desconectar_olist: { Args: never; Returns: undefined }
+      eh_admin: { Args: never; Returns: boolean }
+      eh_membro_equipe: { Args: never; Returns: boolean }
       endereco_do_cliente: {
-        Args: {
-          p_cliente: unknown
-        }
+        Args: { p_cliente: Database["public"]["Tables"]["clientes"]["Row"] }
         Returns: Json
       }
       excluir_categoria_financeira: {
-        Args: {
-          p_id: string
-        }
+        Args: { p_id: string }
         Returns: undefined
       }
-      gerar_contas_fixas: {
-        Args: {
-          p_competencia: string
-        }
-        Returns: number
-      }
-      hoje_brasilia: {
-        Args: never
-        Returns: string
-      }
+      gerar_contas_fixas: { Args: { p_competencia: string }; Returns: number }
+      hoje_brasilia: { Args: never; Returns: string }
       identificar_cliente_pre_venda: {
-        Args: {
-          p_whatsapp: string
-        }
+        Args: { p_whatsapp: string }
         Returns: Json
       }
       importar_leads: {
+        Args: { p_leads: Json; p_lista_id: string }
+        Returns: number
+      }
+      importar_pedido_shopify: { Args: { p_pedido: Json }; Returns: string }
+      metricas_painel: {
+        Args: { p_fim: string; p_inicio: string }
+        Returns: Json
+      }
+      normalizar_whatsapp: { Args: { p_numero: string }; Returns: string }
+      ordem_status_whatsapp: {
         Args: {
-          p_lista_id: string
-          p_leads: Json
+          p_status: Database["public"]["Enums"]["status_mensagem_whatsapp"]
         }
         Returns: number
       }
-      importar_pedido_shopify: {
-        Args: {
-          p_pedido: Json
-        }
-        Returns: string
-      }
-      metricas_painel: {
-        Args: {
-          p_inicio: string
-          p_fim: string
-        }
+      pedido_json: { Args: { p_pedido_id: string }; Returns: Json }
+      preparar_envio_whatsapp: {
+        Args: { p_atendimento_id: string; p_texto: string }
         Returns: Json
       }
-      normalizar_whatsapp: {
-        Args: {
-          p_numero: string
-        }
+      previa_mensagem_whatsapp: {
+        Args: { p_texto: string; p_tipo: string }
         Returns: string
-      }
-      pedido_json: {
-        Args: {
-          p_pedido_id: string
-        }
-        Returns: Json
       }
       receita_semanal: {
-        Args: {
-          p_semanas?: number
-        }
+        Args: { p_semanas?: number }
         Returns: {
-          semana: string
           canal: Database["public"]["Enums"]["canal_venda"]
-          total: number
           pedidos: number
+          semana: string
+          total: number
         }[]
       }
       registrar_cobranca: {
-        Args: {
-          p_pedido_id: string
-        }
+        Args: { p_pedido_id: string }
         Returns: {
+          atualizado_em: string
+          canal: Database["public"]["Enums"]["canal_venda"]
+          cliente_id: string
+          cobrancas_enviadas: number
+          criado_em: string
+          criado_por: string | null
+          desconto: number
+          endereco_entrega: Json | null
+          forma_pagamento: string | null
           id: string
           numero: number
-          cliente_id: string
-          pre_venda_id: string | null
-          canal: Database["public"]["Enums"]["canal_venda"]
+          observacoes: string | null
           origem: Database["public"]["Enums"]["origem_pedido"]
+          pago_em: string | null
+          pre_venda_id: string | null
+          shopify_order_id: string | null
           status: Database["public"]["Enums"]["status_pedido"]
           status_pagamento: Database["public"]["Enums"]["status_pagamento"]
           subtotal: number
           taxa_entrega: number
-          desconto: number
           total: number
-          endereco_entrega: Json | null
-          observacoes: string | null
-          cobrancas_enviadas: number
           ultima_cobranca_em: string | null
-          pago_em: string | null
-          forma_pagamento: string | null
-          shopify_order_id: string | null
-          criado_por: string | null
-          criado_em: string
-          atualizado_em: string
         }
         SetofOptions: {
           from: "*"
@@ -1496,44 +2067,45 @@ export type Database = {
       }
       registrar_evento: {
         Args: {
-          p_tipo: string
           p_entidade: string
           p_entidade_id: string
           p_payload: Json
+          p_tipo: string
         }
         Returns: string
       }
+      registrar_mensagem_whatsapp: { Args: { p: Json }; Returns: Json }
       registrar_pedido_pre_venda: {
         Args: {
-          p_slug: string
+          p_atualizar_endereco?: boolean
           p_cliente: Json
           p_itens: Json
-          p_atualizar_endereco?: boolean
           p_observacoes?: string
+          p_slug: string
         }
         Returns: {
+          atualizado_em: string
+          canal: Database["public"]["Enums"]["canal_venda"]
+          cliente_id: string
+          cobrancas_enviadas: number
+          criado_em: string
+          criado_por: string | null
+          desconto: number
+          endereco_entrega: Json | null
+          forma_pagamento: string | null
           id: string
           numero: number
-          cliente_id: string
-          pre_venda_id: string | null
-          canal: Database["public"]["Enums"]["canal_venda"]
+          observacoes: string | null
           origem: Database["public"]["Enums"]["origem_pedido"]
+          pago_em: string | null
+          pre_venda_id: string | null
+          shopify_order_id: string | null
           status: Database["public"]["Enums"]["status_pedido"]
           status_pagamento: Database["public"]["Enums"]["status_pagamento"]
           subtotal: number
           taxa_entrega: number
-          desconto: number
           total: number
-          endereco_entrega: Json | null
-          observacoes: string | null
-          cobrancas_enviadas: number
           ultima_cobranca_em: string | null
-          pago_em: string | null
-          forma_pagamento: string | null
-          shopify_order_id: string | null
-          criado_por: string | null
-          criado_em: string
-          atualizado_em: string
         }
         SetofOptions: {
           from: "*"
@@ -1543,57 +2115,54 @@ export type Database = {
         }
       }
       renomear_categoria_financeira: {
-        Args: {
-          p_id: string
-          p_nome: string
-        }
+        Args: { p_id: string; p_nome: string }
         Returns: undefined
       }
       resumo_produtos_vendidos: {
         Args: {
           p_canal?: Database["public"]["Enums"]["canal_venda"]
-          p_pre_venda_id?: string
-          p_inicio?: string
           p_fim?: string
+          p_inicio?: string
+          p_pre_venda_id?: string
           p_status_pagamento?: Database["public"]["Enums"]["status_pagamento"]
         }
         Returns: {
-          produto_id: string
           descricao: string
           estilo: string
+          pedidos: number
+          produto_id: string
           quantidade: number
           total: number
-          pedidos: number
         }[]
       }
       salvar_conexao_olist: {
         Args: {
-          p_access_token: string
-          p_refresh_token: string
           p_access_expira_em: string
+          p_access_token: string
           p_refresh_expira_em: string
+          p_refresh_token: string
         }
         Returns: undefined
       }
+      salvar_lead_whatsapp: {
+        Args: { p_contato_id: string; p_pasta_id?: string }
+        Returns: string
+      }
       salvar_pre_venda: {
-        Args: {
-          p_dados: Json
-          p_itens: Json
-          p_id?: string
-        }
+        Args: { p_dados: Json; p_id?: string; p_itens: Json }
         Returns: {
-          id: string
-          titulo: string
-          descricao: string | null
-          slug: string
-          canal: Database["public"]["Enums"]["canal_venda"]
-          status: Database["public"]["Enums"]["status_pre_venda"]
-          encerra_em: string | null
-          previsao_entrega: string | null
-          taxa_entrega: number
-          criado_por: string | null
-          criado_em: string
           atualizado_em: string
+          canal: Database["public"]["Enums"]["canal_venda"]
+          criado_em: string
+          criado_por: string | null
+          descricao: string | null
+          encerra_em: string | null
+          id: string
+          previsao_entrega: string | null
+          slug: string
+          status: Database["public"]["Enums"]["status_pre_venda"]
+          taxa_entrega: number
+          titulo: string
         }
         SetofOptions: {
           from: "*"
@@ -1603,68 +2172,74 @@ export type Database = {
         }
       }
       situacao_erp_conta_venda: {
-        Args: {
-          p_situacao: number
-        }
+        Args: { p_situacao: number }
         Returns: boolean
       }
-      somente_digitos: {
-        Args: {
-          p_texto: string
-        }
-        Returns: string
-      }
-      status_integracao_olist: {
-        Args: never
-        Returns: Json
+      somente_digitos: { Args: { p_texto: string }; Returns: string }
+      status_integracao_olist: { Args: never; Returns: Json }
+      transferir_atendimento: {
+        Args: { p_id: string; p_para: string }
+        Returns: undefined
       }
       vendas_crm_por_dia: {
         Args: {
           p_canal: Database["public"]["Enums"]["canal_venda"]
-          p_inicio: string
           p_fim: string
+          p_inicio: string
         }
         Returns: {
           dia: string
-          valor: number
           pedidos: number
+          valor: number
         }[]
       }
       vendas_erp_por_canal: {
-        Args: {
-          p_inicio: string
-          p_fim: string
-        }
+        Args: { p_fim: string; p_inicio: string }
         Returns: {
           canal: string
-          valor: number
           pedidos: number
+          valor: number
         }[]
       }
       vendas_erp_por_dia: {
-        Args: {
-          p_inicio: string
-          p_fim: string
-        }
+        Args: { p_fim: string; p_inicio: string }
         Returns: {
-          dia: string
           canal: string
-          valor: number
+          dia: string
           pedidos: number
+          valor: number
         }[]
       }
+      whatsapp_canonico: { Args: { p_numero: string }; Returns: string }
     }
     Enums: {
       canal_venda: "grupo_vip" | "whatsapp" | "loja" | "shopify" | "app"
+      direcao_mensagem: "entrada" | "saida"
       natureza_financeira: "pagar" | "receber"
       origem_cliente: "manual" | "pre_venda" | "shopify" | "app" | "importacao"
       origem_pedido: "link" | "manual" | "shopify" | "app" | "api"
       papel_usuario: "admin" | "equipe"
+      status_atendimento:
+        | "fila"
+        | "em_atendimento"
+        | "aguardando_cliente"
+        | "resolvido"
       status_conta: "pendente" | "paga" | "cancelada"
       status_evento: "pendente" | "enviado" | "erro" | "ignorado"
       status_lista_leads: "importando" | "pronta"
+      status_mensagem_whatsapp:
+        | "enviando"
+        | "enviada"
+        | "entregue"
+        | "lida"
+        | "falhou"
       status_pagamento: "pendente" | "cobrado" | "pago" | "estornado"
-      status_pedido: "novo" | "confirmado" | "separado" | "entregue" | "cancelado"
+      status_pedido:
+        | "novo"
+        | "confirmado"
+        | "separado"
+        | "entregue"
+        | "cancelado"
       status_pre_venda: "rascunho" | "ativa" | "encerrada"
       status_recebimento: "pendente" | "recebida" | "cancelada"
       tipo_conta: "fixa" | "variavel"
@@ -1683,12 +2258,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1712,11 +2287,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1737,11 +2312,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1762,11 +2337,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1775,19 +2350,56 @@ export type Enums<
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never
 
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never) = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
 export const Constants = {
   public: {
     Enums: {
       canal_venda: ["grupo_vip", "whatsapp", "loja", "shopify", "app"],
+      direcao_mensagem: ["entrada", "saida"],
       natureza_financeira: ["pagar", "receber"],
       origem_cliente: ["manual", "pre_venda", "shopify", "app", "importacao"],
       origem_pedido: ["link", "manual", "shopify", "app", "api"],
       papel_usuario: ["admin", "equipe"],
+      status_atendimento: [
+        "fila",
+        "em_atendimento",
+        "aguardando_cliente",
+        "resolvido",
+      ],
       status_conta: ["pendente", "paga", "cancelada"],
       status_evento: ["pendente", "enviado", "erro", "ignorado"],
       status_lista_leads: ["importando", "pronta"],
+      status_mensagem_whatsapp: [
+        "enviando",
+        "enviada",
+        "entregue",
+        "lida",
+        "falhou",
+      ],
       status_pagamento: ["pendente", "cobrado", "pago", "estornado"],
-      status_pedido: ["novo", "confirmado", "separado", "entregue", "cancelado"],
+      status_pedido: [
+        "novo",
+        "confirmado",
+        "separado",
+        "entregue",
+        "cancelado",
+      ],
       status_pre_venda: ["rascunho", "ativa", "encerrada"],
       status_recebimento: ["pendente", "recebida", "cancelada"],
       tipo_conta: ["fixa", "variavel"],
