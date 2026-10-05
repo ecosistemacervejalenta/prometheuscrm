@@ -3,7 +3,7 @@ import { Link2, RefreshCw, Unplug } from 'lucide-react'
 import { ActionButton } from '@/components/ui/action-button'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { classesBotao } from '@/components/ui/button'
+import { Button, classesBotao } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { CopyButton } from '@/components/ui/copy-button'
 import { formatarDataHora, formatarHaQuanto } from '@/lib/format'
@@ -41,11 +41,16 @@ export function CartaoOlist({ status, site, ehAdmin }: { status: StatusOlist; si
     <Badge tom="alerta" ponto>Falta configurar</Badge>
   )
 
-  const botaoConectar = ehAdmin && status.configurado && (
+  const rotuloConectar = status.conectado || status.expirada ? 'Reconectar' : 'Conectar Olist'
+  const botaoConectar = !ehAdmin ? null : status.configurado ? (
     // <a> (e não <Link>): a rota redireciona para fora do CRM e não deve ser pré-carregada.
     <a href="/api/olist/conectar" className={classesBotao({ variante: status.conectado ? 'secundario' : 'primario', tamanho: 'sm' })}>
-      <Link2 /> {status.conectado || status.expirada ? 'Reconectar' : 'Conectar Olist'}
+      <Link2 /> {rotuloConectar}
     </a>
+  ) : (
+    <Button tamanho="sm" variante="primario" disabled title="Disponível depois de cadastrar as chaves na Vercel e fazer o redeploy">
+      <Link2 /> {rotuloConectar}
+    </Button>
   )
 
   return (
@@ -101,10 +106,23 @@ export function CartaoOlist({ status, site, ehAdmin }: { status: StatusOlist; si
         </div>
 
         {!status.configurado && (
-          <p className="text-suave">
-            3. Copie o Client ID e o Client Secret do aplicativo para a Vercel (<Codigo>OLIST_CLIENT_ID</Codigo> e{' '}
-            <Codigo>OLIST_CLIENT_SECRET</Codigo>) e faça um novo deploy. Depois volte aqui e clique em Conectar.
-          </p>
+          <>
+            <p className="text-suave">
+              3. Copie o Client ID e o Client Secret do aplicativo (botão “detalhes” no Olist) para a Vercel, em{' '}
+              <strong className="text-ink">Settings › Environment Variables</strong>, ambiente <strong className="text-ink">Production</strong>.
+              Depois faça um <strong className="text-ink">Redeploy</strong> e o botão Conectar é liberado.
+            </p>
+            <Alert tom="alerta" titulo="O servidor ainda não encontrou:">
+              {status.variaveisFaltando.map((nome, i) => (
+                <span key={nome}>
+                  {i > 0 && ' e '}
+                  <Codigo>{nome}</Codigo>
+                </span>
+              ))}
+              . Se você já cadastrou, confira o nome (exatamente assim, em maiúsculas), se marcou Production e se fez o Redeploy
+              depois de salvar.
+            </Alert>
+          </>
         )}
         {!status.sincronizacaoDisponivel && (
           <Alert tom="alerta" titulo="Falta CRON_SECRET">

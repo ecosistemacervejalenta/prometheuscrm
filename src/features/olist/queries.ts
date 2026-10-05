@@ -3,11 +3,13 @@ import 'server-only'
 import { exigirEquipe } from '@/lib/auth'
 import { envServidor } from '@/lib/env.server'
 
-import { olistConfigurado } from './oauth'
+import { variaveisOlistFaltando } from './oauth'
 
 export type StatusOlist = {
   /** OLIST_CLIENT_ID/SECRET definidos. */
   configurado: boolean
+  /** Quais dessas variáveis o servidor ainda não enxerga. */
+  variaveisFaltando: string[]
   /** CRON_SECRET definido (necessário para sincronizar). */
   sincronizacaoDisponivel: boolean
   conectado: boolean
@@ -24,8 +26,10 @@ export async function statusOlist(): Promise<StatusOlist> {
   if (error) throw error
   const s = (data ?? {}) as Record<string, unknown>
   const texto = (v: unknown) => (typeof v === 'string' ? v : null)
+  const variaveisFaltando = variaveisOlistFaltando()
   return {
-    configurado: olistConfigurado(),
+    configurado: variaveisFaltando.length === 0,
+    variaveisFaltando,
     sincronizacaoDisponivel: Boolean(envServidor.cronSecret),
     conectado: s.conectado === true,
     expirada: s.expirada === true,

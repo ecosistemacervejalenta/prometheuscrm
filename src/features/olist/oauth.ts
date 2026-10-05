@@ -23,8 +23,16 @@ export type TokensOlist = {
 /** Erro de autorização definitivo (refresh vencido/revogado): exige reconectar. */
 export class ConexaoOlistExpirada extends Error {}
 
+/** Variáveis do aplicativo Olist que ainda não chegaram ao servidor (faltam na Vercel ou falta redeploy). */
+export function variaveisOlistFaltando(): string[] {
+  return [
+    !envServidor.olistClientId && 'OLIST_CLIENT_ID',
+    !envServidor.olistClientSecret && 'OLIST_CLIENT_SECRET',
+  ].filter((v): v is string => Boolean(v))
+}
+
 export function olistConfigurado(): boolean {
-  return Boolean(envServidor.olistClientId && envServidor.olistClientSecret)
+  return variaveisOlistFaltando().length === 0
 }
 
 function credenciais() {
