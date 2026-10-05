@@ -7,9 +7,27 @@ import { errosDeValidacao, falha, traduzirErro, type EstadoAcao } from '@/lib/ac
 import { exigirEquipe } from '@/lib/auth'
 import { formParaObjeto } from '@/lib/validacao'
 
-import { esquemaProduto, TAMANHO_MAXIMO_IMAGEM, TIPOS_IMAGEM } from './schema'
+import { esquemaCerveja, esquemaCervejaNova, esquemaProduto, TAMANHO_MAXIMO_IMAGEM, TIPOS_IMAGEM } from './schema'
 
 const BUCKET = 'produtos'
+const CAMPOS_CERVEJA = 'id, nome, estilo, cervejaria, volume_ml, teor_alcoolico, descricao, preco, imagem_url'
+
+type Supabase = Awaited<ReturnType<typeof exigirEquipe>>['supabase']
+
+/** Upload da imagem para o Supabase Storage (bucket público "produtos"). */
+async function enviarImagem(supabase: Supabase, arquivo: File): Promise<{ url: string } | { erro: string }> {
+  if (!TIPOS_IMAGEM.includes(arquivo.type)) return { erro: 'Use PNG, JPG, WEBP ou AVIF.' }
+  if (arquivo.size > TAMANHO_MAXIMO_IMAGEM) return { erro: 'Imagem acima de 4 MB.' }
+
+  const extensao = arquivo.name.split('.').pop()?.toLowerCase() || 'jpg'
+  const caminho = `${crypto.randomUUID()}.${extensao}`
+  const envio = await supabase.storage.from(BUCKET).upload(caminho, arquivo, {
+    contentType: arquivo.type,
+    cacheControl: '31536000',
+  })
+  if (envio.error) return { erro: `Não foi possível enviar a imagem: ${envio.error.message}` }
+  return { url: supabase.storage.from(BUCKET).getPublicUrl(caminho).data.publicUrl }
+}
 
 export async function salvarProduto(id: string | null, _: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
   const { supabase } = await exigirEquipe()
@@ -19,19 +37,10 @@ export async function salvarProduto(id: string | null, _: EstadoAcao, formData: 
   const dados = esquemaProduto.safeParse(formParaObjeto(formData))
   if (!dados.success) return errosDeValidacao(dados.error)
 
-  // Upload opcional da imagem para o Supabase Storage (bucket público "produtos").
   if (arquivo instanceof File && arquivo.size > 0) {
-    if (!TIPOS_IMAGEM.includes(arquivo.type)) return { ok: false, erros: { imagem: ['Use PNG, JPG, WEBP ou AVIF.'] } }
-    if (arquivo.size > TAMANHO_MAXIMO_IMAGEM) return { ok: false, erros: { imagem: ['Imagem acima de 4 MB.'] } }
-
-    const extensao = arquivo.name.split('.').pop()?.toLowerCase() || 'jpg'
-    const caminho = `${crypto.randomUUID()}.${extensao}`
-    const envio = await supabase.storage.from(BUCKET).upload(caminho, arquivo, {
-      contentType: arquivo.type,
-      cacheControl: '31536000',
-    })
-    if (envio.error) return falha(`Não foi possível enviar a imagem: ${envio.error.message}`)
-    dados.data.imagem_url = supabase.storage.from(BUCKET).getPublicUrl(caminho).data.publicUrl
+    const envio = await enviarImagem(supabase, arquivo)
+    if ('erro' in envio) return { ok: false, mensagem: envio.erro, erros: { imagem: [envio.erro] } }
+    dados.data.imagem_url = envio.url
   }
 
   const { error } = id
@@ -55,4 +64,64 @@ export async function excluirProduto(id: string): Promise<EstadoAcao> {
   }
   revalidatePath('/produtos')
   redirect('/produtos')
+}
+
+export type CervejaSalva = {
+  id: string
+  nome: string
+  estilo: string | null
+  cervejaria: string | null
+  volume_ml: number | null
+  teor_alcoolico: number | null
+  descricao: string | null
+  preco: number
+  imagem_url: string | null
+}
+
+export type ResultadoCerveja =
+  | { ok: true; cerveja: CervejaSalva }
+  | { ok: false; mensagem: string; erros?: Record<string, string[] | undefined> }
+
+/**
+ * Cadastro/edição rápida de cerveja dentro da pré-venda (sem sair da tela).
+ * Cria no catálogo já ativa; na edição, o preço da pré-venda fica no formulário dela.
+ * Campos: nome, estilo, cervejaria, volume_ml, teor_alcoolico, descricao, preco (só ao criar),
+ * imagem (arquivo já enquadrado no navegador) e remover_imagem ("1").
+ */
+export async function salvarCervejaRapida(id: string | null, formData: FormData): Promise<ResultadoCerveja> {
+  const { supabase } = await exigirEquipe()
+
+  const arquivo = formData.get('imagem')
+  const removerImagem = formData.get('remover_imagem') === '1'
+  formData.delete('imagem')
+  formData.delete('remover_imagem')
+
+  const dados = (id ? esquemaCerveja : esquemaCervejaNova).safeParse(formParaObjeto(formData))
+  if (!dados.success) {
+    const { mensagem, erros } = errosDeValidacao(dados.error)
+    return { ok: false, mensagem: mensagem ?? 'Revise os campos destacados.', erros }
+  }
+
+  const registro: typeof dados.data & { imagem_url?: string | null } = { ...dados.data }
+  if (removerImagem) registro.imagem_url = null
+  if (arquivo instanceof File && arquivo.size > 0) {
+    const envio = await enviarImagem(supabase, arquivo)
+    if ('erro' in envio) return { ok: false, mensagem: envio.erro, erros: { imagem: [envio.erro] } }
+    registro.imagem_url = envio.url
+  }
+
+  const { data, error } = id
+    ? await supabase.from('produtos').update(registro).eq('id', id).select(CAMPOS_CERVEJA).single()
+    : await supabase
+        .from('produtos')
+        .insert({ ...registro, ativo: true })
+        .select(CAMPOS_CERVEJA)
+        .single()
+  if (error) return { ok: false, mensagem: traduzirErro(error) }
+
+  revalidatePath('/produtos')
+  return {
+    ok: true,
+    cerveja: { ...data, preco: Number(data.preco), teor_alcoolico: data.teor_alcoolico === null ? null : Number(data.teor_alcoolico) },
+  }
 }

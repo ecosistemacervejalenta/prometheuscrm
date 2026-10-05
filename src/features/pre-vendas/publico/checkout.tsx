@@ -3,7 +3,6 @@
 import {
   ArrowLeft,
   ArrowRight,
-  Beer,
   CalendarClock,
   Check,
   CircleAlert,
@@ -11,10 +10,8 @@ import {
   Lock,
   MapPin,
   MessageCircle,
-  Minus,
   Pencil,
   Phone,
-  Plus,
   Truck,
   User,
 } from 'lucide-react'
@@ -39,6 +36,7 @@ import {
 } from './armazenamento'
 import { CLASSE_CAMPO, CLASSE_RESPOSTA, classeBotaoGrande } from './estilos'
 import { TelaPagamento } from './pagamento'
+import { CartaoCervejaLink, detalhesDa, Miniatura, TextoWhatsapp } from './cartao-cerveja'
 import type { PreVendaPublica } from './queries'
 
 type Etapa = 'inicio' | 'cervejas' | 'conferir' | 'nome' | 'sobrenome' | 'whatsapp' | 'cep' | 'numero' | 'revisao' | 'pago'
@@ -51,12 +49,12 @@ const TOTAL_PERGUNTAS = 5
 const UFS = 'AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ')
 const BUSCA_CEP_CORREIOS = 'https://buscacepinter.correios.com.br/app/endereco/index.php'
 
-const detalhesDo = (i: Item) =>
-  [i.estilo, i.volume_ml ? `${i.volume_ml} ml` : null, i.teor_alcoolico ? `${String(i.teor_alcoolico).replace('.', ',')}%` : null]
+const maximoDo = (i: Item) => Math.min(i.limite_por_cliente ?? Infinity, i.restante ?? Infinity, 99)
+
+const avisosDo = (i: Item) =>
+  [i.restante !== null && i.restante <= 30 ? `restam ${i.restante}` : null, i.limite_por_cliente ? `máx. ${i.limite_por_cliente} por pessoa` : null]
     .filter(Boolean)
     .join(' · ')
-
-const maximoDo = (i: Item) => Math.min(i.limite_por_cliente ?? Infinity, i.restante ?? Infinity, 99)
 
 const linhasDoEndereco = (c: DadosCliente) => [
   `${c.logradouro}${c.numero ? `, ${c.numero}` : ''}${c.complemento ? ` — ${c.complemento}` : ''}`,
@@ -124,6 +122,7 @@ function Fluxo({
   const enderecoCompleto = [cliente.logradouro, cliente.bairro, cliente.cidade, cliente.uf].every((v) => v.trim())
   const nomeCompleto = `${cliente.nome} ${cliente.sobrenome}`.trim().replace(/\s+/g, ' ')
   const primeiroNome = cliente.nome.trim().split(/\s+/)[0] ?? ''
+  const fotoDestaque = itens.find((i) => i.imagem_url)?.imagem_url ?? null
 
   const alterar = (campo: keyof DadosCliente) => (valor: string) => setCliente((c) => ({ ...c, [campo]: valor }))
 
@@ -308,33 +307,43 @@ function Fluxo({
         {/* Boas-vindas ------------------------------------------------------ */}
         {etapa === 'inicio' && (
           <>
-            <section className="rounded-[28px] bg-volt p-6 sm:p-8">
-              <p className="tipo-rotulo text-ink/70">{preVenda.grupoVip ? 'Pré-venda exclusiva · Grupo VIP' : `Pré-venda · ${loja.nome}`}</p>
-              <h1 className="tipo-h1 mt-3 text-balance">{preVenda.titulo}</h1>
-              {preVenda.descricao && <p className="mt-3 text-[17px] leading-7 whitespace-pre-line text-ink/80">{preVenda.descricao}</p>}
-              {(preVenda.encerra_em || preVenda.previsao_entrega) && (
-                <div className="mt-5 flex flex-wrap gap-2">
-                  {preVenda.encerra_em && (
-                    <span className="tipo-dado inline-flex items-center gap-1.5 rounded-full bg-ink/10 px-3 py-1 text-[13px]">
-                      <CalendarClock className="size-3.5" aria-hidden /> Encerra {formatarDataHora(preVenda.encerra_em)}
-                    </span>
-                  )}
-                  {preVenda.previsao_entrega && (
-                    <span className="tipo-dado inline-flex items-center gap-1.5 rounded-full bg-ink/10 px-3 py-1 text-[13px]">
-                      <Truck className="size-3.5" aria-hidden /> Entrega prevista {formatarData(preVenda.previsao_entrega)}
-                    </span>
-                  )}
-                </div>
+            <section className="rounded-[28px] bg-volt p-2 pb-6 sm:pb-8">
+              {fotoDestaque && (
+                // eslint-disable-next-line @next/next/no-img-element -- imagem pública do Storage
+                <img src={fotoDestaque} alt={preVenda.titulo} className="aspect-square w-full rounded-[22px] object-cover" />
               )}
+              <div className={cn('px-4 sm:px-6', fotoDestaque ? 'pt-5' : 'pt-4 sm:pt-6')}>
+                <p className="tipo-rotulo text-ink/70">{preVenda.grupoVip ? 'Pré-venda exclusiva · Grupo VIP' : `Pré-venda · ${loja.nome}`}</p>
+                <h1 className="tipo-h1 mt-3 text-balance">{preVenda.titulo}</h1>
+                {preVenda.descricao && (
+                  <p className="mt-3 text-[17px] leading-7 whitespace-pre-line text-ink/80">
+                    <TextoWhatsapp texto={preVenda.descricao} />
+                  </p>
+                )}
+                {(preVenda.encerra_em || preVenda.previsao_entrega) && (
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {preVenda.encerra_em && (
+                      <span className="tipo-dado inline-flex items-center gap-1.5 rounded-full bg-ink/10 px-3 py-1 text-[13px]">
+                        <CalendarClock className="size-3.5" aria-hidden /> Encerra {formatarDataHora(preVenda.encerra_em)}
+                      </span>
+                    )}
+                    {preVenda.previsao_entrega && (
+                      <span className="tipo-dado inline-flex items-center gap-1.5 rounded-full bg-ink/10 px-3 py-1 text-[13px]">
+                        <Truck className="size-3.5" aria-hidden /> Entrega prevista {formatarData(preVenda.previsao_entrega)}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             </section>
 
             <ul className="mt-4 divide-y divide-linha rounded-[24px] border border-linha bg-superficie">
               {itens.map((item) => (
                 <li key={item.produto_id} className="flex items-center gap-3 px-4 py-3">
-                  <Miniatura item={item} className="size-12" />
+                  <Miniatura cerveja={item} className="size-12" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[16px] font-semibold">{item.nome}</p>
-                    <p className="truncate text-[13px] text-suave">{detalhesDo(item)}</p>
+                    <p className="truncate text-[13px] text-suave">{detalhesDa(item).join(' · ')}</p>
                   </div>
                   <p className="tipo-numero shrink-0 text-lg">{formatarMoeda(item.preco)}</p>
                 </li>
@@ -361,11 +370,14 @@ function Fluxo({
             <Titulo rotulo="Sua escolha" titulo="Quantas você vai querer?" descricao="Toque no + ou digite a quantidade." />
             <ul className="mt-6 space-y-3">
               {itens.map((item) => (
-                <CartaoCerveja
+                <CartaoCervejaLink
                   key={item.produto_id}
-                  item={item}
+                  cerveja={item}
                   quantidade={quantidades[item.produto_id] ?? 0}
                   aoDefinir={(n) => definirQuantidade(item, n)}
+                  maximo={maximoDo(item)}
+                  esgotado={item.restante !== null && item.restante <= 0}
+                  avisos={avisosDo(item)}
                 />
               ))}
             </ul>
@@ -842,83 +854,6 @@ function CamposEndereco({ cliente, alterar }: { cliente: DadosCliente; alterar: 
         </select>
       </div>
     </div>
-  )
-}
-
-function Miniatura({ item, className }: { item: Item; className?: string }) {
-  return (
-    <span className={cn('grid shrink-0 place-items-center overflow-hidden rounded-2xl bg-volt-50 text-volt-700', className)}>
-      {item.imagem_url ? (
-        // eslint-disable-next-line @next/next/no-img-element -- imagem pública do Storage
-        <img src={item.imagem_url} alt="" className="size-full object-cover" />
-      ) : (
-        <Beer className="size-1/2" aria-hidden />
-      )}
-    </span>
-  )
-}
-
-function CartaoCerveja({ item, quantidade, aoDefinir }: { item: Item; quantidade: number; aoDefinir: (n: number) => void }) {
-  const esgotado = item.restante !== null && item.restante <= 0
-  const limite = maximoDo(item)
-  const avisos = esgotado
-    ? 'Esgotado'
-    : [item.restante !== null && item.restante <= 30 ? `restam ${item.restante}` : null, item.limite_por_cliente ? `máx. ${item.limite_por_cliente} por pessoa` : null]
-        .filter(Boolean)
-        .join(' · ')
-
-  return (
-    <li
-      className={cn(
-        'rounded-[22px] border bg-superficie p-3 transition-colors',
-        quantidade > 0 ? 'border-ink ring-1 ring-ink' : 'border-linha',
-        esgotado && 'opacity-50',
-      )}
-    >
-      <div className="flex gap-3">
-        <Miniatura item={item} className="size-24" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[17px] leading-6 font-semibold">{item.nome}</p>
-          <p className="text-[13px] text-suave">{detalhesDo(item)}</p>
-          {item.descricao && <p className="mt-1 line-clamp-2 text-[14px] leading-5 text-suave">{item.descricao}</p>}
-          <p className="tipo-numero mt-1.5 text-xl">{formatarMoeda(item.preco)}</p>
-        </div>
-      </div>
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <p className="min-w-0 text-[13px] text-suave">{avisos}</p>
-        {!esgotado && (
-          <div className="flex shrink-0 items-center gap-1 rounded-2xl bg-papel p-1">
-            <button
-              type="button"
-              onClick={() => aoDefinir(quantidade - 1)}
-              disabled={quantidade === 0}
-              aria-label={`Tirar uma ${item.nome}`}
-              className="grid size-11 place-items-center rounded-xl bg-superficie shadow-cartao disabled:opacity-30"
-            >
-              <Minus className="size-5" aria-hidden />
-            </button>
-            <input
-              type="text"
-              inputMode="numeric"
-              aria-label={`Quantidade de ${item.nome}`}
-              value={quantidade}
-              onFocus={(e) => e.target.select()}
-              onChange={(e) => aoDefinir(Number(e.target.value.replace(/\D/g, '') || 0))}
-              className="campo-resposta tipo-numero h-11 w-12 bg-transparent text-center text-2xl outline-none"
-            />
-            <button
-              type="button"
-              onClick={() => aoDefinir(quantidade + 1)}
-              disabled={quantidade >= limite}
-              aria-label={`Adicionar uma ${item.nome}`}
-              className="grid size-11 place-items-center rounded-xl bg-ink text-white disabled:opacity-30"
-            >
-              <Plus className="size-5" aria-hidden />
-            </button>
-          </div>
-        )}
-      </div>
-    </li>
   )
 }
 

@@ -27,7 +27,7 @@ export async function opcoesProdutos() {
   const { supabase } = await exigirEquipe()
   const { data } = await supabase
     .from('produtos')
-    .select('id, nome, estilo, cervejaria, volume_ml, preco, imagem_url, ativo')
+    .select('id, nome, estilo, cervejaria, volume_ml, teor_alcoolico, descricao, preco, imagem_url, ativo')
     .eq('ativo', true)
     .order('nome')
   return data ?? []
@@ -39,7 +39,7 @@ export async function produtosPorIds(ids: string[]) {
   const { supabase } = await exigirEquipe()
   const { data } = await supabase
     .from('produtos')
-    .select('id, nome, estilo, cervejaria, volume_ml, preco, imagem_url, ativo')
+    .select('id, nome, estilo, cervejaria, volume_ml, teor_alcoolico, descricao, preco, imagem_url, ativo')
     .in('id', ids)
   return data ?? []
 }

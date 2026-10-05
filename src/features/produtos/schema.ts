@@ -23,3 +23,14 @@ export const esquemaProduto = z.object({
 
 export const TAMANHO_MAXIMO_IMAGEM = 4 * 1024 * 1024
 export const TIPOS_IMAGEM = ['image/png', 'image/jpeg', 'image/webp', 'image/avif']
+
+/** Cadastro rápido de cerveja dentro da pré-venda (sem SKU, fornecedor e integrações). */
+export const esquemaCerveja = esquemaProduto.pick({
+  nome: true,
+  estilo: true,
+  cervejaria: true,
+  volume_ml: true,
+  teor_alcoolico: true,
+  descricao: true,
+})
+export const esquemaCervejaNova = esquemaCerveja.extend({ preco: dinheiro('Informe o preço.') })
