@@ -67,6 +67,7 @@ export default async function PaginaAtendimento({ searchParams }: PageProps<'/at
 
         {conversa ? (
           <Conversa
+            key={conversa.atendimento.id}
             conversa={conversa}
             equipe={equipe}
             meuId={perfil.id}

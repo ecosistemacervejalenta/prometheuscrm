@@ -555,6 +555,25 @@ await db.exec(`reset role;`)
   expectEq('membro vê a caixa de entrada', Number((await um(`select count(*) n from vw_atendimentos where status <> 'resolvido'`)).n), 2)
   await db.exec(`reset role;`)
 
+  // Envio de mídia (arquivo já no bucket, em <contato>/envios/)
+  await db.exec(`reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${uid}', false);`)
+  await expectError('mídia de outra conversa é recusada', `select preparar_envio_whatsapp($1, null, $2::jsonb)`,
+    [volta.atendimento_id, JSON.stringify({ tipo: 'imagem', path: `${lid.contato_id}/envios/x.jpg`, mime: 'image/jpeg' })])
+  await expectError('tipo de mídia desconhecido é recusado', `select preparar_envio_whatsapp($1, null, $2::jsonb)`,
+    [volta.atendimento_id, JSON.stringify({ tipo: 'figurinha', path: `${r1.contato_id}/envios/x.webp` })])
+  const foto2 = await um(`select preparar_envio_whatsapp($1, 'segue o cardápio', $2::jsonb) r`,
+    [volta.atendimento_id, JSON.stringify({ tipo: 'imagem', path: `${r1.contato_id}/envios/print.png`, mime: 'image/png' })])
+  expectEq('foto enviada pelo CRM já nasce com a mídia pronta', await um(`select tipo, texto, midia_status, midia_mime, status, direcao from whatsapp_mensagens where id = $1`, [foto2.r.mensagem_id]),
+    { tipo: 'imagem', texto: 'segue o cardápio', midia_status: 'pronta', midia_mime: 'image/png', status: 'enviando', direcao: 'saida' })
+  const voz = await um(`select preparar_envio_whatsapp($1, null, $2::jsonb) r`,
+    [volta.atendimento_id, JSON.stringify({ tipo: 'audio', path: `${r1.contato_id}/envios/voz.webm`, mime: 'audio/webm', segundos: 7 })])
+  expectEq('mensagem de voz: sem nome de arquivo, com duração', await um(`select midia_nome, midia_segundos from whatsapp_mensagens where id = $1`, [voz.r.mensagem_id]),
+    { midia_nome: null, midia_segundos: 7 })
+  expectEq('prévia da última mensagem (voz)', (await atend(volta.atendimento_id)).ultima_mensagem_previa, '🎤 Áudio')
+  expectEq('"assumido" fica antes da mensagem na linha do tempo', Boolean((await um(`select
+    (select criado_em from atendimento_eventos where atendimento_id = $1 and tipo = 'assumido') <= (select min(enviada_em) from whatsapp_mensagens where atendimento_id = $1 and direcao = 'saida') ok`, [volta.atendimento_id])).ok), true)
+  await db.exec(`reset role;`)
+
   const intruso = (await q(`insert into auth.users (email) values ('intruso@prometheus.beer') returning id`))[0].id
   await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${intruso}', false);`)
   expectEq('inativo não vê atendimentos nem mensagens', await um(`select (select count(*)::int from vw_atendimentos) a, (select count(*)::int from whatsapp_mensagens) m`), { a: 0, m: 0 })

@@ -2016,7 +2016,7 @@ export type Database = {
       }
       pedido_json: { Args: { p_pedido_id: string }; Returns: Json }
       preparar_envio_whatsapp: {
-        Args: { p_atendimento_id: string; p_texto: string }
+        Args: { p_atendimento_id: string; p_midia?: Json; p_texto: string }
         Returns: Json
       }
       previa_mensagem_whatsapp: {

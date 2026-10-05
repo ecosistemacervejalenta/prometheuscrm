@@ -36,6 +36,7 @@ export type MensagemUazapi = {
   quoted?: string
   track_source?: string
   track_id?: string
+  owner?: string
   error?: string
 }
 
@@ -128,6 +129,32 @@ export function enviarTexto(chatid: string, texto: string, trackId: string) {
   return chamar<MensagemUazapi>('/send/text', {
     corpo: { number: chatid, text: texto, track_source: 'prometheus', track_id: trackId, readchat: true },
     timeoutMs: 25_000,
+  })
+}
+
+/** image · video (MP4) · document · audio (arquivo) · ptt (mensagem de voz, convertida pela uazapi). */
+export type TipoMidiaUazapi = 'image' | 'video' | 'document' | 'audio' | 'ptt'
+
+/** Envia uma mídia pelo link (assinado) do arquivo. Legenda não vale para áudio. */
+export function enviarMidia(
+  chatid: string,
+  midia: { tipo: TipoMidiaUazapi; url: string; legenda?: string | null; nomeArquivo?: string | null; mime?: string | null },
+  trackId: string,
+) {
+  const documento = midia.tipo === 'document'
+  return chamar<MensagemUazapi>('/send/media', {
+    corpo: {
+      number: chatid,
+      type: midia.tipo,
+      file: midia.url,
+      ...(midia.legenda && midia.tipo !== 'audio' && midia.tipo !== 'ptt' ? { text: midia.legenda } : {}),
+      ...(documento && midia.nomeArquivo ? { docName: midia.nomeArquivo } : {}),
+      ...(documento && midia.mime ? { mimetype: midia.mime } : {}),
+      track_source: 'prometheus',
+      track_id: trackId,
+      readchat: true,
+    },
+    timeoutMs: 60_000,
   })
 }
 

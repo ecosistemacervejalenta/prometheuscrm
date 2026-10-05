@@ -35,6 +35,11 @@ function quando(iso: string | null) {
   return formatarDataCurta(iso)
 }
 
+/** "*Ana:* oi" → "Ana: oi" (a prévia não mostra os marcadores do WhatsApp). */
+function semFormatacao(texto: string) {
+  return texto.replace(/([*_~])([^*_~\n]+)\1/g, '$2')
+}
+
 export function hrefConversa(aba: AbaAtendimento, busca: string | undefined, id?: string) {
   const p = new URLSearchParams({ aba })
   if (busca) p.set('q', busca)
@@ -137,7 +142,7 @@ export function ListaConversas({
                     <div className="flex items-center justify-between gap-2">
                       <p className={cn('truncate text-[13px]', naoLidas ? 'text-ink' : 'text-suave')}>
                         {item.ultima_mensagem_direcao === 'saida' && <span className="text-sutil">Você: </span>}
-                        {item.ultima_mensagem_previa || 'Sem mensagens'}
+                        {item.ultima_mensagem_previa ? semFormatacao(item.ultima_mensagem_previa) : 'Sem mensagens'}
                       </p>
                       {naoLidas > 0 && (
                         <span className="tipo-dado grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-volt px-1.5 text-[11px] text-ink">

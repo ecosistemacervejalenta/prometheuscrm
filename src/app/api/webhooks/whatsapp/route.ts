@@ -12,6 +12,7 @@ export const maxDuration = 60
 type EventoUazapi = {
   EventType?: string
   token?: string
+  owner?: string
   message?: MensagemUazapi
   chat?: ChatUazapi
   state?: string
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
   const db = createAdminClient()
 
   if (evento.EventType === 'messages') {
-    const registro = mensagemParaCrm(evento.message, evento.chat)
+    const registro = evento.message ? mensagemParaCrm({ owner: evento.owner, ...evento.message }, evento.chat) : null
     if (!registro) return NextResponse.json({ ok: true, ignorado: true })
 
     try {

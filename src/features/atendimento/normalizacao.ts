@@ -132,6 +132,8 @@ function dataDaMensagem(ts: number | undefined): string {
 export function mensagemParaCrm(m: MensagemUazapi | null | undefined, chat?: ChatUazapi | null): RegistroMensagem | null {
   const chatid = m?.chatid?.trim()
   if (!m || !m.id || !chatid || m.isGroup || chatIgnorado(chatid)) return null
+  // Conversa da loja com ela mesma ("Você" no WhatsApp) não é atendimento.
+  if (m.owner && chatid.split('@')[0] === m.owner) return null
 
   const c = conteudo(m)
   const tipo = TIPOS[m.messageType ?? ''] ?? 'outro'

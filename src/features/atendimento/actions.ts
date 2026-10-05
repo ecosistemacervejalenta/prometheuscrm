@@ -9,9 +9,25 @@ import { formParaObjeto } from '@/lib/validacao'
 import type { StatusMensagemWhatsapp } from '@/types'
 
 import { statusDaUazapi } from './normalizacao'
-import { esquemaConfigAtendimento, esquemaContato, esquemaMensagem, esquemaNota, esquemaStatus } from './schema'
-import { guardarMidia, sincronizarConversa } from './sincronizacao'
-import { configurarWebhook, enviarTexto, ErroUazapi, marcarChatLido, type MensagemUazapi } from './uazapi'
+import {
+  esquemaConfigAtendimento,
+  esquemaContato,
+  esquemaMensagem,
+  esquemaMidia,
+  esquemaNota,
+  esquemaStatus,
+  type DadosMidia,
+} from './schema'
+import { BUCKET_MIDIAS, guardarMidia, sincronizarConversa } from './sincronizacao'
+import {
+  configurarWebhook,
+  enviarMidia,
+  enviarTexto,
+  ErroUazapi,
+  marcarChatLido,
+  type MensagemUazapi,
+  type TipoMidiaUazapi,
+} from './uazapi'
 
 type Supabase = Awaited<ReturnType<typeof exigirEquipe>>['supabase']
 
@@ -22,6 +38,48 @@ function atualizarTelas() {
 function primeiroNome(nome: string | null | undefined) {
   const n = nome?.trim().split(/\s+/)[0] ?? ''
   return n ? n.charAt(0).toUpperCase() + n.slice(1) : ''
+}
+
+/** "*Ana:* " quando a assinatura está ligada (Configurações › Integrações). */
+async function assinatura(supabase: Supabase, nomePerfil: string | null) {
+  const { data: config } = await supabase.from('configuracoes').select('whatsapp_assinatura').eq('id', 1).maybeSingle()
+  const nome = primeiroNome(nomePerfil)
+  return config?.whatsapp_assinatura !== false && nome ? `*${nome}:* ` : ''
+}
+
+type MensagemParaEnvio = {
+  id: string
+  tipo: string
+  texto: string | null
+  midia_path: string | null
+  midia_mime: string | null
+  midia_nome: string | null
+}
+
+const TIPOS_UAZAPI: Record<string, TipoMidiaUazapi> = { imagem: 'image', video: 'video', documento: 'document' }
+
+/** Manda à uazapi uma mensagem já registrada no CRM: texto, ou mídia por link assinado (15 min). */
+async function despachar(supabase: Supabase, chatid: string, m: MensagemParaEnvio) {
+  if (m.tipo === 'texto') return enviarTexto(chatid, m.texto ?? '', m.id)
+  if (!m.midia_path) throw new Error('Arquivo não encontrado.')
+  const { data, error } = await supabase.storage.from(BUCKET_MIDIAS).createSignedUrl(m.midia_path, 15 * 60)
+  if (error || !data?.signedUrl) throw new Error('Não foi possível preparar o arquivo para envio.')
+  // Áudio sem nome de arquivo = gravado no CRM → mensagem de voz.
+  const tipo = m.tipo === 'audio' ? (m.midia_nome ? 'audio' : 'ptt') : (TIPOS_UAZAPI[m.tipo] ?? 'document')
+  return enviarMidia(chatid, { tipo, url: data.signedUrl, legenda: m.texto, nomeArquivo: m.midia_nome, mime: m.midia_mime }, m.id)
+}
+
+/** Envia e marca o resultado. registrada = a mensagem já aparece na conversa ("Tentar de novo" se falhar). */
+async function enviarRegistrada(supabase: Supabase, chatid: string, m: MensagemParaEnvio): Promise<EstadoAcao & { registrada: true }> {
+  try {
+    await confirmarEnvio(supabase, m.id, await despachar(supabase, chatid, m))
+    atualizarTelas()
+    return { ...sucesso(), registrada: true }
+  } catch (e) {
+    const erro = await registrarFalha(supabase, m.id, e)
+    atualizarTelas()
+    return { ...falha(erro), registrada: true }
+  }
 }
 
 /** Grava o id da uazapi na mensagem do CRM (o eco do webhook pode ter chegado antes). */
@@ -54,54 +112,60 @@ async function registrarFalha(supabase: Supabase, mensagemId: string, e: unknown
   return erro
 }
 
-/**
- * Envia texto pelo WhatsApp da loja, com o nome do atendente em negrito (se ligado).
- * registrada = a mensagem já aparece na conversa (com "Tentar de novo" se falhar).
- */
+/** Envia texto pelo WhatsApp da loja, com o nome do atendente em negrito (se ligado). */
 export async function enviarMensagem(atendimentoId: string, texto: string): Promise<EstadoAcao & { registrada?: boolean }> {
   const { supabase, perfil } = await exigirEquipe()
   const dados = esquemaMensagem.safeParse(texto)
   if (!dados.success) return falha(dados.error.issues[0]?.message ?? 'Mensagem inválida.')
 
-  const { data: config } = await supabase.from('configuracoes').select('whatsapp_assinatura').eq('id', 1).maybeSingle()
-  const nome = primeiroNome(perfil.nome)
-  const final = config?.whatsapp_assinatura !== false && nome ? `*${nome}:* ${dados.data}` : dados.data
-
+  const final = `${await assinatura(supabase, perfil.nome)}${dados.data}`
   const { data, error } = await supabase.rpc('preparar_envio_whatsapp', { p_atendimento_id: atendimentoId, p_texto: final })
   if (error) return falha(traduzirErro(error))
-  const { mensagem_id: mensagemId, chatid } = data as { mensagem_id: string; chatid: string }
+  const { mensagem_id: id, chatid } = data as { mensagem_id: string; chatid: string }
 
-  try {
-    await confirmarEnvio(supabase, mensagemId, await enviarTexto(chatid, final, mensagemId))
-    atualizarTelas()
-    return { ...sucesso(), registrada: true }
-  } catch (e) {
-    const erro = await registrarFalha(supabase, mensagemId, e)
-    atualizarTelas()
-    return { ...falha(erro), registrada: true }
-  }
+  return enviarRegistrada(supabase, chatid, { id, tipo: 'texto', texto: final, midia_path: null, midia_mime: null, midia_nome: null })
 }
 
-/** Tenta de novo uma mensagem que falhou (mesmo texto, mesma linha). */
+/**
+ * Envia foto, print, vídeo, documento, arquivo de áudio ou mensagem de voz gravada.
+ * O navegador já subiu o arquivo para o bucket; a legenda recebe a assinatura.
+ */
+export async function enviarArquivo(atendimentoId: string, entrada: DadosMidia): Promise<EstadoAcao & { registrada?: boolean }> {
+  const { supabase, perfil } = await exigirEquipe()
+  const dados = esquemaMidia.safeParse(entrada)
+  if (!dados.success) return falha(dados.error.issues[0]?.message ?? 'Arquivo inválido.')
+  const { caminho, tipo, mime, segundos, gravado, legenda } = dados.data
+
+  const texto = legenda && tipo !== 'audio' ? `${await assinatura(supabase, perfil.nome)}${legenda}` : null
+  // Mensagem de voz fica sem nome; documentos sempre com nome (o cliente vê ao baixar).
+  const nome = gravado ? null : dados.data.nome || (tipo === 'documento' ? caminho.split('/').pop()! : null)
+  const midia = { tipo, path: caminho, mime, nome, segundos }
+
+  const { data, error } = await supabase.rpc('preparar_envio_whatsapp', {
+    p_atendimento_id: atendimentoId,
+    p_texto: texto ?? '',
+    p_midia: midia,
+  })
+  if (error) return falha(traduzirErro(error))
+  const { mensagem_id: id, chatid } = data as { mensagem_id: string; chatid: string }
+
+  return enviarRegistrada(supabase, chatid, { id, tipo, texto, midia_path: caminho, midia_mime: mime, midia_nome: nome })
+}
+
+/** Tenta de novo uma mensagem que falhou (mesmo conteúdo, mesma linha). */
 export async function reenviarMensagem(mensagemId: string): Promise<EstadoAcao> {
   const { supabase } = await exigirEquipe()
   const { data: msg } = await supabase
     .from('whatsapp_mensagens')
-    .select('id, texto, status, contato_id, whatsapp_contatos(chatid)')
+    .select('id, tipo, texto, midia_path, midia_mime, midia_nome, status, whatsapp_contatos(chatid)')
     .eq('id', mensagemId)
     .maybeSingle()
-  if (!msg?.texto || msg.status !== 'falhou' || !msg.whatsapp_contatos?.chatid) return falha('Esta mensagem não pode ser reenviada.')
+  const chatid = msg?.whatsapp_contatos?.chatid
+  if (!msg || msg.status !== 'falhou' || !chatid || !(msg.texto || msg.midia_path)) return falha('Esta mensagem não pode ser reenviada.')
 
   await supabase.from('whatsapp_mensagens').update({ status: 'enviando', erro: null }).eq('id', mensagemId)
-  try {
-    await confirmarEnvio(supabase, mensagemId, await enviarTexto(msg.whatsapp_contatos.chatid, msg.texto, mensagemId))
-    atualizarTelas()
-    return sucesso('Mensagem enviada.')
-  } catch (e) {
-    const erro = await registrarFalha(supabase, mensagemId, e)
-    atualizarTelas()
-    return falha(erro)
-  }
+  const r = await enviarRegistrada(supabase, chatid, msg)
+  return r.ok ? sucesso('Mensagem enviada.') : r
 }
 
 /** Nota interna: aparece na conversa para a equipe, o cliente não vê. */

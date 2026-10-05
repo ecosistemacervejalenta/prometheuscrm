@@ -14,14 +14,14 @@ import {
   Info,
   LoaderCircle,
   MapPin,
+  Paperclip,
   RotateCcw,
-  SendHorizontal,
   StickyNote,
   UserRoundCheck,
   X,
 } from 'lucide-react'
 import Link from 'next/link'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, type DragEvent } from 'react'
 
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -33,16 +33,15 @@ import { STATUS_ATENDIMENTO } from '@/lib/rotulos'
 import { cn } from '@/lib/utils'
 
 import {
-  adicionarNota,
   alterarStatusAtendimento,
   assumirAtendimento,
   baixarMidiaNovamente,
-  enviarMensagem,
   marcarComoLido,
   reenviarMensagem,
   sincronizarConversaAgora,
 } from '../actions'
 import type { Conversa as DadosConversa, EventoConversa, MembroEquipe, MensagemConversa } from '../queries'
+import { Compositor, useAnexos } from './compositor'
 import { PainelContato } from './painel-contato'
 import { TextoWhatsapp } from './texto-whatsapp'
 
@@ -67,17 +66,27 @@ function rotuloDia(iso: string) {
 }
 
 function montarLinhaDoTempo(mensagens: MensagemConversa[], eventos: EventoConversa[]): Item[] {
+  // "Atendimento aberto" vem antes da mensagem que o abriu (o horário dela é o do WhatsApp).
+  const primeiraMensagem = new Map<string, string>()
+  for (const m of mensagens) {
+    if (m.atendimento_id && !primeiraMensagem.has(m.atendimento_id)) primeiraMensagem.set(m.atendimento_id, m.enviada_em)
+  }
   const brutos = [
-    ...mensagens.map((m) => ({ quando: m.enviada_em, item: { tipo: 'mensagem' as const, chave: m.id, m } })),
-    ...eventos.map((e) => ({ quando: e.criado_em, item: { tipo: 'evento' as const, chave: e.id, e } })),
-  ].sort((a, b) => a.quando.localeCompare(b.quando))
+    ...eventos.map((e) => {
+      const inicio = e.tipo === 'aberto' ? primeiraMensagem.get(e.atendimento_id) : undefined
+      const quando = inicio && inicio < e.criado_em ? inicio : e.criado_em
+      return { quando: new Date(quando).getTime(), ordem: 0, item: { tipo: 'evento' as const, chave: e.id, e } }
+    }),
+    ...mensagens.map((m) => ({ quando: new Date(m.enviada_em).getTime(), ordem: 1, item: { tipo: 'mensagem' as const, chave: m.id, m } })),
+  ].sort((a, b) => a.quando - b.quando || a.ordem - b.ordem)
 
   const itens: Item[] = []
   let diaAnterior = ''
   for (const { quando, item } of brutos) {
-    const dia = formatarData(quando)
+    const iso = new Date(quando).toISOString()
+    const dia = formatarData(iso)
     if (dia !== diaAnterior) {
-      itens.push({ tipo: 'dia', chave: `dia-${dia}`, rotulo: rotuloDia(quando) })
+      itens.push({ tipo: 'dia', chave: `dia-${dia}`, rotulo: rotuloDia(iso) })
       diaAnterior = dia
     }
     itens.push(item)
@@ -287,99 +296,6 @@ function Evento({ e, nomes, numeros }: { e: EventoConversa; nomes: Map<string, s
   )
 }
 
-// Compositor ------------------------------------------------------------------------
-
-function Compositor({ atendimentoId, naFila }: { atendimentoId: string; naFila: boolean }) {
-  const [modo, setModo] = useState<'mensagem' | 'nota'>('mensagem')
-  const [texto, setTexto] = useState('')
-  const [pendente, iniciar] = useTransition()
-  const avisar = useAvisos()
-  const campo = useRef<HTMLTextAreaElement>(null)
-
-  useLayoutEffect(() => {
-    const el = campo.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
-  }, [texto])
-
-  const enviar = () => {
-    const conteudo = texto.trim()
-    if (!conteudo || pendente) return
-    setTexto('')
-    iniciar(async () => {
-      const r: { ok?: boolean; mensagem?: string; registrada?: boolean } =
-        modo === 'nota' ? await adicionarNota(atendimentoId, conteudo) : await enviarMensagem(atendimentoId, conteudo)
-      if (r.ok === false) {
-        // Se a mensagem já está na conversa, ela mostra "Tentar de novo"; senão, o texto volta ao campo.
-        if (!r.registrada) setTexto(conteudo)
-        avisar(r.mensagem ?? 'Não foi possível enviar.', 'erro')
-      }
-      campo.current?.focus()
-    })
-  }
-
-  const nota = modo === 'nota'
-  return (
-    <div className={cn('border-t border-linha p-2.5 sm:p-3', nota ? 'bg-vip-50' : 'bg-superficie')}>
-      <div className="mb-2 flex items-center gap-1">
-        {(['mensagem', 'nota'] as const).map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => setModo(m)}
-            aria-pressed={modo === m}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-semibold transition-colors',
-              modo === m ? (m === 'nota' ? 'bg-vip text-ink' : 'bg-ink text-white') : 'text-suave hover:bg-ink/5 hover:text-ink',
-            )}
-          >
-            {m === 'nota' ? <StickyNote className="size-3.5" aria-hidden /> : <SendHorizontal className="size-3.5" aria-hidden />}
-            {m === 'nota' ? 'Nota interna' : 'Mensagem'}
-          </button>
-        ))}
-        <span className="ml-auto hidden text-[11px] text-sutil sm:inline">
-          {nota ? 'Só a equipe vê' : naFila ? 'Responder assume o atendimento' : 'Enter envia · Shift+Enter quebra linha'}
-        </span>
-      </div>
-      <div className="flex items-end gap-2">
-        <textarea
-          ref={campo}
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          onKeyDown={(e) => {
-            const toque = window.matchMedia('(pointer: coarse)').matches
-            if (e.key === 'Enter' && !e.shiftKey && !toque && !e.nativeEvent.isComposing) {
-              e.preventDefault()
-              enviar()
-            }
-          }}
-          rows={1}
-          maxLength={4000}
-          placeholder={nota ? 'Escreva uma nota para a equipe…' : 'Escreva uma mensagem…'}
-          aria-label={nota ? 'Nota interna' : 'Mensagem para o cliente'}
-          className={cn(
-            'max-h-40 min-h-11 flex-1 resize-none rounded-xl border px-3.5 py-2.5 text-[15px] leading-6 outline-none placeholder:text-sutil focus:ring-4',
-            nota ? 'border-vip/40 bg-superficie focus:border-vip-700 focus:ring-vip/20' : 'border-linha bg-papel focus:border-ink focus:bg-superficie focus:ring-volt/25',
-          )}
-        />
-        <Button
-          variante={nota ? 'escuro' : 'primario'}
-          tamanho="icone"
-          className="size-11 rounded-xl lg:size-11"
-          onClick={enviar}
-          disabled={!texto.trim()}
-          carregando={pendente}
-          aria-label={nota ? 'Salvar nota' : 'Enviar mensagem'}
-          title={nota ? 'Salvar nota' : 'Enviar'}
-        >
-          {!pendente && (nota ? <StickyNote /> : <SendHorizontal />)}
-        </Button>
-      </div>
-    </div>
-  )
-}
-
 // Conversa --------------------------------------------------------------------------
 
 export function Conversa({
@@ -405,6 +321,8 @@ export function Conversa({
   const avisar = useAvisos()
   const rolagem = useRef<HTMLDivElement>(null)
   const pertoDoFim = useRef(true)
+  const anexos = useAnexos()
+  const [arrastando, setArrastando] = useState(false)
 
   const nomes = useMemo(() => new Map(equipe.map((m) => [m.id, m.nome])), [equipe])
   const numeros = useMemo(() => new Map(atendimentos.map((a) => [a.id, a.numero])), [atendimentos])
@@ -437,6 +355,24 @@ export function Conversa({
     if (el) el.scrollTop = el.scrollHeight
   }, [id])
 
+  const temArquivos = (e: DragEvent) => aberto && e.dataTransfer.types.includes('Files')
+  const soltar = {
+    onDragOver: (e: DragEvent) => {
+      if (!temArquivos(e)) return
+      e.preventDefault()
+      setArrastando(true)
+    },
+    onDragLeave: (e: DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setArrastando(false)
+    },
+    onDrop: (e: DragEvent) => {
+      if (!temArquivos(e)) return
+      e.preventDefault()
+      setArrastando(false)
+      anexos.adicionarArquivos(Array.from(e.dataTransfer.files))
+    },
+  }
+
   const executar = (acao: () => Promise<{ ok?: boolean; mensagem?: string }>) =>
     iniciar(async () => {
       const r = await acao()
@@ -445,7 +381,13 @@ export function Conversa({
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col" {...soltar}>
+        {arrastando && (
+          <div className="pointer-events-none absolute inset-2 z-20 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-volt-600 bg-volt-50/90 text-volt-700">
+            <Paperclip className="size-6" aria-hidden />
+            <p className="text-sm font-semibold">Solte para anexar à conversa</p>
+          </div>
+        )}
         {/* Cabeçalho */}
         <header className="flex items-center gap-2 border-b border-linha bg-superficie px-2 py-2 sm:px-3">
           <Link href={voltarHref} className="grid size-9 shrink-0 place-items-center rounded-lg text-suave hover:bg-papel lg:hidden" aria-label="Voltar para a lista">
@@ -529,7 +471,7 @@ export function Conversa({
 
         {/* Rodapé */}
         {aberto ? (
-          <Compositor key={id} atendimentoId={id} naFila={!atendimento.responsavel_id} />
+          <Compositor key={id} atendimentoId={id} contatoId={contato.id} naFila={!atendimento.responsavel_id} anexos={anexos} />
         ) : (
           <div className="flex flex-wrap items-center justify-center gap-2 border-t border-linha bg-superficie px-3 py-3 text-[13px] text-suave">
             <span>Atendimento resolvido{atendimento.resolvido_em ? ` em ${formatarData(atendimento.resolvido_em)}` : ''}.</span>
