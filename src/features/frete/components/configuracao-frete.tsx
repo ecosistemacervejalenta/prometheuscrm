@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils'
 import { decodificarTexto, lerPlanilhaExcel, lerTexto } from '@/features/leads/planilha'
 
 import { salvarValorFreteVip, substituirCepsVip, testarCepVip } from '../actions'
-import { analisarCeps, cepParaTexto, formatarCepNumero, linhasDoTexto, MAX_FAIXAS } from '../ceps'
+import { analisarCeps, formatarCepNumero, linhasDoTexto, listaCompacta, MAX_FAIXAS } from '../ceps'
 import type { ResumoCeps } from '../queries'
 
 const EXCEL = ['xlsx', 'xls', 'xlsm', 'ods']
@@ -160,7 +160,7 @@ export function ListaCepsVip({ resumo, arquivo, importadoEm }: { resumo: ResumoC
     setErro(null)
     iniciar(async () => {
       const r = await substituirCepsVip(
-        analise.faixas.map(([inicio, fim]) => [cepParaTexto(inicio), cepParaTexto(fim)]),
+        listaCompacta(analise.faixas),
         modo === 'arquivo' ? (planilha?.nome ?? null) : 'Lista colada',
       )
       if (!r.ok) return setErro(r.mensagem)
@@ -186,7 +186,7 @@ export function ListaCepsVip({ resumo, arquivo, importadoEm }: { resumo: ResumoC
           </div>
           <ActionButton
             acao={async () => {
-              const r = await substituirCepsVip([], null)
+              const r = await substituirCepsVip('', null)
               return r.ok ? { ok: true, mensagem: 'Lista de CEPs VIP removida.' } : { ok: false, mensagem: r.mensagem }
             }}
             confirmar="Remover toda a lista de CEPs VIP? Todos os pedidos do link passam a ficar com frete a cotar."

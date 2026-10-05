@@ -202,3 +202,8 @@ export function analisarCeps(linhas: string[][], duasColunasComoFaixa?: boolean)
     comoFaixa: colunaInicio !== null,
   }
 }
+
+/** Faixas → texto para envio: "01310100,0400000004999999" (8 dígitos = CEP avulso; 16 = início+fim). */
+export function listaCompacta(faixas: Faixa[]): string {
+  return faixas.map(([inicio, fim]) => (inicio === fim ? cepParaTexto(inicio) : cepParaTexto(inicio) + cepParaTexto(fim))).join(',')
+}

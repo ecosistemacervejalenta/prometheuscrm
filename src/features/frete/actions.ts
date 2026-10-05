@@ -28,24 +28,32 @@ export async function salvarValorFreteVip(_: EstadoAcao, formData: FormData): Pr
   return sucesso('Valor do frete salvo.')
 }
 
-const cep = z.string().regex(/^\d{8}$/)
-const esquemaLista = z.object({
-  faixas: z.array(z.tuple([cep, cep]).refine(([inicio, fim]) => inicio <= fim)).max(MAX_FAIXAS, 'Lista grande demais.'),
-  arquivo: z.string().trim().max(200).nullable(),
-})
-
-/** Troca a lista inteira de CEPs VIP (planilha nova). Lista vazia = remover todos. */
+/**
+ * Troca a lista inteira de CEPs VIP (planilha nova). Lista vazia = remover todos.
+ * `lista` vem compacta, em texto: "01310100,0400000004999999,..." (8 dígitos = CEP avulso,
+ * 16 = faixa início+fim). Um array com dezenas de milhares de pares estoura o limite de
+ * aninhamento das Server Actions ("Maximum array nesting exceeded").
+ */
 export async function substituirCepsVip(
-  faixas: Array<[string, string]>,
+  lista: string,
   arquivo: string | null,
 ): Promise<{ ok: true; resumo: ResumoCeps } | { ok: false; mensagem: string }> {
   const { supabase } = await exigirEquipe()
-  const dados = esquemaLista.safeParse({ faixas, arquivo })
-  if (!dados.success) return { ok: false, mensagem: dados.error.issues[0]?.message ?? 'Lista de CEPs inválida.' }
+  const tokens = lista ? lista.split(',') : []
+  if (tokens.length > MAX_FAIXAS) return { ok: false, mensagem: 'Lista grande demais.' }
+
+  const faixas: Array<[string, string]> = []
+  for (const token of tokens) {
+    if (!/^\d{8}(\d{8})?$/.test(token)) return { ok: false, mensagem: 'Lista de CEPs inválida.' }
+    const inicio = token.slice(0, 8)
+    const fim = token.length === 16 ? token.slice(8) : inicio
+    if (inicio > fim) return { ok: false, mensagem: 'Lista de CEPs inválida.' }
+    faixas.push([inicio, fim])
+  }
 
   const { data, error } = await supabase.rpc('substituir_ceps_frete_vip', {
-    p_faixas: dados.data.faixas,
-    p_arquivo: dados.data.arquivo ?? undefined,
+    p_faixas: faixas,
+    p_arquivo: arquivo?.trim().slice(0, 200) || undefined,
   })
   if (error) return { ok: false, mensagem: traduzirErro(error) }
   atualizarTelas()
