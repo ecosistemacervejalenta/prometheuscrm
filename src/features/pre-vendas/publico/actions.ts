@@ -37,7 +37,7 @@ const esquemaConfirmacao = z.object({
   whatsapp: z.string().refine(whatsappValido, 'Informe um WhatsApp válido.'),
   itens: z
     .array(z.object({ produto_id: z.uuid(), quantidade: z.number().int().positive().max(999) }))
-    .min(1, 'Escolha pelo menos uma cerveja.'),
+    .min(1, 'Escolha pelo menos um item.'),
   observacoes: z.string().max(500).optional(),
   armadilha: z.string().max(0, 'Envio inválido.').optional(), // campo invisível anti-robô
   cliente: z.object({

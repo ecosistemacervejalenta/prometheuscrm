@@ -35,6 +35,36 @@ export function detalhesDa(c: Pick<CervejaDoLink, 'estilo' | 'volume_ml' | 'teor
   )
 }
 
+/**
+ * Textos da etapa de escolha conforme o que a pré-venda vende: só kits, só cervejas
+ * avulsas ou os dois (a maioria das vendas do Grupo VIP é de kits).
+ */
+export function textosDaEscolha(itens: Array<Pick<CervejaDoLink, 'cervejas_do_kit'>>) {
+  const kits = itens.filter((i) => i.cervejas_do_kit.length > 0).length
+  if (kits > 0 && kits === itens.length) {
+    return {
+      titulo: 'Quantos kits você vai querer?',
+      descricao: 'Selecione aqui quantos kits você quer: toque no + ou digite a quantidade.',
+      vazio: 'Escolha seus kits',
+      contar: (n: number) => (n === 1 ? '1 kit' : `${n} kits`),
+    }
+  }
+  if (kits > 0) {
+    return {
+      titulo: 'O que você vai levar?',
+      descricao: 'Selecione aqui quantos kits e cervejas você quer: toque no + ou digite a quantidade.',
+      vazio: 'Escolha seus itens',
+      contar: (n: number) => (n === 1 ? '1 item' : `${n} itens`),
+    }
+  }
+  return {
+    titulo: 'Quantas cervejas você vai querer?',
+    descricao: 'Selecione aqui a quantidade: toque no + ou digite o número.',
+    vazio: 'Escolha suas cervejas',
+    contar: (n: number) => (n === 1 ? '1 cerveja' : `${n} cervejas`),
+  }
+}
+
 /** Texto com a formatação do WhatsApp: *negrito* vira negrito; o resto fica como está. */
 export function TextoWhatsapp({ texto }: { texto: string }) {
   return texto.split(/(\*[^*\n]+\*)/g).map((parte, i) =>

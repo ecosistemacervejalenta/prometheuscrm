@@ -35,7 +35,7 @@ export function TelaPagamento({
         <CircleCheck className="mx-auto size-14 text-ink" strokeWidth={1.5} aria-hidden />
         <p className="tipo-rotulo mt-4 text-ink/70">Pedido confirmado</p>
         <h1 className="tipo-h1 mt-1">{numeroPedido(pedido.numero)}</h1>
-        <p className="mt-2 text-[17px] text-ink/80">Obrigado, {primeiroNome}! Suas cervejas estão garantidas.</p>
+        <p className="mt-2 text-[17px] text-ink/80">Obrigado, {primeiroNome}! Seu pedido está garantido.</p>
       </section>
 
       {aCotar && (
@@ -55,7 +55,7 @@ export function TelaPagamento({
         {loja.pix ? (
           <>
             <div className="mt-4 rounded-2xl bg-papel p-4">
-              <p className="tipo-rotulo text-suave">{aCotar ? 'Valor das cervejas' : 'Valor a pagar'}</p>
+              <p className="tipo-rotulo text-suave">{aCotar ? 'Valor do pedido (sem frete)' : 'Valor a pagar'}</p>
               <p className="tipo-numero mt-1 text-[40px] leading-none">{formatarMoeda(valor)}</p>
               <p className="mt-2 text-[14px] text-suave">
                 {aCotar

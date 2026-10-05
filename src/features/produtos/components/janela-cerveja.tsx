@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom'
 import { classesControle } from '@/components/form/fields'
 import { Button } from '@/components/ui/button'
 import { AberturaPreVenda, type PreVendaDoLink } from '@/features/pre-vendas/publico/abertura'
-import { CartaoCervejaLink, type CervejaDoLink } from '@/features/pre-vendas/publico/cartao-cerveja'
+import { CartaoCervejaLink, textosDaEscolha, type CervejaDoLink } from '@/features/pre-vendas/publico/cartao-cerveja'
 import { CelularPrevia } from '@/features/pre-vendas/publico/celular-previa'
 import { lerDinheiro } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -276,6 +276,7 @@ export function JanelaCerveja({
     lista.find((c) => c.imagem_url) === previa && galeria[0]?.tipo === 'nova' ? (
       <FotoEnquadrada foto={galeria[0].foto} enquadramento={galeria[0].enquadramento} />
     ) : undefined
+  const escolha = textosDaEscolha(lista)
   const unidadesKit = kit.reduce((s, l) => s + (Number(l.quantidade) || 1), 0)
 
   return createPortal(
@@ -597,7 +598,8 @@ export function JanelaCerveja({
                 <AberturaPreVenda preVenda={contexto.preVenda} itens={lista} nomeLoja={contexto.nomeLoja} freteVip={contexto.freteVip} capa={capaNoLink} />
                 <div className="mt-12">
                   <p className="tipo-rotulo text-volt-700">Sua escolha</p>
-                  <h2 className="tipo-h2 mt-2 text-balance">Quantas você vai querer?</h2>
+                  <h2 className="tipo-h2 mt-2 text-balance">{escolha.titulo}</h2>
+                  <p className="mt-2 text-[16px] text-suave">{escolha.descricao}</p>
                   <ul className="mt-6">
                     <CartaoCervejaLink cerveja={previa} fotos={galeria.map(slide)} />
                   </ul>

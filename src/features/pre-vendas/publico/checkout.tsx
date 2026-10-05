@@ -36,7 +36,7 @@ import {
 import { CLASSE_CAMPO, CLASSE_RESPOSTA, classeBotaoGrande } from './estilos'
 import { TelaPagamento } from './pagamento'
 import { AberturaPreVenda } from './abertura'
-import { CartaoCervejaLink } from './cartao-cerveja'
+import { CartaoCervejaLink, textosDaEscolha } from './cartao-cerveja'
 import type { PreVendaPublica } from './queries'
 
 type Etapa = 'inicio' | 'cervejas' | 'conferir' | 'nome' | 'sobrenome' | 'whatsapp' | 'cep' | 'numero' | 'revisao' | 'pago'
@@ -123,6 +123,7 @@ function Fluxo({
   const total = subtotal + (freteVip ? loja.freteVip : 0)
   const enderecoCompleto = [cliente.logradouro, cliente.bairro, cliente.cidade, cliente.uf].every((v) => v.trim())
   const nomeCompleto = `${cliente.nome} ${cliente.sobrenome}`.trim().replace(/\s+/g, ' ')
+  const escolha = textosDaEscolha(itens)
   const primeiroNome = cliente.nome.trim().split(/\s+/)[0] ?? ''
 
   const alterar = (campo: keyof DadosCliente) => (valor: string) => setCliente((c) => ({ ...c, [campo]: valor }))
@@ -339,7 +340,7 @@ function Fluxo({
         {/* Cervejas ---------------------------------------------------------- */}
         {etapa === 'cervejas' && (
           <div className="pb-32">
-            <Titulo rotulo="Sua escolha" titulo="Quantas você vai querer?" descricao="Toque no + ou digite a quantidade." />
+            <Titulo rotulo="Sua escolha" titulo={escolha.titulo} descricao={escolha.descricao} />
             <ul className="mt-6 space-y-3">
               {itens.map((item) => (
                 <CartaoCervejaLink
@@ -355,7 +356,7 @@ function Fluxo({
             </ul>
             <BarraInferior erro={erro}>
               <div className="min-w-0 flex-1">
-                <p className="text-[13px] text-white/60">{unidades === 0 ? 'Escolha suas cervejas' : unidades === 1 ? '1 cerveja' : `${unidades} cervejas`}</p>
+                <p className="text-[13px] text-white/60">{unidades === 0 ? escolha.vazio : escolha.contar(unidades)}</p>
                 <p className="tipo-numero text-2xl whitespace-nowrap text-white max-[360px]:text-lg">{formatarMoeda(subtotal)}</p>
               </div>
               <button type="button" disabled={unidades === 0} onClick={() => ir(lembrado ? 'conferir' : 'nome')} className={classeBotaoGrande('volt')}>
@@ -593,7 +594,7 @@ function Fluxo({
 
             <section className="mt-6 rounded-[24px] border border-linha bg-superficie p-5">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="tipo-h3">Cervejas</h2>
+                <h2 className="tipo-h3">Seu pedido</h2>
                 <button type="button" onClick={() => ir('cervejas')} className="text-[14px] font-semibold text-volt-700 hover:text-ink">
                   Alterar
                 </button>
