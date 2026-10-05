@@ -135,7 +135,7 @@ npm run db:types:local  # regenera os tipos TypeScript
 │   │   ├── 20261001223400_pre_vendas_pedidos.sql   # pré-vendas, pedidos, timeline, RPCs, views
 │   │   ├── 20261001223500_integracoes.sql          # webhooks, fila de eventos, Shopify
 │   │   └── 20261001223600_permissoes_storage.sql   # grants e bucket de imagens
-│   ├── templates/                  # E-mails de convite e recuperação (pt-BR)
+│   ├── templates/                  # E-mail de recuperação de senha (pt-BR)
 │   ├── seed.sql                    # Dados de demonstração
 │   └── config.toml                 # Supabase local
 ├── src/
@@ -290,7 +290,7 @@ erDiagram
 
 | Tabela | Descrição |
 |---|---|
-| `perfis` | Membros da equipe (1:1 com `auth.users`), papel `admin`/`equipe`, `ativo`. |
+| `perfis` | Membros da equipe (1:1 com `auth.users`), papel `admin`/`equipe`, `ativo`, `trocar_senha` (entrou com senha temporária). |
 | `configuracoes` | Linha única: loja, PIX, modelos de mensagem. |
 | `fornecedores` | Empresas fornecedoras. CNPJ só dígitos, único. |
 | `vendedores` | Representantes comerciais. |
@@ -349,22 +349,16 @@ Nunca edite uma migration já aplicada em produção — crie outra.
 ## 8. Autenticação e equipe
 
 - Login por **e-mail e senha** (Supabase Auth). Cadastro público **desativado** por design (CRM interno).
-- **Primeiro usuário** = administrador ativo. Os demais nascem **inativos** até um admin liberar — exceto quem entra por **convite** (Configurações › Equipe), que já entra liberado.
-- **Convite**: o admin informa nome, e-mail, cargo e papel → a pessoa recebe e-mail, cria a senha em `/redefinir-senha` e entra.
-- **Esqueci minha senha**: link na tela de login.
+- **Primeiro usuário** = administrador ativo. Os demais nascem **inativos** até um admin liberar — exceto quem é **cadastrado pelo admin** (Configurações › Equipe), que já entra liberado.
+- **Cadastro da equipe (sem e-mail)**: o admin informa nome, e-mail, cargo e papel → o CRM cria a conta com uma **senha temporária** (`xxxx-xxxx-xxxx`) e mostra a senha com uma mensagem pronta para copiar e mandar (ex.: WhatsApp). A senha não fica salva em lugar nenhum e não aparece de novo.
+- **Primeiro acesso**: enquanto `perfis.trocar_senha` estiver ligado, qualquer tela do CRM leva para **Crie sua senha** (`/redefinir-senha`). Ao salvar a senha pessoal, o acesso é liberado.
+- **Nova senha** (lista de membros, só admin): gera outra senha temporária — para quem esqueceu a senha ou contas de convites antigos por e-mail. A senha anterior para de funcionar.
+- **Esqueceu a senha**: o CRM não envia e-mails — a tela de login orienta a pedir ao administrador uma **Nova senha**.
 
 ### Configurar no painel do Supabase (produção)
 
 1. **Authentication › Sign In / Providers › Email**: desative *Allow new users to sign up*.
-2. **Authentication › URL Configuration**:
-   - *Site URL*: `https://SEU-DOMINIO` (o mesmo de `NEXT_PUBLIC_SITE_URL`)
-   - *Redirect URLs*: `https://SEU-DOMINIO/**` e `http://localhost:3000/**`
-3. **Authentication › Email Templates** (recomendado): cole o conteúdo de
-   - `supabase/templates/convite.html` em **Invite user**
-   - `supabase/templates/recuperar-senha.html` em **Reset password**
-
-   Esses modelos usam o link `/auth/confirm?token_hash=...`, que funciona em qualquer navegador. (Os modelos padrão também funcionam: a tela `/redefinir-senha` aceita os dois formatos.)
-4. Para volume real de e-mails, configure um SMTP próprio em **Project Settings › Auth › SMTP**.
+2. Só se alguém enviar recuperação de senha pelo próprio painel do Supabase (*Authentication › Users*): ajuste em **Authentication › URL Configuration** a *Site URL* (`https://SEU-DOMINIO`) e as *Redirect URLs* (`https://SEU-DOMINIO/**`), e use o modelo `supabase/templates/recuperar-senha.html` em **Email Templates › Reset password** (link `/auth/confirm?token_hash=...`). O CRM em si não depende disso.
 
 ---
 
@@ -606,7 +600,8 @@ O gráfico de receita usa uma paleta categórica **validada para daltonismo** (d
 |---|---|
 | “Variável de ambiente ... não configurada” | Preencha o `.env.local` (local) ou as variáveis na Vercel e faça novo deploy. |
 | Login funciona mas cai em “Acesso pendente” | O perfil está inativo — um admin libera em Configurações › Equipe (ou `update perfis set ativo = true where email = '...'` no SQL Editor). |
-| Link de convite/recuperação “inválido” | Confira *Site URL* e *Redirect URLs* no Supabase e use os templates da seção 8. |
+| Pessoa da equipe não consegue entrar | Um admin clica em **Nova senha** em Configurações › Equipe e repassa a senha temporária. |
+| O único administrador esqueceu a senha | No SQL Editor: `update auth.users set encrypted_password = extensions.crypt('Temporaria#2026', extensions.gen_salt('bf')) where email = 'admin@...';` e `update perfis set trocar_senha = true where email = 'admin@...';` — entre com essa senha e crie a nova. |
 | Link da pré-venda aponta para `localhost` | Defina `NEXT_PUBLIC_SITE_URL` com o domínio de produção. |
 | Pré-venda não aceita pedidos | Status diferente de “Ativa” ou data de encerramento passou. |
 | Upload de imagem falha | Migration `permissoes_storage` aplicada? Imagem até 4 MB (PNG/JPG/WEBP/AVIF). |

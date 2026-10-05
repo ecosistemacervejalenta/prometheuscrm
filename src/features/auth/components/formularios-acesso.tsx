@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
 import { ActionForm, SubmitButton } from '@/components/form/action-form'
@@ -8,7 +7,7 @@ import { Field, Input } from '@/components/form/fields'
 import { Alert } from '@/components/ui/alert'
 import { createClient } from '@/lib/supabase/client'
 
-import { definirSenha, entrar, solicitarRecuperacao } from '../actions'
+import { definirSenha, entrar } from '../actions'
 
 export function FormularioLogin({ voltar }: { voltar?: string }) {
   return (
@@ -23,28 +22,8 @@ export function FormularioLogin({ voltar }: { voltar?: string }) {
       <SubmitButton bloco tamanho="lg">
         Entrar
       </SubmitButton>
-      <p className="text-center text-sm">
-        <Link href="/login?recuperar=1" className="font-semibold text-volt-700 hover:text-ink">
-          Esqueci minha senha
-        </Link>
-      </p>
-    </ActionForm>
-  )
-}
-
-export function FormularioRecuperacao() {
-  return (
-    <ActionForm action={solicitarRecuperacao} className="space-y-4" limparAoConcluir>
-      <Field label="E-mail" name="email">
-        <Input name="email" type="email" autoComplete="email" placeholder="voce@empresa.com" autoFocus />
-      </Field>
-      <SubmitButton bloco tamanho="lg">
-        Enviar link
-      </SubmitButton>
-      <p className="text-center text-sm">
-        <Link href="/login" className="font-semibold text-volt-700 hover:text-ink">
-          Voltar para o login
-        </Link>
+      <p className="text-center text-sm text-suave">
+        Esqueceu a senha? Peça ao administrador uma nova senha temporária.
       </p>
     </ActionForm>
   )
@@ -81,7 +60,7 @@ export function FormularioNovaSenha() {
   if (semSessao) {
     return (
       <Alert tom="erro" titulo="Link inválido ou expirado">
-        Peça um novo convite ao administrador ou use “Esqueci minha senha” na tela de login.
+        Peça ao administrador uma nova senha temporária.
       </Alert>
     )
   }

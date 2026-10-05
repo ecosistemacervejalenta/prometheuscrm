@@ -244,11 +244,8 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Prometheus: templates em pt-BR com link token_hash (ver README › Autenticação).
-[auth.email.template.invite]
-subject = "Você foi convidado(a) para o Prometheus CRM"
-content_path = "./supabase/templates/convite.html"
-
+# Prometheus: template em pt-BR com link token_hash (ver README › Autenticação).
+# O cadastro da equipe não usa e-mail: o CRM gera uma senha temporária (Configurações › Equipe).
 [auth.email.template.recovery]
 subject = "Redefinir sua senha · Prometheus CRM"
 content_path = "./supabase/templates/recuperar-senha.html"

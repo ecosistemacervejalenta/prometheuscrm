@@ -429,6 +429,13 @@ await expectError('inativo não lança conta a receber', `insert into contas_rec
 await db.exec(`reset role; update perfis set ativo = true where id = '${uid2}'; set role authenticated; select set_config('request.jwt.claim.sub', '${uid2}', false);`)
 await q(`update perfis set nome = 'João Silva' where id = $1`, [uid2])
 await expectError('equipe tenta virar admin', `update perfis set papel = 'admin' where id = $1`, [uid2])
+// Senha temporária: ao criar a própria senha, o membro desliga só a própria trava (RLS ignora a dos outros).
+await db.exec(`reset role; update perfis set trocar_senha = true where id in ('${uid}', '${uid2}'); set role authenticated; select set_config('request.jwt.claim.sub', '${uid2}', false);`)
+await q(`update perfis set trocar_senha = false where id = $1`, [uid2])
+await q(`update perfis set trocar_senha = false where id = $1`, [uid])
+await db.exec(`reset role;`)
+expectEq('senha temporária: membro libera só a própria trava', await um(`select (select trocar_senha from perfis where id = $1) eu, (select trocar_senha from perfis where id = $2) outro`, [uid2, uid]), { eu: false, outro: true })
+await db.exec(`update perfis set trocar_senha = false where id = '${uid}'; set role authenticated; select set_config('request.jwt.claim.sub', '${uid2}', false);`)
 await expectError('equipe (não admin) não desconecta o Olist', `select desconectar_olist()`)
 await expectError('equipe (não admin) não conecta o Olist', `select salvar_conexao_olist('a', 'b', now(), now())`)
 await db.exec(`select set_config('request.jwt.claim.sub', '${uid}', false);`)

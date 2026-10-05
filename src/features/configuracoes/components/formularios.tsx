@@ -1,13 +1,14 @@
 'use client'
 
-import { ActionForm, SubmitButton } from '@/components/form/action-form'
+import { ActionForm, SubmitButton, useFormulario } from '@/components/form/action-form'
 import { Checkbox, Field, FormActions, FormSection, Input, Select, Textarea } from '@/components/form/fields'
 import { Card } from '@/components/ui/card'
 import { formatarWhatsapp } from '@/lib/format'
 import { PLACEHOLDERS } from '@/lib/whatsapp'
 import type { Configuracoes, Perfil } from '@/types'
 
-import { convidarMembro, criarWebhook, salvarConfiguracoes, salvarMeuPerfil } from '../actions'
+import { cadastrarMembro, criarWebhook, salvarConfiguracoes, salvarMeuPerfil } from '../actions'
+import { PainelCredenciais } from './senha-temporaria'
 
 function Placeholders({ lista }: { lista: readonly string[] }) {
   return (
@@ -98,9 +99,20 @@ export function FormularioWebhook() {
   )
 }
 
-export function FormularioConvite() {
+function CredenciaisDoCadastro() {
+  const { estado } = useFormulario()
+  if (!estado.credenciais) return null
   return (
-    <ActionForm action={convidarMembro} limparAoConcluir>
+    <div className="mb-5">
+      <PainelCredenciais credenciais={estado.credenciais} />
+    </div>
+  )
+}
+
+export function FormularioCadastroMembro() {
+  return (
+    <ActionForm action={cadastrarMembro} limparAoConcluir>
+      <CredenciaisDoCadastro />
       <div className="grid gap-4 sm:grid-cols-6">
         <Field label="Nome" name="nome" obrigatorio className="sm:col-span-3">
           <Input name="nome" />
@@ -119,7 +131,7 @@ export function FormularioConvite() {
         </Field>
       </div>
       <div className="mt-4 flex justify-end">
-        <SubmitButton>Enviar convite</SubmitButton>
+        <SubmitButton>Cadastrar e gerar senha</SubmitButton>
       </div>
     </ActionForm>
   )

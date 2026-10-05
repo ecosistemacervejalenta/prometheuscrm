@@ -6,12 +6,17 @@ import type { z } from 'zod'
  *   ok        → operação concluída
  *   mensagem  → texto para o usuário (erro geral ou confirmação)
  *   erros     → erros por campo (exibidos abaixo de cada input)
+ *   credenciais → acesso com senha temporária para o admin repassar (Configurações › Equipe)
  */
 export type EstadoAcao = {
   ok?: boolean
   mensagem?: string
   erros?: Record<string, string[] | undefined>
+  credenciais?: Credenciais
 }
+
+/** Senha temporária gerada para um membro + mensagem pronta para mandar (ex.: WhatsApp). */
+export type Credenciais = { nome: string; email: string; senha: string; mensagem: string }
 
 export const estadoInicial: EstadoAcao = {}
 

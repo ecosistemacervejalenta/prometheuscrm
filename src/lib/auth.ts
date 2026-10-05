@@ -24,11 +24,13 @@ export const obterSessao = cache(async () => {
 /**
  * Garante que há um membro ativo da equipe logado.
  * Use no início de toda página e Server Action do CRM.
+ * Quem entrou com senha temporária só passa depois de criar a própria senha.
  */
 export async function exigirEquipe() {
   const sessao = await obterSessao()
   if (!sessao) redirect('/login')
   if (!sessao.perfil) redirect('/sem-acesso')
+  if (sessao.perfil.trocar_senha) redirect('/redefinir-senha')
   return { supabase: sessao.supabase, perfil: sessao.perfil }
 }
 

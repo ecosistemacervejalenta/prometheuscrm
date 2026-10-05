@@ -3,8 +3,9 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
-import { errosDeValidacao, falha, sucesso, traduzirErro, type EstadoAcao } from '@/lib/acoes'
+import { errosDeValidacao, falha, sucesso, traduzirErro, type Credenciais, type EstadoAcao } from '@/lib/acoes'
 import { exigirAdmin, exigirEquipe } from '@/lib/auth'
+import { gerarSenhaTemporaria } from '@/lib/senha'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { urlDoSite } from '@/lib/url'
 import { formParaObjeto, texto, textoOpcional, whatsappOpcional } from '@/lib/validacao'
@@ -119,38 +120,85 @@ export async function reenviarEvento(id: string): Promise<EstadoAcao> {
 
 // Equipe --------------------------------------------------------------------------
 
-const esquemaConvite = z.object({
+const esquemaCadastro = z.object({
   nome: texto('Informe o nome.'),
   email: z.email('E-mail inválido.'),
   cargo: textoOpcional,
   papel: z.enum(['admin', 'equipe']),
 })
 
-/** Convida por e-mail e já libera o acesso (somente administradores). */
-export async function convidarMembro(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
-  await exigirAdmin()
-  const dados = esquemaConvite.safeParse(formParaObjeto(formData))
-  if (!dados.success) return errosDeValidacao(dados.error)
+/** Mensagem pronta para o admin repassar o acesso (ex.: pelo WhatsApp). */
+async function credenciais(nome: string, email: string, senha: string): Promise<Credenciais> {
+  const primeiroNome = nome.trim().split(/\s+/)[0]
+  const mensagem = [
+    `Olá, ${primeiroNome}! Seu acesso ao Prometheus CRM:`,
+    `${await urlDoSite()}/login`,
+    `E-mail: ${email}`,
+    `Senha temporária: ${senha}`,
+    'No primeiro acesso você vai criar a sua senha pessoal.',
+  ].join('\n')
+  return { nome, email, senha, mensagem }
+}
 
+/**
+ * Cadastra a pessoa com uma senha temporária e já libera o acesso (somente administradores).
+ * Sem e-mail: o admin repassa a senha e, no primeiro login, a pessoa cria a própria senha.
+ */
+export async function cadastrarMembro(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
+  await exigirAdmin()
+  const dados = esquemaCadastro.safeParse(formParaObjeto(formData))
+  if (!dados.success) return errosDeValidacao(dados.error)
+  const { nome, email, cargo, papel } = dados.data
+
+  const senha = gerarSenhaTemporaria()
   const admin = createAdminClient()
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(dados.data.email, {
-    data: { nome: dados.data.nome },
-    redirectTo: `${await urlDoSite()}/redefinir-senha`,
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    password: senha,
+    email_confirm: true,
+    user_metadata: { nome },
   })
   if (error) {
     return falha(
-      error.message.includes('already') ? 'Este e-mail já tem cadastro.' : `Não foi possível convidar: ${error.message}`,
+      error.code === 'email_exists'
+        ? 'Este e-mail já tem cadastro. Para dar uma nova senha temporária, use “Nova senha” na lista de membros.'
+        : `Não foi possível cadastrar: ${error.message}`,
     )
   }
 
   const { error: erroPerfil } = await admin
     .from('perfis')
-    .update({ ativo: true, papel: dados.data.papel, cargo: dados.data.cargo, nome: dados.data.nome })
+    .update({ ativo: true, papel, cargo, nome, trocar_senha: true })
     .eq('id', data.user.id)
   if (erroPerfil) return falha(traduzirErro(erroPerfil))
 
   revalidatePath('/configuracoes/equipe')
-  return sucesso(`Convite enviado para ${dados.data.email}.`)
+  return { ok: true, mensagem: `Acesso de ${nome} criado.`, credenciais: await credenciais(nome, email, senha) }
+}
+
+/** Gera outra senha temporária para um membro (esqueceu a senha, convite antigo...). A senha atual deixa de valer. */
+export async function gerarNovaSenha(id: string): Promise<EstadoAcao> {
+  const { perfil } = await exigirAdmin()
+  if (id === perfil.id) return falha('Você não pode gerar uma senha temporária para a sua própria conta.')
+
+  const admin = createAdminClient()
+  const { data: membro } = await admin.from('perfis').select('nome, email').eq('id', id).maybeSingle()
+  if (!membro?.email) return falha('Membro não encontrado.')
+
+  const senha = gerarSenhaTemporaria()
+  // email_confirm: libera também contas de convites antigos por e-mail que nunca foram confirmados.
+  const { error } = await admin.auth.admin.updateUserById(id, { password: senha, email_confirm: true })
+  if (error) return falha(`Não foi possível gerar a senha: ${error.message}`)
+
+  const { error: erroPerfil } = await admin.from('perfis').update({ trocar_senha: true }).eq('id', id)
+  if (erroPerfil) return falha(traduzirErro(erroPerfil))
+
+  revalidatePath('/configuracoes/equipe')
+  return {
+    ok: true,
+    mensagem: 'Nova senha temporária gerada.',
+    credenciais: await credenciais(membro.nome || membro.email, membro.email, senha),
+  }
 }
 
 export async function atualizarAcessoMembro(

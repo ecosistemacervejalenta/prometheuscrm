@@ -1094,6 +1094,7 @@ export type Database = {
           id: string
           nome: string
           papel: Database["public"]["Enums"]["papel_usuario"]
+          trocar_senha: boolean
         }
         Insert: {
           ativo?: boolean
@@ -1104,6 +1105,7 @@ export type Database = {
           id: string
           nome?: string
           papel?: Database["public"]["Enums"]["papel_usuario"]
+          trocar_senha?: boolean
         }
         Update: {
           ativo?: boolean
@@ -1114,6 +1116,7 @@ export type Database = {
           id?: string
           nome?: string
           papel?: Database["public"]["Enums"]["papel_usuario"]
+          trocar_senha?: boolean
         }
         Relationships: []
       }
