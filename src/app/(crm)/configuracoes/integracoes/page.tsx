@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Pause, Play, RefreshCw, Send, Trash2 } from 'lucide-react'
 
 import { ActionButton } from '@/components/ui/action-button'
+import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { CopyButton } from '@/components/ui/copy-button'
@@ -17,10 +18,14 @@ import {
 import { CabecalhoConfiguracoes } from '@/features/configuracoes/components/cabecalho'
 import { FormularioWebhook } from '@/features/configuracoes/components/formularios'
 import { listarEventosRecentes, listarWebhooks } from '@/features/configuracoes/queries'
+import { AVISOS_OLIST, CartaoOlist } from '@/features/olist/components/cartao-olist'
+import { statusOlist } from '@/features/olist/queries'
+import { exigirEquipe } from '@/lib/auth'
 import { envServidor } from '@/lib/env.server'
 import { formatarDataCurta, formatarHora } from '@/lib/format'
 import type { Tom } from '@/lib/rotulos'
 import { urlDoSite } from '@/lib/url'
+import { param } from '@/lib/utils'
 
 export const metadata: Metadata = { title: 'Integrações' }
 
@@ -51,14 +56,26 @@ function Endpoint({ metodo, caminho, descricao }: { metodo: string; caminho: str
   )
 }
 
-export default async function PaginaIntegracoes() {
-  const [webhooks, eventos, site] = await Promise.all([listarWebhooks(), listarEventosRecentes(), urlDoSite()])
+export default async function PaginaIntegracoes({ searchParams }: PageProps<'/configuracoes/integracoes'>) {
+  const { perfil } = await exigirEquipe()
+  const aviso = AVISOS_OLIST[param((await searchParams).olist) ?? '']
+  const [webhooks, eventos, site, olist] = await Promise.all([
+    listarWebhooks(),
+    listarEventosRecentes(),
+    urlDoSite(),
+    statusOlist(),
+  ])
 
   return (
     <>
       <CabecalhoConfiguracoes ativa="integracoes" />
 
       <div className="space-y-5 lg:space-y-6">
+        {aviso && <Alert tom={aviso.tom}>{aviso.texto}</Alert>}
+
+        {/* Olist ERP */}
+        <CartaoOlist status={olist} site={site} ehAdmin={perfil.papel === 'admin'} />
+
         {/* n8n / webhooks de saída */}
         <Card>
           <CardHeader

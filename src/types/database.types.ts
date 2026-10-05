@@ -501,6 +501,59 @@ export type Database = {
         }
         Relationships: []
       }
+      integracao_olist: {
+        Row: {
+          id: number
+          access_token: string | null
+          refresh_token: string | null
+          access_expira_em: string | null
+          refresh_expira_em: string | null
+          conectado_em: string | null
+          conectado_por: string | null
+          ultima_sincronizacao: string | null
+          sincronizado_ate: string | null
+          sincronizando_desde: string | null
+          ultimo_erro: string | null
+          atualizado_em: string
+        }
+        Insert: {
+          id?: number
+          access_token?: string | null
+          refresh_token?: string | null
+          access_expira_em?: string | null
+          refresh_expira_em?: string | null
+          conectado_em?: string | null
+          conectado_por?: string | null
+          ultima_sincronizacao?: string | null
+          sincronizado_ate?: string | null
+          sincronizando_desde?: string | null
+          ultimo_erro?: string | null
+          atualizado_em?: string
+        }
+        Update: {
+          id?: number
+          access_token?: string | null
+          refresh_token?: string | null
+          access_expira_em?: string | null
+          refresh_expira_em?: string | null
+          conectado_em?: string | null
+          conectado_por?: string | null
+          ultima_sincronizacao?: string | null
+          sincronizado_ate?: string | null
+          sincronizando_desde?: string | null
+          ultimo_erro?: string | null
+          atualizado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integracao_olist_conectado_por_fkey"
+            columns: ["conectado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pedido_itens: {
         Row: {
           id: string
@@ -642,6 +695,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      pedidos_erp: {
+        Row: {
+          id: number
+          numero: number | null
+          canal: string
+          ecommerce: string | null
+          situacao: number
+          data_pedido: string
+          valor: number
+          sincronizado_em: string
+        }
+        Insert: {
+          id: number
+          numero?: number | null
+          canal: string
+          ecommerce?: string | null
+          situacao?: number
+          data_pedido: string
+          valor?: number
+          sincronizado_em?: string
+        }
+        Update: {
+          id?: number
+          numero?: number | null
+          canal?: string
+          ecommerce?: string | null
+          situacao?: number
+          data_pedido?: string
+          valor?: number
+          sincronizado_em?: string
+        }
+        Relationships: []
       }
       perfis: {
         Row: {
@@ -1114,6 +1200,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      desconectar_olist: {
+        Args: never
+        Returns: undefined
+      }
       eh_admin: {
         Args: never
         Returns: boolean
@@ -1293,6 +1383,15 @@ export type Database = {
           pedidos: number
         }[]
       }
+      salvar_conexao_olist: {
+        Args: {
+          p_access_token: string
+          p_refresh_token: string
+          p_access_expira_em: string
+          p_refresh_expira_em: string
+        }
+        Returns: undefined
+      }
       salvar_pre_venda: {
         Args: {
           p_dados: Json
@@ -1325,6 +1424,21 @@ export type Database = {
           p_texto: string
         }
         Returns: string
+      }
+      status_integracao_olist: {
+        Args: never
+        Returns: Json
+      }
+      vendas_erp_por_canal: {
+        Args: {
+          p_inicio: string
+          p_fim: string
+        }
+        Returns: {
+          canal: string
+          valor: number
+          pedidos: number
+        }[]
       }
     }
     Enums: {

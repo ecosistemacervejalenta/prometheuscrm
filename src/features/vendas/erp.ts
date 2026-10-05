@@ -1,23 +1,28 @@
 import 'server-only'
 
+import { exigirEquipe } from '@/lib/auth'
+
 import type { IdCanal } from './canais'
 import type { Intervalo } from './periodos'
 
 export type Vendas = { valor: number; pedidos: number }
 
+/** Canais do painel que vêm do Olist. Pedidos "API Tiny" e sem e-commerce ficam de fora. */
+const CANAIS_DO_ERP: IdCanal[] = ['mercado_livre', 'shopee', 'shopify']
+
 /**
- * Vendas por canal vindas do ERP.
- *
- * AGUARDANDO A DOCUMENTAÇÃO DA API DO ERP. Enquanto a integração não existir,
- * devolve `null` e o painel mostra esses canais como "aguardando ERP".
- *
- * Ao implementar: autenticar (credenciais em env.server.ts, nunca no cliente),
- * buscar os pedidos do intervalo (datas inclusivas, fuso de Brasília), ignorar
- * cancelados/devolvidos e somar valor e quantidade de pedidos por canal
- * (mercado_livre, shopee, shopify). Lançar erro em falha de rede/autenticação:
- * o painel mostra "erro no ERP" sem derrubar a página.
+ * Vendas por canal no intervalo (datas inclusivas), a partir dos pedidos do
+ * Olist ERP já sincronizados em pedidos_erp. Pedidos cancelados não entram.
  */
-export async function vendasDoErp(intervalo: Intervalo): Promise<Partial<Record<IdCanal, Vendas>> | null> {
-  void intervalo
-  return null
+export async function vendasDoErp(intervalo: Intervalo): Promise<Partial<Record<IdCanal, Vendas>>> {
+  const { supabase } = await exigirEquipe()
+  const { data, error } = await supabase.rpc('vendas_erp_por_canal', { p_inicio: intervalo.inicio, p_fim: intervalo.fim })
+  if (error) throw error
+
+  const vendas: Partial<Record<IdCanal, Vendas>> = {}
+  for (const linha of data ?? []) {
+    const canal = linha.canal as IdCanal
+    if (CANAIS_DO_ERP.includes(canal)) vendas[canal] = { valor: Number(linha.valor), pedidos: Number(linha.pedidos) }
+  }
+  return vendas
 }

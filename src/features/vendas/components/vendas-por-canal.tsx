@@ -1,10 +1,15 @@
 import Link from 'next/link'
-import { CircleAlert, Info, Minus, TrendingDown, TrendingUp } from 'lucide-react'
+import { after } from 'next/server'
+import { CircleAlert, Info, Minus, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react'
 
+import { ActionButton } from '@/components/ui/action-button'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
-import { formatarMoeda, formatarMoedaCompacta, formatarNumero } from '@/lib/format'
+import { sincronizarOlistAgora } from '@/features/olist/actions'
+import { dispararSincronizacao, sincronizacaoDesatualizada } from '@/features/olist/disparo'
+import { formatarHaQuanto, formatarMoeda, formatarMoedaCompacta, formatarNumero } from '@/lib/format'
+import { urlDoSite } from '@/lib/url'
 import { cn } from '@/lib/utils'
 
 import { CANAIS } from '../canais'
@@ -41,7 +46,7 @@ function Variacao({ valor, comparacao, compacta = false }: { valor: number | nul
   )
 }
 
-function CartaoCanal({ canal, comparacao }: { canal: ResumoCanal; comparacao: string }) {
+function CartaoCanal({ canal, comparacao, textoAguardando }: { canal: ResumoCanal; comparacao: string; textoAguardando: string }) {
   return (
     <article
       aria-label={canal.nome}
@@ -67,9 +72,9 @@ function CartaoCanal({ canal, comparacao }: { canal: ResumoCanal; comparacao: st
               <Variacao valor={canal.variacao} comparacao={comparacao} compacta />
             </>
           ) : canal.estado === 'erro' ? (
-            <Badge tom="perigo" ponto>Erro no ERP</Badge>
+            <Badge tom="perigo" ponto>Erro no Olist</Badge>
           ) : (
-            <Badge tom="neutro" ponto>Aguardando ERP</Badge>
+            <Badge tom="neutro" ponto>Aguardando Olist</Badge>
           )}
         </div>
       </div>
@@ -86,9 +91,9 @@ function CartaoCanal({ canal, comparacao }: { canal: ResumoCanal; comparacao: st
             )}
           </>
         ) : canal.estado === 'erro' ? (
-          'Não foi possível consultar o ERP agora.'
+          'Não foi possível ler as vendas do Olist agora.'
         ) : (
-          'Entra quando o ERP for conectado.'
+          textoAguardando
         )}
       </p>
     </article>
@@ -101,19 +106,30 @@ function CartaoCanal({ canal, comparacao }: { canal: ResumoCanal; comparacao: st
  */
 export async function VendasPorCanal({ periodo, comExemplo }: { periodo: ChavePeriodo; comExemplo: boolean }) {
   const dados = await vendasPorCanal(periodo, { comExemplo })
+
+  // Dados do Olist com mais de 15 min: pede uma sincronização depois de responder
+  // (quem abrir a tela em seguida já vê os números novos).
+  const { olist } = dados
+  if (olist?.conectado && olist.sincronizacaoDisponivel && sincronizacaoDesatualizada(olist.ultimaSincronizacao)) {
+    const site = await urlDoSite()
+    after(() => dispararSincronizacao(site))
+  }
+
   return <PainelVendasPorCanal dados={dados} periodo={periodo} />
 }
 
 /** Apresentação do painel (sem buscar dados). */
 export function PainelVendasPorCanal({ dados, periodo }: { dados: DadosVendasPorCanal; periodo: ChavePeriodo }) {
-  const { periodo: intervalos, canais, total, pendentes, comExemplo } = dados
+  const { periodo: intervalos, canais, total, pendentes, olist, comExemplo } = dados
   const comDados = canais.filter((c) => c.estado === 'ok' && c.atual)
   const nomesPendentes = pendentes.map((c) => c.nome)
   const listaPendentes =
     nomesPendentes.length > 1 ? `${nomesPendentes.slice(0, -1).join(', ')} e ${nomesPendentes.at(-1)}` : nomesPendentes[0]
   const fontes = comExemplo
     ? 'Dados de exemplo'
-    : 'Mercado Livre, Shopee e Loja Virtual pelo ERP · Grupo VIP pelos pedidos do CRM'
+    : 'Mercado Livre, Shopee e Loja Virtual pelo Olist · Grupo VIP pelos pedidos do CRM'
+  const textoAguardando = olist?.conectado ? 'Importando o histórico do Olist…' : 'Entra quando o Olist for conectado.'
+  const comErro = pendentes.some((c) => c.estado === 'erro')
 
   return (
     <section aria-labelledby="titulo-vendas-canal" className="mb-5 space-y-3 lg:mb-6 lg:space-y-4">
@@ -126,14 +142,40 @@ export function PainelVendasPorCanal({ dados, periodo }: { dados: DadosVendasPor
             {intervalos.descricao} · {fontes}
           </p>
         </div>
-        <div className="w-full sm:w-auto">
-          <SeletorPeriodo ativo={periodo} comExemplo={comExemplo} />
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          {olist?.conectado && (
+            <div className="flex items-center gap-2 print:hidden">
+              <span className="text-[12px] text-suave">
+                {olist.ultimaSincronizacao ? `Olist atualizado ${formatarHaQuanto(olist.ultimaSincronizacao)}` : 'Importando…'}
+              </span>
+              <ActionButton acao={sincronizarOlistAgora} titulo="Buscar agora as vendas mais recentes no Olist">
+                <RefreshCw /> Atualizar
+              </ActionButton>
+            </div>
+          )}
+          <div className="w-full sm:w-auto">
+            <SeletorPeriodo ativo={periodo} comExemplo={comExemplo} />
+          </div>
         </div>
       </div>
 
+      {olist?.expirada && (
+        <Alert tom="erro" titulo="A conexão com o Olist expirou">
+          Os números do Mercado Livre, Shopee e Loja Virtual podem estar desatualizados.{' '}
+          <Link href="/configuracoes/integracoes" className="font-semibold text-ink underline underline-offset-2">
+            Reconectar o Olist
+          </Link>
+        </Alert>
+      )}
+      {olist?.conectado && olist.ultimoErro && (
+        <Alert tom="alerta" titulo="A última sincronização com o Olist falhou">
+          {olist.ultimoErro} Os números mostram a última sincronização que deu certo.
+        </Alert>
+      )}
+
       {comExemplo && (
         <Alert tom="alerta" titulo="Dados de exemplo">
-          Números fictícios, só para visualizar a tela enquanto o ERP não está conectado.{' '}
+          Números fictícios, só para visualizar a tela enquanto o Olist não está conectado.{' '}
           <Link href={`/?periodo=${periodo}`} scroll={false} className="font-semibold text-ink underline underline-offset-2">
             Voltar aos dados reais
           </Link>
@@ -163,22 +205,32 @@ export function PainelVendasPorCanal({ dados, periodo }: { dados: DadosVendasPor
 
           {pendentes.length > 0 && (
             <p className="mt-4 flex gap-2 rounded-xl bg-papel px-3 py-2.5 text-[13px] text-suave">
-              {pendentes.some((c) => c.estado === 'erro') ? (
+              {comErro ? (
                 <CircleAlert className="mt-0.5 size-4 shrink-0 text-perigo" aria-hidden />
               ) : (
                 <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
               )}
               <span>
-                {pendentes.some((c) => c.estado === 'erro')
-                  ? `Não foi possível consultar o ERP: ${listaPendentes} ficaram de fora do total.`
-                  : `${listaPendentes} entram no total quando o ERP for conectado.`}{' '}
-                <Link
-                  href={`/?periodo=${periodo}&exemplo=1`}
-                  scroll={false}
-                  className="font-semibold whitespace-nowrap text-volt-700 hover:text-ink"
-                >
-                  Ver com dados de exemplo
-                </Link>
+                {comErro
+                  ? `Não foi possível ler as vendas do Olist: ${listaPendentes} ficaram de fora do total.`
+                  : olist?.conectado
+                    ? `Importando o histórico do Olist — ${listaPendentes} aparecem em instantes.`
+                    : `${listaPendentes} entram no total quando o Olist for conectado.`}{' '}
+                {!olist?.conectado && !comErro && (
+                  <>
+                    <Link href="/configuracoes/integracoes" className="font-semibold whitespace-nowrap text-volt-700 hover:text-ink">
+                      Conectar o Olist
+                    </Link>
+                    {' · '}
+                    <Link
+                      href={`/?periodo=${periodo}&exemplo=1`}
+                      scroll={false}
+                      className="font-semibold whitespace-nowrap text-volt-700 hover:text-ink"
+                    >
+                      ver exemplo
+                    </Link>
+                  </>
+                )}
               </span>
             </p>
           )}
@@ -208,14 +260,14 @@ export function PainelVendasPorCanal({ dados, periodo }: { dados: DadosVendasPor
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {canais.map((canal) => (
-          <CartaoCanal key={canal.id} canal={canal} comparacao={intervalos.comparacao} />
+          <CartaoCanal key={canal.id} canal={canal} comparacao={intervalos.comparacao} textoAguardando={textoAguardando} />
         ))}
       </div>
     </section>
   )
 }
 
-/** Esqueleto exibido enquanto os números chegam (o ERP pode demorar). */
+/** Esqueleto exibido enquanto os números chegam. */
 export function EsqueletoVendasPorCanal() {
   return (
     <section aria-busy="true" aria-label="Carregando vendas por canal" className="mb-5 space-y-3 lg:mb-6 lg:space-y-4">

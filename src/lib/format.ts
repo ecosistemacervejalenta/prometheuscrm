@@ -112,6 +112,17 @@ export function formatarMesAno(iso: string): string {
     .replace('.', '')
 }
 
+/** agora · há 5 min · há 3 h · 02/10/2026 às 14:30 (para "atualizado …"). */
+export function formatarHaQuanto(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const minutos = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000)
+  if (minutos < 1) return 'agora'
+  if (minutos < 60) return `há ${minutos} min`
+  const horas = Math.floor(minutos / 60)
+  if (horas < 24) return `há ${horas} h`
+  return formatarDataHora(iso)
+}
+
 /** hoje · ontem · 12 dias · 3 meses */
 export function formatarRelativo(iso: string | null | undefined): string {
   const dias = diasDesde(iso)

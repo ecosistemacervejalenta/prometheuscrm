@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { statusOlist, type StatusOlist } from '@/features/olist/queries'
 import { exigirEquipe } from '@/lib/auth'
 import { hojeISO, inicioDoDia, somarDias } from '@/lib/datas'
 import type { CanalVenda } from '@/types'
@@ -68,20 +69,22 @@ function exemplo(id: IdCanal, chave: ChavePeriodo): [Vendas, Vendas] {
 }
 
 /**
- * Vendas por canal no período: ERP para os marketplaces e a loja virtual,
- * CRM para o Grupo VIP. Uma falha no ERP não derruba o painel — os canais
- * dele ficam em estado "erro" e o restante continua aparecendo.
+ * Vendas por canal no período: Olist ERP para os marketplaces e a loja virtual,
+ * CRM para o Grupo VIP. Os canais do Olist só têm números depois da primeira
+ * sincronização; uma falha na leitura não derruba o painel (estado "erro").
  */
 export async function vendasPorCanal(chave: ChavePeriodo, { comExemplo = false } = {}) {
   const periodo = intervalosDoPeriodo(chave, hojeISO())
 
+  let olist: StatusOlist | null = null
   let erp: [Partial<Record<IdCanal, Vendas>> | null, Partial<Record<IdCanal, Vendas>> | null] = [null, null]
   let erroErp = false
   if (!comExemplo) {
     try {
-      erp = await Promise.all([vendasDoErp(periodo.atual), vendasDoErp(periodo.anterior)])
+      olist = await statusOlist()
+      if (olist.ultimaSincronizacao) erp = await Promise.all([vendasDoErp(periodo.atual), vendasDoErp(periodo.anterior)])
     } catch (erro) {
-      console.error('[vendas] falha ao consultar o ERP', erro)
+      console.error('[vendas] falha ao ler as vendas do Olist', erro)
       erroErp = true
     }
   }
@@ -132,8 +135,10 @@ export async function vendasPorCanal(chave: ChavePeriodo, { comExemplo = false }
       ticket: ticket(totalAtual),
       variacao: comDados.length > 0 ? variacao(totalAtual, totalAnterior) : null,
     },
-    /** Canais sem números (aguardando ERP ou com erro): o total é parcial. */
+    /** Canais sem números (aguardando Olist ou com erro): o total é parcial. */
     pendentes: canais.filter((c) => c.estado !== 'ok'),
+    /** Status da conexão com o Olist (null no modo exemplo). */
+    olist,
     comExemplo,
   }
 }

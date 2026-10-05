@@ -13,4 +13,7 @@ export const envServidor = {
   cronSecret: process.env.CRON_SECRET || undefined,
   /** Segredo de assinatura dos webhooks da Shopify. */
   shopifyWebhookSecret: process.env.SHOPIFY_WEBHOOK_SECRET || undefined,
+  /** Aplicativo da API v3 do Olist ERP (Menu › Configurações › Geral › Aplicativos). */
+  olistClientId: process.env.OLIST_CLIENT_ID || undefined,
+  olistClientSecret: process.env.OLIST_CLIENT_SECRET || undefined,
 }

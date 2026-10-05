@@ -293,6 +293,25 @@ expectEq('excluir manda as contas para Outros', await um(`select
 
 show('contas a receber (seed + testes)', await q(`select descricao, categoria, pagador, vencimento, valor, status, situacao from vw_contas_receber order by vencimento`))
 
+// Olist ERP ---------------------------------------------------------------------
+await q(`insert into pedidos_erp (id, numero, canal, ecommerce, situacao, data_pedido, valor) values
+  (1, 101, 'mercado_livre', 'Mercado Livre', 1, '2026-09-10', 100.50),
+  (2, 102, 'mercado_livre', 'Mercado Livre', 6, '2026-09-30', 49.50),
+  (3, 103, 'mercado_livre', 'Mercado Livre', 2, '2026-09-15', 999.00),
+  (4, 104, 'shopee', 'Shopee', 0, '2026-09-01', 80.00),
+  (5, 105, 'shopify', 'Shopify', 9, '2026-09-20', 120.00),
+  (6, 106, 'outro', 'API Tiny', 1, '2026-09-20', 70.00),
+  (7, 107, 'shopee', 'Shopee', 1, '2026-10-01', 55.00)`)
+expectEq('vendas ERP por canal: sem cancelados e dentro do intervalo',
+  (await q(`select canal, valor::float valor, pedidos from vendas_erp_por_canal('2026-09-01', '2026-09-30') order by canal`)),
+  [{ canal: 'mercado_livre', valor: 150, pedidos: 2 }, { canal: 'outro', valor: 70, pedidos: 1 },
+   { canal: 'shopee', valor: 80, pedidos: 1 }, { canal: 'shopify', valor: 120, pedidos: 1 }])
+expectEq('vendas ERP: intervalo de um dia (inclusivo)',
+  (await q(`select canal, pedidos from vendas_erp_por_canal('2026-10-01', '2026-10-01')`)), [{ canal: 'shopee', pedidos: 1 }])
+await q(`insert into integracao_olist (id, access_token, refresh_token, access_expira_em, refresh_expira_em, conectado_em, ultima_sincronizacao)
+  values (1, 'segredo-access', 'segredo-refresh', now() + interval '4 hours', now() + interval '1 day', now(), now())`)
+await expectError('só existe uma linha de conexão do Olist', `insert into integracao_olist (id) values (2)`)
+
 // RLS ---------------------------------------------------------------------------
 const uid =(await q(`insert into auth.users (email, raw_user_meta_data) values ('ana@prometheus.beer', '{"nome":"Ana Ribeiro"}') returning id`))[0].id
 const uid2 = (await q(`insert into auth.users (email) values ('joao@prometheus.beer') returning id`))[0].id
@@ -317,19 +336,42 @@ await q(`update contas_fixas set valor = 12 where id = $1`, [fixaMembro.id])
 expectEq('membro aplica modelo às pendentes', (await um(`select aplicar_conta_fixa_aos_pendentes($1) n`, [fixaMembro.id])).n, 1)
 await q(`update contas_fixas set ativa = false where id = $1`, [fixaMembro.id])
 await q(`delete from contas_fixas where id = $1`, [fixaMembro.id])
+expectEq('membro lê pedidos do ERP', Number((await um(`select count(*) n from pedidos_erp`)).n), 7)
+expectEq('membro soma vendas do ERP', (await q(`select canal from vendas_erp_por_canal('2026-09-01', '2026-09-30') order by canal`)).length, 4)
+await expectError('membro não grava pedidos do ERP', `insert into pedidos_erp (id, canal, data_pedido) values (99, 'shopee', current_date)`)
+await expectError('membro não altera pedidos do ERP', `update pedidos_erp set valor = 0 where id = 1 returning id`)
+await expectError('membro não lê os tokens do Olist', `select access_token from integracao_olist`)
+const statusOlist = (await um(`select status_integracao_olist() s`)).s
+expectEq('status do Olist sem expor tokens', { conectado: statusOlist.conectado, expirada: statusOlist.expirada, temToken: JSON.stringify(statusOlist).includes('segredo') }, { conectado: true, expirada: false, temToken: false })
 await db.exec(`reset role;`)
 
 await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${uid2}', false);`)
 show('autenticado inativo (novo usuário) vê clientes (0)', (await q(`select count(*) from clientes`))[0])
 expectEq('inativo não vê contas a receber', Number((await um(`select count(*) n from contas_receber`)).n), 0)
 expectEq('inativo não vê categorias', Number((await um(`select count(*) n from categorias_financeiras`)).n), 0)
+expectEq('inativo não vê pedidos do ERP', Number((await um(`select count(*) n from pedidos_erp`)).n), 0)
+expectEq('inativo não vê o status do Olist', (await um(`select status_integracao_olist() s`)).s, null)
 await expectError('inativo não lança conta a receber', `insert into contas_receber (descricao, competencia, vencimento, valor) values ('x', current_date, current_date, 1)`)
 await db.exec(`reset role; update perfis set ativo = true where id = '${uid2}'; set role authenticated; select set_config('request.jwt.claim.sub', '${uid2}', false);`)
 await q(`update perfis set nome = 'João Silva' where id = $1`, [uid2])
 await expectError('equipe tenta virar admin', `update perfis set papel = 'admin' where id = $1`, [uid2])
+await expectError('equipe (não admin) não desconecta o Olist', `select desconectar_olist()`)
+await expectError('equipe (não admin) não conecta o Olist', `select salvar_conexao_olist('a', 'b', now(), now())`)
 await db.exec(`select set_config('request.jwt.claim.sub', '${uid}', false);`)
 await q(`update perfis set cargo = 'Atendimento' where id = $1`, [uid2])
+await q(`select desconectar_olist()`)
+expectEq('admin desconecta o Olist', (await um(`select status_integracao_olist() s`)).s.conectado, false)
+await q(`select salvar_conexao_olist('novo-access', 'novo-refresh', now() + interval '4 hours', now() + interval '1 day')`)
+expectEq('admin reconecta o Olist', (await um(`select status_integracao_olist() s`)).s.conectado, true)
 await db.exec(`reset role;`)
+expectEq('reconexão grava tokens e quem conectou', await um(`select access_token, conectado_por = $1 as autor from integracao_olist`, [uid]), { access_token: 'novo-access', autor: true })
+await q(`select set_config('request.jwt.claim.sub', $1, false)`, [uid])
+await db.exec(`set role authenticated;`)
+await q(`select desconectar_olist()`)
+await db.exec(`reset role;`)
+expectEq('desconectar apaga os tokens e mantém os pedidos', await um(`select
+  (select access_token is null and refresh_token is null from integracao_olist) sem_tokens,
+  (select count(*)::int from pedidos_erp) pedidos`), { sem_tokens: true, pedidos: 7 })
 show('perfil do João', (await q(`select nome, cargo, papel, ativo from perfis where id = $1`, [uid2]))[0])
 
 await db.exec(`set role anon; select set_config('request.jwt.claim.sub', '', false);`)
@@ -339,6 +381,9 @@ await expectError('anon lê contas a receber', `select * from contas_receber`)
 await expectError('anon lê categorias', `select * from categorias_financeiras`)
 await expectError('anon lê vw_contas_receber', `select * from vw_contas_receber`)
 await expectError('anon chama aplicar_conta_fixa_aos_pendentes', `select aplicar_conta_fixa_aos_pendentes(gen_random_uuid())`)
+await expectError('anon lê pedidos do ERP', `select * from pedidos_erp`)
+await expectError('anon lê tokens do Olist', `select * from integracao_olist`)
+await expectError('anon consulta status do Olist', `select status_integracao_olist()`)
 await db.exec(`reset role;`)
 
 await db.exec(`set role service_role;`)

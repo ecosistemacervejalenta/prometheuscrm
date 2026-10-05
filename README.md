@@ -520,6 +520,25 @@ Como funciona: assinatura HMAC validada → `importar_pedido_shopify()` encontra
 
 Já preparado: canal `app`, coluna `clientes.app_usuario_id`, origem `app`, API `/api/v1` para criar clientes/consultar pedidos e eventos via webhook para manter o App sincronizado.
 
+### 11.5 Olist ERP (API v3) — painel "Vendas por canal"
+
+O painel da Visão geral mostra as vendas do **Mercado Livre, Shopee e Loja Virtual (Shopify)** a partir do Olist ERP e as do **Grupo VIP** a partir dos pedidos do próprio CRM. Contam todos os pedidos, **exceto os cancelados**; pedidos do e-commerce "API Tiny" (e sem e-commerce) ficam de fora.
+
+**Configuração (uma vez):**
+
+1. No Olist: **Menu › Configurações › aba Geral › Aplicativos › + novo aplicativo**. Permissão: só **Leitura** em **Pedidos**. URL de redirecionamento: `https://SEU-DOMINIO/api/olist/callback` (a tela Configurações › Integrações mostra a URL exata para copiar).
+2. Na Vercel, cadastre `OLIST_CLIENT_ID`, `OLIST_CLIENT_SECRET` e `CRON_SECRET` (`openssl rand -hex 32`) e faça um novo deploy.
+3. Em **Configurações › Integrações › Olist ERP**, um administrador clica em **Conectar Olist** e autoriza. A primeira sincronização importa 13 meses de histórico.
+
+**Como funciona:**
+
+- OAuth2 (Keycloak do Olist): o token de acesso vale 4 h e o de renovação, 1 dia. Os tokens ficam em `integracao_olist`, tabela sem acesso pela equipe (só o servidor); a interface lê apenas o status por `status_integracao_olist()`.
+- A rota `/api/cron/olist` (protegida por `CRON_SECRET`) renova o token e sincroniza para `pedidos_erp`: pedidos criados nos últimos 62 dias + alterados desde a última execução (cancelamentos antigos). É a única parte que usa a chave secreta do Supabase.
+- Quem chama a rota: a Vercel Cron 6x por dia (a cada ~4 h, compatível com o plano Hobby — mantém o token vivo), o botão **Atualizar** do painel e a própria Visão geral quando os dados têm mais de 15 min.
+- Se a renovação falhar por mais de 1 dia, a conexão expira: o painel avisa e basta **Reconectar** (o histórico importado é mantido).
+- Limite da API: 60 requisições/min no plano Evoluir (por conta, compartilhado entre aplicativos). Uma sincronização normal usa poucas requisições; a importação inicial, ~1 por 100 pedidos.
+- Código: `src/features/olist/` (OAuth, cliente da API, sincronização) e `src/features/vendas/` (painel).
+
 ---
 
 ## 12. Identidade visual
