@@ -1,21 +1,24 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { MapPin, MessageCircle, Phone, Printer } from 'lucide-react'
+import { MapPin, MessageCircle, Phone, Printer, Trash2 } from 'lucide-react'
 
 import { LinhaDoTempo } from '@/components/dominio/linha-do-tempo'
+import { ActionButton } from '@/components/ui/action-button'
 import { PrintButton } from '@/components/ui/print-button'
 import { ButtonExternal } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { ListaMobile } from '@/components/ui/lista-mobile'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
+import { excluirPedido } from '@/features/pedidos/actions'
 import { linkDeCobranca, linkDeFrete } from '@/features/pedidos/cobranca'
 import { BotaoCobrar, ControlePagamento, SeletorStatus } from '@/features/pedidos/components/controles'
 import { BotaoEnviarFrete, CotarFrete } from '@/features/pedidos/components/frete'
 import { CanalBadge, FreteBadge, PagamentoBadge } from '@/features/pedidos/components/selos'
 import { atividadesDoPedido, obterPedido } from '@/features/pedidos/queries'
 import { formatarCep, formatarDataHora, formatarEndereco, formatarMoeda, formatarWhatsapp, numeroPedido, primeiroNome, type Endereco } from '@/lib/format'
+import { exigirEquipe } from '@/lib/auth'
 import { linkWhatsapp } from '@/lib/whatsapp'
 
 export async function generateMetadata({ params }: PageProps<'/pedidos/[id]'>): Promise<Metadata> {
@@ -25,7 +28,7 @@ export async function generateMetadata({ params }: PageProps<'/pedidos/[id]'>): 
 
 export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'>) {
   const { id } = await params
-  const [pedido, atividades, config] = await Promise.all([obterPedido(id), atividadesDoPedido(id), obterConfiguracoes()])
+  const [{ perfil }, pedido, atividades, config] = await Promise.all([exigirEquipe(), obterPedido(id), atividadesDoPedido(id), obterConfiguracoes()])
   if (!pedido) notFound()
 
   const cliente = pedido.clientes
@@ -190,6 +193,26 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
               )}
             </CardContent>
           </Card>
+
+          {perfil.papel === 'admin' && (
+            <Card className="print:hidden">
+              <CardHeader
+                titulo="Excluir venda"
+                descricao={`Apaga o pedido de vez e ele sai do faturamento${pedido.canal === 'grupo_vip' ? ' do Grupo VIP' : ''}. Para manter o histórico, use o status “Cancelado”.`}
+              />
+              <CardContent>
+                <ActionButton
+                  acao={excluirPedido.bind(null, pedido.id, pedido.pre_vendas ? `/pre-vendas/${pedido.pre_vendas.id}` : '/pedidos')}
+                  variante="perigo"
+                  tamanho="md"
+                  className="w-full"
+                  confirmar={`Excluir a venda ${numeroPedido(pedido.numero)} (${formatarMoeda(pedido.total)})? Ela sai do faturamento e não dá para desfazer.`}
+                >
+                  <Trash2 /> Excluir venda
+                </ActionButton>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="print:hidden">
             <CardHeader titulo="Linha do tempo" />

@@ -48,13 +48,17 @@ export async function alterarStatusPreVenda(id: string, status: StatusPreVenda):
   return sucesso(status === 'encerrada' ? 'Pré-venda encerrada: o link não aceita mais pedidos.' : 'Pré-venda reaberta.')
 }
 
-export async function excluirPreVenda(id: string): Promise<EstadoAcao> {
-  const { supabase } = await exigirEquipe()
-  const { count } = await supabase.from('pedidos').select('id', { count: 'exact', head: true }).eq('pre_venda_id', id)
-  if ((count ?? 0) > 0) return falha('Esta pré-venda já tem pedidos. Encerre em vez de excluir.')
-
-  const { error } = await supabase.from('pre_vendas').delete().eq('id', id)
+/**
+ * Exclui a pré-venda (só administradores). Com pedidos, só quando `comPedidos` — eles
+ * são excluídos junto e saem do faturamento do Grupo VIP.
+ */
+export async function excluirPreVenda(id: string, comPedidos = false): Promise<EstadoAcao> {
+  const { supabase, perfil } = await exigirEquipe()
+  if (perfil.papel !== 'admin') return falha('Só administradores podem excluir pré-vendas.')
+  const { error } = await supabase.rpc('excluir_pre_venda', { p_pre_venda_id: id, p_com_pedidos: comPedidos })
   if (error) return falha(traduzirErro(error))
   atualizarTelas()
+  revalidatePath('/pedidos')
+  revalidatePath('/clientes', 'layout')
   redirect('/pre-vendas')
 }

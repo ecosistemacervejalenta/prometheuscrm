@@ -51,7 +51,7 @@ export default async function PaginaGrupoVip({ searchParams }: PageProps<'/grupo
   const pagamento = FILTROS_PAGAMENTO[param(busca.pagamento) ?? '']?.valor
   const frete = (Object.keys(FILTROS_FRETE) as SituacaoFrete[]).find((f) => f === param(busca.frete))
 
-  const { supabase } = await exigirEquipe()
+  const { supabase, perfil } = await exigirEquipe()
   const [config, preVendas, membros, pedidos, ceps] = await Promise.all([
     obterConfiguracoes(),
     opcoesPreVendas('grupo_vip'),
@@ -286,7 +286,7 @@ export default async function PaginaGrupoVip({ searchParams }: PageProps<'/grupo
               titulo="Vendas e cobranças"
               descricao="Cobre pelo WhatsApp com a mensagem pronta. Na impressão, vira a lista de separação por cliente."
             />
-            <TabelaCobrancas pedidos={pedidos} config={config} />
+            <TabelaCobrancas pedidos={pedidos} config={config} podeExcluir={perfil.papel === 'admin'} />
           </Card>
         </div>
       )}

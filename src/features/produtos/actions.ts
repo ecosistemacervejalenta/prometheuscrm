@@ -5,12 +5,14 @@ import { redirect } from 'next/navigation'
 
 import { errosDeValidacao, falha, traduzirErro, type EstadoAcao } from '@/lib/acoes'
 import { exigirEquipe } from '@/lib/auth'
+import { envPublico } from '@/lib/env'
 import { formParaObjeto } from '@/lib/validacao'
 
+import { esquemaKit, lerKit, MAX_FOTOS, type CervejaDoKit } from './kit'
 import { esquemaCerveja, esquemaCervejaNova, esquemaProduto, TAMANHO_MAXIMO_IMAGEM, TIPOS_IMAGEM } from './schema'
 
 const BUCKET = 'produtos'
-const CAMPOS_CERVEJA = 'id, nome, estilo, cervejaria, volume_ml, teor_alcoolico, descricao, preco, imagem_url'
+const CAMPOS_CERVEJA = 'id, nome, estilo, cervejaria, volume_ml, teor_alcoolico, descricao, preco, imagem_url, fotos, cervejas_do_kit'
 
 type Supabase = Awaited<ReturnType<typeof exigirEquipe>>['supabase']
 
@@ -76,25 +78,44 @@ export type CervejaSalva = {
   descricao: string | null
   preco: number
   imagem_url: string | null
+  fotos: string[]
+  cervejas_do_kit: CervejaDoKit[]
 }
 
 export type ResultadoCerveja =
   | { ok: true; cerveja: CervejaSalva }
   | { ok: false; mensagem: string; erros?: Record<string, string[] | undefined> }
 
+/** Só aceita fotos do nosso bucket público "produtos" (enviadas pelo navegador). */
+const prefixoFotos = () => `${envPublico.supabaseUrl}/storage/v1/object/public/produtos/`
+
+function lerJson(valor: FormDataEntryValue | null): unknown {
+  try {
+    return JSON.parse(String(valor ?? '[]'))
+  } catch {
+    return null
+  }
+}
+
 /**
- * Cadastro/edição rápida de cerveja dentro da pré-venda (sem sair da tela).
+ * Cadastro/edição rápida de cerveja (ou kit) dentro da pré-venda, sem sair da tela.
  * Cria no catálogo já ativa; na edição, o preço da pré-venda fica no formulário dela.
  * Campos: nome, estilo, cervejaria, volume_ml, teor_alcoolico, descricao, preco (só ao criar),
- * imagem (arquivo já enquadrado no navegador) e remover_imagem ("1").
+ * fotos (JSON com as URLs já enviadas, na ordem; a 1ª é a capa) e cervejas_do_kit (JSON).
  */
 export async function salvarCervejaRapida(id: string | null, formData: FormData): Promise<ResultadoCerveja> {
   const { supabase } = await exigirEquipe()
 
-  const arquivo = formData.get('imagem')
-  const removerImagem = formData.get('remover_imagem') === '1'
-  formData.delete('imagem')
-  formData.delete('remover_imagem')
+  const fotos = lerJson(formData.get('fotos'))
+  const kit = esquemaKit.safeParse(lerJson(formData.get('cervejas_do_kit')))
+  formData.delete('fotos')
+  formData.delete('cervejas_do_kit')
+
+  const prefixo = prefixoFotos()
+  if (!Array.isArray(fotos) || fotos.length > MAX_FOTOS || !fotos.every((f) => typeof f === 'string' && f.startsWith(prefixo))) {
+    return { ok: false, mensagem: 'Fotos inválidas. Tente enviar de novo.' }
+  }
+  if (!kit.success) return { ok: false, mensagem: kit.error.issues[0]?.message ?? 'Revise as cervejas do kit.' }
 
   const dados = (id ? esquemaCerveja : esquemaCervejaNova).safeParse(formParaObjeto(formData))
   if (!dados.success) {
@@ -102,14 +123,7 @@ export async function salvarCervejaRapida(id: string | null, formData: FormData)
     return { ok: false, mensagem: mensagem ?? 'Revise os campos destacados.', erros }
   }
 
-  const registro: typeof dados.data & { imagem_url?: string | null } = { ...dados.data }
-  if (removerImagem) registro.imagem_url = null
-  if (arquivo instanceof File && arquivo.size > 0) {
-    const envio = await enviarImagem(supabase, arquivo)
-    if ('erro' in envio) return { ok: false, mensagem: envio.erro, erros: { imagem: [envio.erro] } }
-    registro.imagem_url = envio.url
-  }
-
+  const registro = { ...dados.data, fotos: fotos as string[], cervejas_do_kit: kit.data }
   const { data, error } = id
     ? await supabase.from('produtos').update(registro).eq('id', id).select(CAMPOS_CERVEJA).single()
     : await supabase
@@ -122,6 +136,12 @@ export async function salvarCervejaRapida(id: string | null, formData: FormData)
   revalidatePath('/produtos')
   return {
     ok: true,
-    cerveja: { ...data, preco: Number(data.preco), teor_alcoolico: data.teor_alcoolico === null ? null : Number(data.teor_alcoolico) },
+    cerveja: {
+      ...data,
+      preco: Number(data.preco),
+      teor_alcoolico: data.teor_alcoolico === null ? null : Number(data.teor_alcoolico),
+      fotos: data.fotos ?? [],
+      cervejas_do_kit: lerKit(data.cervejas_do_kit),
+    },
   }
 }

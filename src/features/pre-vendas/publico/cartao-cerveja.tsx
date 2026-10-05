@@ -1,12 +1,13 @@
 'use client'
 
-import { Beer, Minus, Plus } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { Beer, ChevronLeft, ChevronRight, Minus, Package, Plus } from 'lucide-react'
+import { useRef, useState, type ReactNode } from 'react'
 
+import type { CervejaDoKit } from '@/features/produtos/kit'
 import { formatarMoeda } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-/** O que o link mostra de cada cerveja (também usado na prévia ao cadastrar). */
+/** O que o link mostra de cada cerveja ou kit (também usado na prévia ao cadastrar). */
 export type CervejaDoLink = {
   nome: string
   estilo: string | null
@@ -15,13 +16,24 @@ export type CervejaDoLink = {
   teor_alcoolico: number | null
   descricao: string | null
   imagem_url: string | null
+  fotos: string[]
+  cervejas_do_kit: CervejaDoKit[]
   preco: number
 }
 
-export const detalhesDa = (c: Pick<CervejaDoLink, 'estilo' | 'volume_ml' | 'teor_alcoolico'>) =>
-  [c.estilo, c.volume_ml ? `${c.volume_ml} ml` : null, c.teor_alcoolico ? `${String(c.teor_alcoolico).replace('.', ',')}% ABV` : null].filter(
+const teor = (n: number) => `${String(n).replace('.', ',')}%`
+
+/** Etiquetas da cerveja (estilo, ml, ABV) — ou, no kit, quantas cervejas e de quais marcas. */
+export function detalhesDa(c: Pick<CervejaDoLink, 'estilo' | 'volume_ml' | 'teor_alcoolico' | 'cervejas_do_kit'>): string[] {
+  if (c.cervejas_do_kit.length > 0) {
+    const unidades = c.cervejas_do_kit.reduce((s, k) => s + k.quantidade, 0)
+    const marcas = [...new Set(c.cervejas_do_kit.map((k) => k.cervejaria).filter((m): m is string => Boolean(m)))]
+    return [`Kit com ${unidades} ${unidades === 1 ? 'cerveja' : 'cervejas'}`, ...marcas]
+  }
+  return [c.estilo, c.volume_ml ? `${c.volume_ml} ml` : null, c.teor_alcoolico ? `${teor(c.teor_alcoolico)} ABV` : null].filter(
     (d): d is string => Boolean(d),
   )
+}
 
 /** Texto com a formatação do WhatsApp: *negrito* vira negrito; o resto fica como está. */
 export function TextoWhatsapp({ texto }: { texto: string }) {
@@ -49,9 +61,62 @@ export function Miniatura({ cerveja, className }: { cerveja: Pick<CervejaDoLink,
   )
 }
 
+/** Fotos quadradas para deslizar com o dedo (iPhone/Android) ou pelas setas (computador). */
+function Carrossel({ slides, rotulo, selo }: { slides: ReactNode[]; rotulo: string; selo?: ReactNode }) {
+  const trilho = useRef<HTMLDivElement>(null)
+  const [atual, setAtual] = useState(0)
+  const irPara = (i: number) => trilho.current?.scrollTo({ left: i * trilho.current.clientWidth, behavior: 'smooth' })
+
+  return (
+    <div className="group relative aspect-square w-full bg-papel" role="region" aria-roledescription="carrossel" aria-label={`Fotos de ${rotulo}`}>
+      <div
+        ref={trilho}
+        onScroll={(e) => setAtual(Math.round(e.currentTarget.scrollLeft / Math.max(e.currentTarget.clientWidth, 1)))}
+        className="flex size-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {slides.map((slide, i) => (
+          <div key={i} className="relative size-full shrink-0 snap-center snap-always" aria-label={`Foto ${i + 1} de ${slides.length}`}>
+            {slide}
+          </div>
+        ))}
+      </div>
+      {selo}
+      {slides.length > 1 && (
+        <>
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center gap-1.5">
+            {slides.map((_, i) => (
+              <span key={i} className={cn('h-1.5 rounded-full bg-white shadow transition-all', i === atual ? 'w-5' : 'w-1.5 opacity-60')} />
+            ))}
+          </div>
+          {atual > 0 && (
+            <button
+              type="button"
+              onClick={() => irPara(atual - 1)}
+              aria-label="Foto anterior"
+              className="absolute top-1/2 left-2 hidden size-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 shadow-cartao lg:grid lg:opacity-0 lg:group-hover:opacity-100"
+            >
+              <ChevronLeft className="size-5" aria-hidden />
+            </button>
+          )}
+          {atual < slides.length - 1 && (
+            <button
+              type="button"
+              onClick={() => irPara(atual + 1)}
+              aria-label="Próxima foto"
+              className="absolute top-1/2 right-2 hidden size-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 shadow-cartao lg:grid lg:opacity-0 lg:group-hover:opacity-100"
+            >
+              <ChevronRight className="size-5" aria-hidden />
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 /**
- * Cartão da cerveja no link: com foto, a foto ganha destaque (quadrada, largura toda);
- * sem foto, fica compacto. A descrição respeita as quebras de linha e abre com "Ler mais".
+ * Cartão da cerveja (ou kit) no link: fotos em destaque (carrossel quando há mais de uma),
+ * etiquetas, descrição com quebras de linha e "Ler mais"; no kit, a lista do que vem nele.
  * Sem `aoDefinir`, é só prévia (o contador fica parado).
  */
 export function CartaoCervejaLink({
@@ -61,7 +126,7 @@ export function CartaoCervejaLink({
   maximo = 99,
   esgotado = false,
   avisos,
-  foto,
+  fotos,
 }: {
   cerveja: CervejaDoLink
   quantidade?: number
@@ -69,13 +134,20 @@ export function CartaoCervejaLink({
   maximo?: number
   esgotado?: boolean
   avisos?: string
-  /** Substitui a foto (prévia do enquadramento antes de enviar). */
-  foto?: ReactNode
+  /** Substitui as fotos (prévia do enquadramento antes de enviar). */
+  fotos?: ReactNode[]
 }) {
   const [aberta, setAberta] = useState(false)
   const descricao = cerveja.descricao?.trim() ?? ''
-  const longa = descricao.length > 170 || descricao.split('\n').length > 4
-  const temFoto = Boolean(foto ?? cerveja.imagem_url)
+  const kit = cerveja.cervejas_do_kit
+  const longa = descricao.length > 170 || descricao.split('\n').length > 4 || kit.some((k) => (k.descricao?.length ?? 0) > 60)
+  const urls = cerveja.fotos.length ? cerveja.fotos : cerveja.imagem_url ? [cerveja.imagem_url] : []
+  const slides =
+    fotos ??
+    urls.map((url, i) => (
+      // eslint-disable-next-line @next/next/no-img-element -- imagem pública do Storage
+      <img key={url} src={url} alt={i === 0 ? cerveja.nome : ''} className="absolute inset-0 size-full object-cover" loading={i === 0 ? 'eager' : 'lazy'} draggable={false} />
+    ))
   const detalhes = detalhesDa(cerveja)
 
   return (
@@ -86,21 +158,19 @@ export function CartaoCervejaLink({
         esgotado && 'opacity-60',
       )}
     >
-      {temFoto && (
-        <div className="relative aspect-square w-full overflow-hidden bg-papel">
-          {foto ?? (
-            // eslint-disable-next-line @next/next/no-img-element -- imagem pública do Storage
-            <img src={cerveja.imagem_url ?? ''} alt={cerveja.nome} className="absolute inset-0 size-full object-cover" loading="lazy" />
-          )}
-          {esgotado && <span className="absolute top-3 left-3 rounded-full bg-ink px-3 py-1 text-[13px] font-semibold text-white">Esgotado</span>}
-        </div>
+      {slides.length > 0 && (
+        <Carrossel
+          slides={slides}
+          rotulo={cerveja.nome}
+          selo={esgotado && <span className="absolute top-3 left-3 rounded-full bg-ink px-3 py-1 text-[13px] font-semibold text-white">Esgotado</span>}
+        />
       )}
 
       <div className="p-4">
         <div className="flex items-start gap-3">
-          {!temFoto && <Miniatura cerveja={cerveja} className="size-16" />}
+          {slides.length === 0 && <Miniatura cerveja={cerveja} className="size-16" />}
           <div className="min-w-0 flex-1">
-            {cerveja.cervejaria && <p className="tipo-rotulo truncate text-suave">{cerveja.cervejaria}</p>}
+            {cerveja.cervejaria && kit.length === 0 && <p className="tipo-rotulo truncate text-suave">{cerveja.cervejaria}</p>}
             <h3 className="text-[19px] leading-6 font-semibold text-balance">{cerveja.nome}</h3>
           </div>
           <p className="tipo-numero shrink-0 text-[22px] leading-6">{formatarMoeda(cerveja.preco)}</p>
@@ -108,8 +178,15 @@ export function CartaoCervejaLink({
 
         {detalhes.length > 0 && (
           <ul className="mt-2.5 flex flex-wrap gap-1.5">
-            {detalhes.map((d) => (
-              <li key={d} className="rounded-full bg-papel px-2.5 py-0.5 text-[13px] font-medium text-ink/70">
+            {detalhes.map((d, i) => (
+              <li
+                key={d}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[13px] font-medium',
+                  kit.length > 0 && i === 0 ? 'bg-ink text-white' : 'bg-papel text-ink/70',
+                )}
+              >
+                {kit.length > 0 && i === 0 && <Package className="size-3.5" aria-hidden />}
                 {d}
               </li>
             ))}
@@ -117,16 +194,43 @@ export function CartaoCervejaLink({
         )}
 
         {descricao && (
-          <div className="mt-3">
-            <p className={cn('text-[15px] leading-6 whitespace-pre-line text-ink/75', longa && !aberta && 'line-clamp-4')}>
-              <TextoWhatsapp texto={descricao} />
-            </p>
-            {longa && (
-              <button type="button" onClick={() => setAberta(!aberta)} className="mt-1 text-[14px] font-semibold text-volt-700 hover:text-ink">
-                {aberta ? 'Ler menos' : 'Ler mais'}
-              </button>
-            )}
+          <p className={cn('mt-3 text-[15px] leading-6 whitespace-pre-line text-ink/75', longa && !aberta && 'line-clamp-4')}>
+            <TextoWhatsapp texto={descricao} />
+          </p>
+        )}
+
+        {kit.length > 0 && (
+          <div className="mt-4">
+            <p className="tipo-rotulo text-suave">O que vem no kit</p>
+            <ul className="mt-2 divide-y divide-linha rounded-2xl border border-linha">
+              {kit.map((k, i) => (
+                <li key={i} className="flex gap-3 p-3">
+                  <span className="tipo-dado grid h-7 min-w-9 shrink-0 place-items-center rounded-lg bg-volt-50 px-1.5 text-[13px] font-semibold text-volt-700">
+                    {k.quantidade}×
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[15px] leading-5 font-semibold">{k.nome}</p>
+                    <p className="mt-0.5 text-[13px] text-suave">
+                      {[k.cervejaria, k.estilo, k.teor_alcoolico ? teor(k.teor_alcoolico) : null, k.volume_ml ? `${k.volume_ml} ml` : null]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                    {k.descricao && (
+                      <p className={cn('mt-1 text-[14px] leading-5 whitespace-pre-line text-ink/70', !aberta && 'line-clamp-2')}>
+                        <TextoWhatsapp texto={k.descricao} />
+                      </p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
+        )}
+
+        {longa && (
+          <button type="button" onClick={() => setAberta(!aberta)} className="mt-2 text-[14px] font-semibold text-volt-700 hover:text-ink">
+            {aberta ? 'Ler menos' : 'Ler mais'}
+          </button>
         )}
 
         <div className="mt-4 flex items-center justify-between gap-3">

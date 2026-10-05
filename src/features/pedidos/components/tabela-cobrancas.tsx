@@ -1,9 +1,12 @@
 import Link from 'next/link'
+import { Trash2 } from 'lucide-react'
 
+import { ActionButton } from '@/components/ui/action-button'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { formatarCep, formatarDataCurta, formatarMoeda, formatarRelativo, formatarWhatsapp, numeroPedido, type Endereco } from '@/lib/format'
 import type { Configuracoes } from '@/types'
 
+import { excluirPedido } from '../actions'
 import { linkDeCobranca, linkDeFrete } from '../cobranca'
 import type { PedidoComItens } from '../queries'
 import { BotaoCobrar, BotaoPago } from './controles'
@@ -40,11 +43,26 @@ function AcoesFrete({ pedido, config }: { pedido: PedidoComItens; config: Config
   return null
 }
 
+/** Exclusão definitiva da venda (só administradores) — sai do faturamento. */
+function BotaoExcluirVenda({ pedido, className }: { pedido: PedidoComItens; className?: string }) {
+  return (
+    <ActionButton
+      acao={excluirPedido.bind(null, pedido.id, null)}
+      confirmar={`Excluir a venda ${numeroPedido(pedido.numero)} de ${pedido.clientes?.nome ?? 'cliente'} (${formatarMoeda(pedido.total)})? Ela sai do faturamento e não dá para desfazer.`}
+      variante="fantasma"
+      titulo="Excluir venda"
+      className={className}
+    >
+      <Trash2 className="text-perigo" />
+    </ActionButton>
+  )
+}
+
 /**
  * Pedidos com itens + ações de cobrança (WhatsApp), frete e pagamento.
  * Usada no Grupo VIP e no detalhe da pré-venda. Na impressão vira um romaneio.
  */
-export function TabelaCobrancas({ pedidos, config }: { pedidos: PedidoComItens[]; config: Configuracoes }) {
+export function TabelaCobrancas({ pedidos, config, podeExcluir = false }: { pedidos: PedidoComItens[]; config: Configuracoes; podeExcluir?: boolean }) {
   const linkPara = (p: PedidoComItens) =>
     linkDeCobranca(config, {
       numero: p.numero,
@@ -99,6 +117,11 @@ export function TabelaCobrancas({ pedidos, config }: { pedidos: PedidoComItens[]
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <BotaoCobrar pedidoId={p.id} href={linkPara(p)} tamanho="md" className="w-full" />
                 <BotaoPago pedidoId={p.id} className="h-11 w-full" />
+              </div>
+            )}
+            {podeExcluir && (
+              <div className="mt-2 flex justify-end">
+                <BotaoExcluirVenda pedido={p} />
               </div>
             )}
           </li>
@@ -167,6 +190,7 @@ export function TabelaCobrancas({ pedidos, config }: { pedidos: PedidoComItens[]
                     </div>
                   )}
                   {p.frete && p.frete !== 'vip' && <AcoesFrete pedido={p} config={config} />}
+                  {podeExcluir && <BotaoExcluirVenda pedido={p} />}
                 </div>
               </TD>
               <TD className="hidden text-center print:table-cell">

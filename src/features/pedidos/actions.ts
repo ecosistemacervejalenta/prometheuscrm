@@ -104,3 +104,18 @@ export async function cotarFrete(id: string, valor: string): Promise<EstadoAcao>
   atualizarTelas(id)
   return sucesso('Frete salvo. Agora envie o valor ao cliente pelo WhatsApp.')
 }
+
+/**
+ * Exclui a venda de vez (só administradores): sai do faturamento e dos relatórios.
+ * Para manter o histórico, o caminho é marcar como "cancelado".
+ */
+export async function excluirPedido(id: string, voltarPara: string | null): Promise<EstadoAcao> {
+  const { supabase, perfil } = await exigirEquipe()
+  if (perfil.papel !== 'admin') return falha('Só administradores podem excluir vendas.')
+  const { error } = await supabase.rpc('excluir_pedido', { p_pedido_id: id })
+  if (error) return falha(traduzirErro(error))
+  atualizarTelas()
+  revalidatePath('/clientes', 'layout')
+  if (voltarPara) redirect(voltarPara)
+  return sucesso('Venda excluída. Ela saiu do faturamento.')
+}

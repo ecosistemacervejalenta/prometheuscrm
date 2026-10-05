@@ -1263,10 +1263,12 @@ export type Database = {
           ativo: boolean
           atualizado_em: string
           cervejaria: string | null
+          cervejas_do_kit: Json
           criado_em: string
           descricao: string | null
           estilo: string | null
           fornecedor_id: string | null
+          fotos: string[]
           id: string
           imagem_url: string | null
           nome: string
@@ -1281,10 +1283,12 @@ export type Database = {
           ativo?: boolean
           atualizado_em?: string
           cervejaria?: string | null
+          cervejas_do_kit?: Json
           criado_em?: string
           descricao?: string | null
           estilo?: string | null
           fornecedor_id?: string | null
+          fotos?: string[]
           id?: string
           imagem_url?: string | null
           nome: string
@@ -1299,10 +1303,12 @@ export type Database = {
           ativo?: boolean
           atualizado_em?: string
           cervejaria?: string | null
+          cervejas_do_kit?: Json
           criado_em?: string
           descricao?: string | null
           estilo?: string | null
           fornecedor_id?: string | null
+          fotos?: string[]
           id?: string
           imagem_url?: string | null
           nome?: string
@@ -1881,8 +1887,10 @@ export type Database = {
       vw_pre_venda_itens: {
         Row: {
           cervejaria: string | null
+          cervejas_do_kit: Json | null
           descricao: string | null
           estilo: string | null
+          fotos: string[] | null
           id: string | null
           imagem_url: string | null
           limite_por_cliente: number | null
@@ -2073,6 +2081,11 @@ export type Database = {
       excluir_categoria_financeira: {
         Args: { p_id: string }
         Returns: undefined
+      }
+      excluir_pedido: { Args: { p_pedido_id: string }; Returns: undefined }
+      excluir_pre_venda: {
+        Args: { p_com_pedidos?: boolean; p_pre_venda_id: string }
+        Returns: number
       }
       gerar_contas_fixas: { Args: { p_competencia: string }; Returns: number }
       hoje_brasilia: { Args: never; Returns: string }

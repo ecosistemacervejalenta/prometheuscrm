@@ -19,6 +19,7 @@ import { alterarStatusPreVenda, excluirPreVenda } from '@/features/pre-vendas/ac
 import { itensDaPreVenda, obterPreVenda } from '@/features/pre-vendas/queries'
 import { FotoProduto } from '@/features/produtos/components/foto-produto'
 import { formatarData, formatarDataHora, formatarMoeda, formatarNumero } from '@/lib/format'
+import { exigirEquipe } from '@/lib/auth'
 import { linkPreVenda } from '@/lib/url'
 import { linkWhatsapp, mensagemPreVenda } from '@/lib/whatsapp'
 
@@ -29,7 +30,8 @@ export async function generateMetadata({ params }: PageProps<'/pre-vendas/[id]'>
 
 export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/[id]'>) {
   const { id } = await params
-  const [pv, itens, pedidos, config] = await Promise.all([
+  const [{ perfil }, pv, itens, pedidos, config] = await Promise.all([
+    exigirEquipe(),
     obterPreVenda(id),
     itensDaPreVenda(id),
     pedidosComItens({ preVendaId: id }),
@@ -47,6 +49,8 @@ export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/
     .filter((p) => p.status_pagamento === 'pendente' || p.status_pagamento === 'cobrado')
     .reduce((s, p) => s + Number(p.total), 0)
   const ativa = pv.status_efetivo === 'ativa'
+  const admin = perfil.papel === 'admin'
+  const faturado = pedidos.reduce((s, p) => s + Number(p.total), 0)
 
   return (
     <>
@@ -196,16 +200,38 @@ export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/
             icone={ShoppingBag}
             titulo="Nenhum pedido ainda"
             descricao="Dispare o link no WhatsApp. Os pedidos aparecem aqui assim que os clientes confirmarem."
-            acao={
-              <ActionButton acao={excluirPreVenda.bind(null, id)} variante="perigo" confirmar="Excluir esta pré-venda?">
+          />
+        ) : (
+          <TabelaCobrancas pedidos={pedidos} config={config} podeExcluir={admin} />
+        )}
+      </Card>
+
+      {admin && (
+        <Card className="mt-6 print:hidden">
+          <CardHeader
+            titulo="Excluir pré-venda"
+            descricao={
+              pedidos.length > 0
+                ? `Apaga a pré-venda, o link e ${pedidos.length === 1 ? 'o pedido' : `os ${pedidos.length} pedidos`} dela (${formatarMoeda(faturado)}), que saem do faturamento do Grupo VIP. Não dá para desfazer.`
+                : 'Apaga a pré-venda e o link deixa de funcionar. Não dá para desfazer.'
+            }
+            acoes={
+              <ActionButton
+                acao={excluirPreVenda.bind(null, id, pedidos.length > 0)}
+                variante="perigo"
+                tamanho="md"
+                confirmar={
+                  pedidos.length > 0
+                    ? `Excluir "${pv.titulo}" e ${pedidos.length === 1 ? 'o pedido' : `os ${pedidos.length} pedidos`} dela (${formatarMoeda(faturado)})? Isso não pode ser desfeito.`
+                    : `Excluir "${pv.titulo}"? Isso não pode ser desfeito.`
+                }
+              >
                 <Trash2 /> Excluir pré-venda
               </ActionButton>
             }
           />
-        ) : (
-          <TabelaCobrancas pedidos={pedidos} config={config} />
-        )}
-      </Card>
+        </Card>
+      )}
     </>
   )
 }

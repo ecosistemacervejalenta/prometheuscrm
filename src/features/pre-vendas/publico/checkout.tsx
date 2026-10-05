@@ -3,7 +3,6 @@
 import {
   ArrowLeft,
   ArrowRight,
-  CalendarClock,
   Check,
   CircleAlert,
   LoaderCircle,
@@ -19,7 +18,7 @@ import { useEffect, useRef, useState, useTransition, type FormEvent, type ReactN
 import { flushSync } from 'react-dom'
 
 import { buscarCep, mascararCep } from '@/lib/cep'
-import { formatarData, formatarDataHora, formatarMoeda } from '@/lib/format'
+import { formatarData, formatarMoeda } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { linkWhatsapp, mascararWhatsapp, whatsappValido } from '@/lib/whatsapp'
 
@@ -36,7 +35,8 @@ import {
 } from './armazenamento'
 import { CLASSE_CAMPO, CLASSE_RESPOSTA, classeBotaoGrande } from './estilos'
 import { TelaPagamento } from './pagamento'
-import { CartaoCervejaLink, detalhesDa, Miniatura, TextoWhatsapp } from './cartao-cerveja'
+import { AberturaPreVenda } from './abertura'
+import { CartaoCervejaLink } from './cartao-cerveja'
 import type { PreVendaPublica } from './queries'
 
 type Etapa = 'inicio' | 'cervejas' | 'conferir' | 'nome' | 'sobrenome' | 'whatsapp' | 'cep' | 'numero' | 'revisao' | 'pago'
@@ -124,7 +124,6 @@ function Fluxo({
   const enderecoCompleto = [cliente.logradouro, cliente.bairro, cliente.cidade, cliente.uf].every((v) => v.trim())
   const nomeCompleto = `${cliente.nome} ${cliente.sobrenome}`.trim().replace(/\s+/g, ' ')
   const primeiroNome = cliente.nome.trim().split(/\s+/)[0] ?? ''
-  const fotoDestaque = itens.find((i) => i.imagem_url)?.imagem_url ?? null
 
   const alterar = (campo: keyof DadosCliente) => (valor: string) => setCliente((c) => ({ ...c, [campo]: valor }))
 
@@ -334,62 +333,7 @@ function Fluxo({
       <div key={etapa} className="animar-passo">
         {/* Boas-vindas ------------------------------------------------------ */}
         {etapa === 'inicio' && (
-          <>
-            <section className="rounded-[28px] bg-volt p-2 pb-6 sm:pb-8">
-              {fotoDestaque && (
-                // eslint-disable-next-line @next/next/no-img-element -- imagem pública do Storage
-                <img src={fotoDestaque} alt={preVenda.titulo} className="aspect-square w-full rounded-[22px] object-cover" />
-              )}
-              <div className={cn('px-4 sm:px-6', fotoDestaque ? 'pt-5' : 'pt-4 sm:pt-6')}>
-                <p className="tipo-rotulo text-ink/70">{preVenda.grupoVip ? 'Pré-venda exclusiva · Grupo VIP' : `Pré-venda · ${loja.nome}`}</p>
-                <h1 className="tipo-h1 mt-3 text-balance">{preVenda.titulo}</h1>
-                {preVenda.descricao && (
-                  <p className="mt-3 text-[17px] leading-7 whitespace-pre-line text-ink/80">
-                    <TextoWhatsapp texto={preVenda.descricao} />
-                  </p>
-                )}
-                {(preVenda.encerra_em || preVenda.previsao_entrega) && (
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {preVenda.encerra_em && (
-                      <span className="tipo-dado inline-flex items-center gap-1.5 rounded-full bg-ink/10 px-3 py-1 text-[13px]">
-                        <CalendarClock className="size-3.5" aria-hidden /> Encerra {formatarDataHora(preVenda.encerra_em)}
-                      </span>
-                    )}
-                    {preVenda.previsao_entrega && (
-                      <span className="tipo-dado inline-flex items-center gap-1.5 rounded-full bg-ink/10 px-3 py-1 text-[13px]">
-                        <Truck className="size-3.5" aria-hidden /> Entrega prevista {formatarData(preVenda.previsao_entrega)}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <ul className="mt-4 divide-y divide-linha rounded-[24px] border border-linha bg-superficie">
-              {itens.map((item) => (
-                <li key={item.produto_id} className="flex items-center gap-3 px-4 py-3">
-                  <Miniatura cerveja={item} className="size-12" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[16px] font-semibold">{item.nome}</p>
-                    <p className="truncate text-[13px] text-suave">{detalhesDa(item).join(' · ')}</p>
-                  </div>
-                  <p className="tipo-numero shrink-0 text-lg">{formatarMoeda(item.preco)}</p>
-                </li>
-              ))}
-            </ul>
-
-            <p className="mt-4 flex items-start gap-3 rounded-[20px] border border-linha bg-superficie p-4 text-[15px] leading-6">
-              <Truck className="mt-0.5 size-5 shrink-0 text-volt-700" aria-hidden />
-              <span>
-                Frete fixo de <b>{formatarMoeda(loja.freteVip)}</b> para os CEPs atendidos. Fora deles, a gente cota e te avisa no WhatsApp.
-              </span>
-            </p>
-
-            <button type="button" onClick={() => ir('cervejas')} className={classeBotaoGrande('escuro', 'mt-6 w-full')}>
-              Começar <ArrowRight aria-hidden />
-            </button>
-            <p className="mt-3 text-center text-[13px] text-suave">Leva menos de 1 minuto.</p>
-          </>
+          <AberturaPreVenda preVenda={preVenda} itens={itens} nomeLoja={loja.nome} freteVip={loja.freteVip} aoComecar={() => ir('cervejas')} />
         )}
 
         {/* Cervejas ---------------------------------------------------------- */}

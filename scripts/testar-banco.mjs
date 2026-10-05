@@ -207,6 +207,19 @@ await expectError('slug inválido', `select salvar_pre_venda('{"titulo":"x","slu
 
 // Financeiro --------------------------------------------------------------------
 const um = async (sql, params) => (await q(sql, params))[0]
+
+// Galeria de fotos e kit de cervejas ---------------------------------------------
+expectEq('produto com imagem_url ganha fotos = [capa]', await um(`insert into produtos (nome, preco, imagem_url) values ('Foto antiga', 10, 'https://x/a.jpg') returning fotos, imagem_url`),
+  { fotos: ['https://x/a.jpg'], imagem_url: 'https://x/a.jpg' })
+const prodKit = await um(`insert into produtos (nome, preco, fotos, cervejas_do_kit) values ('Kit Duas Marcas', 99, array['https://x/1.jpg','https://x/2.jpg'],
+  '[{"nome":"Golden Pulp","cervejaria":"Croma","quantidade":2},{"nome":"Stout","cervejaria":"Bodebrown","quantidade":1}]') returning id, imagem_url`)
+expectEq('capa = 1ª foto da galeria', prodKit.imagem_url, 'https://x/1.jpg')
+expectEq('reordenar as fotos troca a capa', (await um(`update produtos set fotos = array['https://x/2.jpg','https://x/1.jpg'] where id = $1 returning imagem_url`, [prodKit.id])).imagem_url, 'https://x/2.jpg')
+expectEq('trocar a capa pelo cadastro de produtos mantém as outras fotos', (await um(`update produtos set imagem_url = 'https://x/3.jpg' where id = $1 returning fotos`, [prodKit.id])).fotos, ['https://x/3.jpg', 'https://x/1.jpg'])
+expectEq('sem fotos, sem capa', (await um(`update produtos set fotos = '{}' where id = $1 returning imagem_url`, [prodKit.id])).imagem_url, null)
+await expectError('cervejas do kit precisam ser uma lista', `update produtos set cervejas_do_kit = '{}'::jsonb where id = $1`, [prodKit.id])
+await expectError('no máximo 10 fotos', `update produtos set fotos = array_fill('https://x/f.jpg'::text, array[11]) where id = $1`, [prodKit.id])
+expectEq('vw_pre_venda_itens traz fotos e cervejas do kit', Object.keys(await um(`select * from vw_pre_venda_itens limit 1`)).filter((k) => ['fotos', 'cervejas_do_kit'].includes(k)), ['fotos', 'cervejas_do_kit'])
 const mes = async (deslocamento) =>
   (await um(`select to_char(date_trunc('month', hoje_brasilia()) + make_interval(months => $1), 'YYYY-MM-DD') m`, [deslocamento])).m
 
@@ -421,6 +434,24 @@ await expectError('autenticado não chama função do link público', `select id
 expectEq('membro importa a lista de CEPs VIP', (await um(`select substituir_ceps_frete_vip('[["01310100","01310100"],["04000000","04999999"],["05424000","05424000"]]'::jsonb, 'ceps.csv') r`)).r.ceps_cobertos, 1000002)
 expectEq('membro testa um CEP', (await um(`select cep_tem_frete_vip('04100-000') r`)).r, true)
 expectEq('membro cota frete', (await um(`select frete from cotar_frete_pedido($1, 30)`, [pedidoCotar.id])).frete, 'cotado')
+const pvExcluir = await um(`select id from salvar_pre_venda('{"titulo":"Pré-venda para excluir"}'::jsonb, $1::jsonb)`, [JSON.stringify([{ produto_id: itens[0].produto_id, preco: 10 }])])
+const slugExcluir = (await um(`select slug from pre_vendas where id = $1`, [pvExcluir.id])).slug
+await db.exec(`reset role;`)
+const vendaTeste = await um(`select id, numero, total, cliente_id from registrar_pedido_pre_venda($1, $2::jsonb, $3::jsonb, true)`, [slugExcluir,
+  JSON.stringify({ whatsapp: '11955550009', nome: 'Teste Exclusão', cep: '01310-100', logradouro: 'Rua A', numero: '1', bairro: 'B', cidade: 'São Paulo', uf: 'SP' }),
+  JSON.stringify([{ produto_id: itens[0].produto_id, quantidade: 1 }])])
+await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${uid}', false);`)
+await expectError('pré-venda com pedidos não é excluída sem confirmar', `select excluir_pre_venda($1)`, [pvExcluir.id])
+await q(`select excluir_pedido($1)`, [vendaTeste.id])
+expectEq('admin exclui a venda (sai do faturamento)', Number((await um(`select count(*) n from pedidos where id = $1`, [vendaTeste.id])).n), 0)
+expectEq('linha do tempo do cliente registra a exclusão', (await um(`select descricao from atividades where cliente_id = $1 and tipo = 'pedido_excluido'`, [vendaTeste.cliente_id]))?.descricao?.startsWith(`Pedido #${vendaTeste.numero} excluído`), true)
+await db.exec(`reset role;`)
+await q(`select registrar_pedido_pre_venda($1, $2::jsonb, $3::jsonb, true)`, [slugExcluir,
+  JSON.stringify({ whatsapp: '11955550009', cep: '01310-100', logradouro: 'Rua A', numero: '1', bairro: 'B', cidade: 'São Paulo', uf: 'SP' }),
+  JSON.stringify([{ produto_id: itens[0].produto_id, quantidade: 2 }])])
+await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${uid}', false);`)
+expectEq('admin exclui a pré-venda junto com os pedidos', (await um(`select excluir_pre_venda($1, true) n`, [pvExcluir.id])).n, 1)
+expectEq('pré-venda e pedidos somem', await um(`select (select count(*)::int from pre_vendas where id = $1) pv, (select count(*)::int from pedidos where pre_venda_id = $1) pe`, [pvExcluir.id]), { pv: 0, pe: 0 })
 const recMembro = await um(`insert into contas_receber (descricao, categoria, competencia, vencimento, valor)
   values ('Lançada pela equipe', 'Categoria da equipe', hoje_brasilia(), hoje_brasilia() + 5, 99.9) returning id`).catch((e) => ({ erro: e.message }))
 expectEq('membro lança conta a receber com categoria nova', recMembro.erro ?? Boolean(recMembro.id), true)
@@ -470,6 +501,8 @@ await expectError('inativo não cota frete', `select cotar_frete_pedido($1, 1)`,
 await db.exec(`reset role; update perfis set ativo = true where id = '${uid2}'; set role authenticated; select set_config('request.jwt.claim.sub', '${uid2}', false);`)
 await q(`update perfis set nome = 'João Silva' where id = $1`, [uid2])
 await expectError('equipe tenta virar admin', `update perfis set papel = 'admin' where id = $1`, [uid2])
+await expectError('equipe não exclui venda', `select excluir_pedido($1)`, [pedidoCotar.id])
+await expectError('equipe não exclui pré-venda', `select excluir_pre_venda((select id from pre_vendas limit 1), true)`)
 // Senha temporária: ao criar a própria senha, o membro desliga só a própria trava (RLS ignora a dos outros).
 await db.exec(`reset role; update perfis set trocar_senha = true where id in ('${uid}', '${uid2}'); set role authenticated; select set_config('request.jwt.claim.sub', '${uid2}', false);`)
 await q(`update perfis set trocar_senha = false where id = $1`, [uid2])

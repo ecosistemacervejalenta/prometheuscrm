@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 
 import { PageHeader } from '@/components/ui/page-header'
+import { obterConfiguracoes } from '@/features/configuracoes/queries'
 import { salvarPreVenda } from '@/features/pre-vendas/actions'
 import { FormularioPreVenda } from '@/features/pre-vendas/components/formulario-pre-venda'
 import { opcoesProdutos } from '@/features/produtos/queries'
@@ -8,7 +9,7 @@ import { opcoesProdutos } from '@/features/produtos/queries'
 export const metadata: Metadata = { title: 'Nova pré-venda' }
 
 export default async function PaginaNovaPreVenda() {
-  const produtos = await opcoesProdutos()
+  const [produtos, config] = await Promise.all([opcoesProdutos(), obterConfiguracoes()])
   return (
     <>
       <PageHeader
@@ -18,7 +19,9 @@ export default async function PaginaNovaPreVenda() {
       />
       <FormularioPreVenda
         acao={salvarPreVenda.bind(null, null)}
-        produtos={produtos.map((p) => ({ ...p, preco: Number(p.preco) }))}
+        produtos={produtos}
+        nomeLoja={config.nome_loja}
+        freteVip={Number(config.frete_vip_valor)}
       />
     </>
   )

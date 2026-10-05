@@ -2,6 +2,7 @@ import 'server-only'
 
 import { cache } from 'react'
 
+import { lerKit } from '@/features/produtos/kit'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
@@ -21,7 +22,7 @@ export const obterPreVendaPublica = cache(async (slug: string) => {
   const [{ data: itens }, { data: loja }] = await Promise.all([
     db
       .from('vw_pre_venda_itens')
-      .select('produto_id, nome, estilo, cervejaria, volume_ml, teor_alcoolico, descricao, imagem_url, preco, limite_por_cliente, restante, ordem')
+      .select('produto_id, nome, estilo, cervejaria, volume_ml, teor_alcoolico, descricao, imagem_url, fotos, cervejas_do_kit, preco, limite_por_cliente, restante, ordem')
       .eq('pre_venda_id', preVenda.id)
       .order('ordem'),
     db
@@ -47,9 +48,11 @@ export const obterPreVendaPublica = cache(async (slug: string) => {
       estilo: i.estilo,
       cervejaria: i.cervejaria,
       volume_ml: i.volume_ml,
-      teor_alcoolico: i.teor_alcoolico,
+      teor_alcoolico: i.teor_alcoolico === null ? null : Number(i.teor_alcoolico),
       descricao: i.descricao,
       imagem_url: i.imagem_url,
+      fotos: i.fotos?.length ? i.fotos : i.imagem_url ? [i.imagem_url] : [],
+      cervejas_do_kit: lerKit(i.cervejas_do_kit),
       preco: Number(i.preco ?? 0),
       limite_por_cliente: i.limite_por_cliente,
       restante: i.restante,
