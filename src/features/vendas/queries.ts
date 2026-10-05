@@ -58,7 +58,15 @@ const EXEMPLO: Record<IdCanal, [Vendas, Vendas]> = {
   shopify: [{ valor: 12310, pedidos: 61 }, { valor: 9880, pedidos: 52 }],
   grupo_vip: [{ valor: 7215, pedidos: 48 }, { valor: 6020, pedidos: 41 }],
 }
-const ESCALA_EXEMPLO: Record<ChavePeriodo, number> = { hoje: 0.05, '7d': 0.25, mes: 1, mes_anterior: 1.12 }
+const ESCALA_EXEMPLO: Record<ChavePeriodo, number> = {
+  hoje: 0.05,
+  '7d': 0.25,
+  '30d': 1,
+  '60d': 2,
+  '90d': 3,
+  mes: 1,
+  mes_anterior: 1.12,
+}
 
 function exemplo(id: IdCanal, chave: ChavePeriodo): [Vendas, Vendas] {
   const k = ESCALA_EXEMPLO[chave]
