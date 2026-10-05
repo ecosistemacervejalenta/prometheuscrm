@@ -91,14 +91,20 @@ export function Miniatura({ cerveja, className }: { cerveja: Pick<CervejaDoLink,
   )
 }
 
-/** Fotos quadradas para deslizar com o dedo (iPhone/Android) ou pelas setas (computador). */
+/**
+ * Fotos quadradas para deslizar com o dedo (iPhone/Android) ou pelas setas. As setas ficam
+ * sempre à vista, discretas dos dois lados, para o cliente perceber que há mais fotos;
+ * nas pontas elas dão a volta (da última para a primeira e vice-versa).
+ */
 function Carrossel({ slides, rotulo, selo }: { slides: ReactNode[]; rotulo: string; selo?: ReactNode }) {
   const trilho = useRef<HTMLDivElement>(null)
   const [atual, setAtual] = useState(0)
-  const irPara = (i: number) => trilho.current?.scrollTo({ left: i * trilho.current.clientWidth, behavior: 'smooth' })
+  const total = slides.length
+  const irPara = (i: number) => trilho.current?.scrollTo({ left: ((i + total) % total) * trilho.current.clientWidth, behavior: 'smooth' })
+  const seta = 'absolute top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-full bg-white/70 text-ink/80 shadow-sm backdrop-blur-sm transition-colors hover:bg-white/90 hover:text-ink'
 
   return (
-    <div className="group relative aspect-square w-full bg-papel" role="region" aria-roledescription="carrossel" aria-label={`Fotos de ${rotulo}`}>
+    <div className="relative aspect-square w-full bg-papel" role="region" aria-roledescription="carrossel" aria-label={`Fotos de ${rotulo}`}>
       <div
         ref={trilho}
         onScroll={(e) => setAtual(Math.round(e.currentTarget.scrollLeft / Math.max(e.currentTarget.clientWidth, 1)))}
@@ -118,26 +124,12 @@ function Carrossel({ slides, rotulo, selo }: { slides: ReactNode[]; rotulo: stri
               <span key={i} className={cn('h-1.5 rounded-full bg-white shadow transition-all', i === atual ? 'w-5' : 'w-1.5 opacity-60')} />
             ))}
           </div>
-          {atual > 0 && (
-            <button
-              type="button"
-              onClick={() => irPara(atual - 1)}
-              aria-label="Foto anterior"
-              className="absolute top-1/2 left-2 hidden size-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 shadow-cartao lg:grid lg:opacity-0 lg:group-hover:opacity-100"
-            >
-              <ChevronLeft className="size-5" aria-hidden />
-            </button>
-          )}
-          {atual < slides.length - 1 && (
-            <button
-              type="button"
-              onClick={() => irPara(atual + 1)}
-              aria-label="Próxima foto"
-              className="absolute top-1/2 right-2 hidden size-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 shadow-cartao lg:grid lg:opacity-0 lg:group-hover:opacity-100"
-            >
-              <ChevronRight className="size-5" aria-hidden />
-            </button>
-          )}
+          <button type="button" onClick={() => irPara(atual - 1)} aria-label="Foto anterior" className={cn(seta, 'left-2.5')}>
+            <ChevronLeft className="size-5" aria-hidden />
+          </button>
+          <button type="button" onClick={() => irPara(atual + 1)} aria-label="Próxima foto" className={cn(seta, 'right-2.5')}>
+            <ChevronRight className="size-5" aria-hidden />
+          </button>
         </>
       )}
     </div>

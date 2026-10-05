@@ -18,7 +18,7 @@ import { carregarImagem, ENQUADRAMENTO_PADRAO, exportarFoto, zoomMinimo, type En
 import { MAX_CERVEJAS_NO_KIT, MAX_FOTOS, type CervejaDoKit } from '../kit'
 import { EditorFoto, FotoEnquadrada, type FotoEscolhida } from './editor-foto'
 
-const MAX_DESCRICAO = 800
+const MAX_DESCRICAO = 1200
 
 /** O que a pré-venda já tem, para o mockup mostrar o link como o cliente vai ver. */
 export type ContextoDoLink = {
