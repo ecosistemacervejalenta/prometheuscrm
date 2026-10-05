@@ -116,7 +116,7 @@ export function PainelContato({
                     )}
                     title={reabrir ? 'Reabrir o atendimento' : undefined}
                   >
-                    {s === 'fila' ? 'Devolver à fila' : STATUS_ATENDIMENTO[s].rotulo}
+                    {s === 'fila' ? (atual ? 'Na fila' : 'Devolver à fila') : STATUS_ATENDIMENTO[s].rotulo}
                   </button>
                 )
               })}

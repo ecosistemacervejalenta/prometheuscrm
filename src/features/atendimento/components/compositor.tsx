@@ -355,8 +355,8 @@ export function Compositor({
   const mostrarMicrofone = !nota && !podeEnviar
 
   return (
-    <div className={cn('border-t border-linha p-2.5 sm:p-3', nota ? 'bg-vip-50' : 'bg-superficie')}>
-      <div className="mb-2 flex items-center gap-1">
+    <div className={cn('min-w-0 border-t border-linha p-2.5 @md:p-3', nota ? 'bg-vip-50' : 'bg-superficie')}>
+      <div className="mb-2 flex min-w-0 items-center gap-1">
         {(['mensagem', 'nota'] as const).map((m) => (
           <button
             key={m}
@@ -365,7 +365,7 @@ export function Compositor({
             aria-pressed={modo === m}
             disabled={voz.gravando}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-semibold transition-colors',
+              'inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-semibold transition-colors',
               modo === m ? (m === 'nota' ? 'bg-vip text-ink' : 'bg-ink text-white') : 'text-suave hover:bg-ink/5 hover:text-ink',
             )}
           >
@@ -373,7 +373,7 @@ export function Compositor({
             {m === 'nota' ? 'Nota interna' : 'Mensagem'}
           </button>
         ))}
-        <span className="ml-auto hidden text-[11px] text-sutil sm:inline">
+        <span className="ml-auto hidden min-w-0 truncate pl-2 text-[11px] text-sutil @xl:block">
           {progresso ??
             (nota
               ? 'Só a equipe vê'
@@ -401,7 +401,7 @@ export function Compositor({
           <div className="flex h-11 flex-1 items-center gap-2.5 rounded-xl border border-perigo/30 bg-perigo-50 px-3.5 text-[14px] text-perigo">
             <span className="size-2.5 animate-pulse rounded-full bg-perigo" aria-hidden />
             Gravando… <span className="tipo-dado">{duracao(voz.segundos)}</span>
-            <span className="ml-auto hidden text-[11px] text-perigo/70 sm:inline">máx. 5 min</span>
+            <span className="ml-auto hidden text-[11px] text-perigo/70 @lg:inline">máx. 5 min</span>
           </div>
           <Button tamanho="icone" variante="escuro" className="size-11 rounded-xl lg:size-11" onClick={() => voz.parar(false)} aria-label="Concluir gravação" title="Concluir e revisar">
             <Square className="fill-current" />

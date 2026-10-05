@@ -71,7 +71,7 @@ export function ListaConversas({
           <h1 className="tipo-h3">Atendimento</h1>
           {avisos}
         </div>
-        <nav className="flex gap-1 rounded-xl bg-ink/[0.06] p-1" aria-label="Filas de atendimento">
+        <nav className="flex gap-0.5 rounded-xl bg-ink/[0.06] p-1" aria-label="Filas de atendimento">
           {(Object.keys(ROTULOS_ABAS) as AbaAtendimento[]).map((chave) => {
             const ativa = chave === aba
             const n = chave === 'resolvidos' ? null : contagens[chave]
@@ -81,7 +81,7 @@ export function ListaConversas({
                 href={hrefConversa(chave, busca)}
                 aria-current={ativa ? 'page' : undefined}
                 className={cn(
-                  'inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-1.5 py-1.5 text-[13px] font-semibold whitespace-nowrap transition-colors',
+                  'inline-flex min-w-0 flex-auto items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[12px] font-semibold whitespace-nowrap transition-colors',
                   ativa ? 'bg-superficie text-ink shadow-sm' : 'text-suave hover:text-ink',
                 )}
               >
@@ -89,7 +89,7 @@ export function ListaConversas({
                 {n ? (
                   <span
                     className={cn(
-                      'tipo-dado grid h-[18px] min-w-[18px] place-items-center rounded-md px-1 text-[11px]',
+                      'tipo-dado grid h-4 min-w-4 shrink-0 place-items-center rounded-[5px] px-1 text-[10px] leading-none',
                       chave === 'fila' ? 'bg-alerta text-white' : 'bg-papel text-suave',
                     )}
                   >

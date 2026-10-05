@@ -202,7 +202,7 @@ function Bolha({ m, autor }: { m: MensagemConversa; autor: string | null }) {
     <div className={cn('flex', saida ? 'justify-end' : 'justify-start')}>
       <div
         className={cn(
-          'max-w-[85%] rounded-2xl px-3 py-2 text-[14px] leading-[21px] shadow-cartao sm:max-w-[70%]',
+          'max-w-[85%] min-w-0 rounded-2xl px-3 py-2 text-[14px] leading-[21px] shadow-cartao @2xl:max-w-[70%]',
           saida ? 'rounded-br-md bg-whatsapp-50 ring-1 ring-whatsapp/15' : 'rounded-bl-md bg-superficie ring-1 ring-linha',
           m.status === 'falhou' && 'ring-perigo/40',
         )}
@@ -252,7 +252,7 @@ function Evento({ e, nomes, numeros }: { e: EventoConversa; nomes: Map<string, s
   if (e.tipo === 'nota') {
     return (
       <div className="flex justify-center">
-        <div className="w-full max-w-[85%] rounded-2xl border border-vip/30 bg-vip-50 px-3 py-2 text-[14px] leading-[21px] sm:max-w-[70%]">
+        <div className="w-full max-w-[85%] rounded-2xl border border-vip/30 bg-vip-50 px-3 py-2 text-[14px] leading-[21px] @2xl:max-w-[70%]">
           <p className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-vip-700">
             <StickyNote className="size-3" aria-hidden /> Nota interna · {autor ?? 'Equipe'}
           </p>
@@ -289,7 +289,7 @@ function Evento({ e, nomes, numeros }: { e: EventoConversa; nomes: Map<string, s
 
   return (
     <div className="flex justify-center">
-      <span className="rounded-full bg-ink/[0.05] px-3 py-1 text-center text-[11px] text-suave">
+      <span className="max-w-[90%] rounded-2xl bg-ink/[0.05] px-3 py-1 text-center text-[11px] text-suave">
         {texto} · <span className="tipo-dado text-[11px]">{formatarHora(e.criado_em)}</span>
       </span>
     </div>
@@ -381,7 +381,7 @@ export function Conversa({
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col" {...soltar}>
+      <div className="@container relative flex min-h-0 min-w-0 flex-1 flex-col" {...soltar}>
         {arrastando && (
           <div className="pointer-events-none absolute inset-2 z-20 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-volt-600 bg-volt-50/90 text-volt-700">
             <Paperclip className="size-6" aria-hidden />
@@ -389,11 +389,11 @@ export function Conversa({
           </div>
         )}
         {/* Cabeçalho */}
-        <header className="flex items-center gap-2 border-b border-linha bg-superficie px-2 py-2 sm:px-3">
+        <header className="flex min-w-0 items-center gap-2 border-b border-linha bg-superficie px-2 py-2 @md:px-3">
           <Link href={voltarHref} className="grid size-9 shrink-0 place-items-center rounded-lg text-suave hover:bg-papel lg:hidden" aria-label="Voltar para a lista">
             <ChevronLeft className="size-5" />
           </Link>
-          <button type="button" onClick={() => setPainel(true)} className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-1 text-left xl:pointer-events-none">
+          <button type="button" onClick={() => setPainel(true)} className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-1 text-left 2xl:pointer-events-none">
             <Avatar nome={nome} />
             <span className="min-w-0">
               <span className="block truncate text-[15px] font-semibold">{nome}</span>
@@ -404,27 +404,27 @@ export function Conversa({
             </span>
           </button>
           {status && (
-            <Badge tom={status.tom} ponto className="hidden sm:inline-flex">
+            <Badge tom={status.tom} ponto className="hidden shrink-0 @3xl:inline-flex">
               {status.rotulo}
             </Badge>
           )}
           <div className="flex shrink-0 items-center gap-1.5">
             {aberto && !atendimento.responsavel_id && (
               <Button tamanho="sm" variante="escuro" carregando={pendente} onClick={() => executar(() => assumirAtendimento(id))}>
-                <UserRoundCheck /> <span className="hidden sm:inline">Assumir</span>
+                <UserRoundCheck /> <span className="hidden @lg:inline">Assumir</span>
               </Button>
             )}
             {atendimento.status === 'em_atendimento' && (
               <Button tamanho="sm" carregando={pendente} onClick={() => executar(() => alterarStatusAtendimento(id, 'aguardando_cliente'))} title="Aguardando cliente">
-                <Hourglass /> <span className="hidden md:inline">Aguardando</span>
+                <Hourglass /> <span className="hidden @2xl:inline">Aguardando</span>
               </Button>
             )}
             {aberto ? (
               <Button tamanho="sm" carregando={pendente} onClick={() => executar(() => alterarStatusAtendimento(id, 'resolvido'))} title="Resolver">
-                <CircleCheckBig /> <span className="hidden md:inline">Resolver</span>
+                <CircleCheckBig /> <span className="hidden @lg:inline">Resolver</span>
               </Button>
             ) : null}
-            <Button tamanho="icone" variante="fantasma" onClick={() => setPainel(true)} className="xl:hidden" aria-label="Detalhes do contato">
+            <Button tamanho="icone" variante="fantasma" onClick={() => setPainel(true)} className="2xl:hidden" aria-label="Detalhes do contato">
               <Info />
             </Button>
           </div>
@@ -439,7 +439,7 @@ export function Conversa({
             pertoDoFim.current = perto
             if (perto === longe) setLonge(!perto)
           }}
-          className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain bg-papel px-3 py-4 sm:px-5"
+          className="min-h-0 flex-1 space-y-2 overflow-x-hidden overflow-y-auto overscroll-contain bg-papel px-3 py-4 @xl:px-5"
         >
           {mensagens.length === 400 && (
             <p className="text-center text-[11px] text-sutil">Mostrando as 400 mensagens mais recentes deste contato.</p>
@@ -462,7 +462,7 @@ export function Conversa({
           <button
             type="button"
             onClick={() => rolagem.current?.scrollTo({ top: rolagem.current.scrollHeight, behavior: 'smooth' })}
-            className="absolute right-4 bottom-36 z-10 grid size-9 place-items-center rounded-full bg-superficie text-ink shadow-flutuante ring-1 ring-linha xl:right-[336px]"
+            className="absolute right-4 bottom-36 z-10 grid size-9 place-items-center rounded-full bg-superficie text-ink shadow-flutuante ring-1 ring-linha"
             aria-label="Ir para a última mensagem"
           >
             <ArrowDown className="size-4" />
@@ -489,16 +489,16 @@ export function Conversa({
       </div>
 
       {/* Painel do contato: fixo no desktop largo, gaveta nas telas menores */}
-      {painel && <button type="button" aria-label="Fechar detalhes" onClick={() => setPainel(false)} className="animar-fundo fixed inset-0 z-40 bg-ink/40 xl:hidden" />}
+      {painel && <button type="button" aria-label="Fechar detalhes" onClick={() => setPainel(false)} className="animar-fundo fixed inset-0 z-40 bg-ink/40 2xl:hidden" />}
       <aside
         className={cn(
           'min-h-0 w-[320px] shrink-0 overflow-y-auto border-l border-linha bg-superficie',
-          'max-xl:fixed max-xl:inset-y-0 max-xl:right-0 max-xl:z-50 max-xl:w-[min(360px,100vw)] max-xl:shadow-flutuante',
-          painel ? 'max-xl:block' : 'max-xl:hidden',
+          'max-2xl:fixed max-2xl:inset-y-0 max-2xl:right-0 max-2xl:z-50 max-2xl:w-[min(360px,100vw)] max-2xl:shadow-flutuante',
+          painel ? 'max-2xl:block' : 'max-2xl:hidden',
         )}
         aria-label="Detalhes do contato"
       >
-        <div className="sticky top-0 z-10 flex justify-end bg-superficie/95 p-2 backdrop-blur xl:hidden">
+        <div className="sticky top-0 z-10 flex justify-end bg-superficie/95 p-2 backdrop-blur 2xl:hidden">
           <Button tamanho="icone" variante="fantasma" onClick={() => setPainel(false)} aria-label="Fechar">
             <X />
           </Button>
