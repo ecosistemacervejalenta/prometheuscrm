@@ -76,14 +76,21 @@ export function FormularioContaVariavel({
   return (
     <Card className="px-5 pt-6 sm:px-6">
       <ActionForm action={acao}>
-        <FormSection titulo="Conta variável" descricao="Lançamento avulso. Parcelada, vira uma conta por mês.">
+        <FormSection
+          titulo="Conta variável"
+          descricao="Lançamento avulso. Parcelada, vira uma conta por mês; com vários boletos, uma conta por boleto."
+        >
           <CamposBase fornecedores={fornecedores} categorias={categorias} />
-          <CamposParcelamento hoje={hoje} />
+          <CamposParcelamento hoje={hoje} variosBoletos />
           <Field label="Forma de pagamento" name="forma_pagamento" className="sm:col-span-3">
             <FormaPagamento />
           </Field>
           <div className="sm:col-span-6">
-            <Checkbox name="ja_paga" label="Já foi paga" descricao="Marca a primeira parcela como paga hoje." />
+            <Checkbox
+              name="ja_paga"
+              label="Já foi paga"
+              descricao="Marca a primeira parcela (ou o boleto de vencimento mais próximo) como paga hoje."
+            />
           </div>
           <Field label="Observações" name="observacoes" className="sm:col-span-6">
             <Textarea name="observacoes" />

@@ -3,13 +3,13 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
-import { gerarParcelas } from '@/features/financeiro/regras'
+import { gerarBoletos, gerarParcelas } from '@/features/financeiro/regras'
 import { errosDeValidacao, falha, sucesso, traduzirErro, type EstadoAcao } from '@/lib/acoes'
 import { exigirEquipe } from '@/lib/auth'
 import { hojeISO, mesAtual, primeiroDia } from '@/lib/datas'
-import { formParaObjeto } from '@/lib/validacao'
+import { agruparLista, formParaObjeto } from '@/lib/validacao'
 
-import { esquemaContaFixa, esquemaContaVariavel, esquemaEdicaoConta } from './schema'
+import { esquemaContaFixa, esquemaContaVariavel, esquemaEdicaoConta, esquemaVariosBoletos } from './schema'
 
 function atualizarTelas() {
   revalidatePath('/contas', 'layout')
@@ -17,16 +17,34 @@ function atualizarTelas() {
   revalidatePath('/')
 }
 
-/** Lança uma conta variável — ou várias, se parcelada (uma por mês). */
+/** À vista ou parcelada mês a mês (uma conta por parcela). */
+function lerParcelamento(formulario: Record<string, unknown>) {
+  const dados = esquemaContaVariavel.safeParse(formulario)
+  if (!dados.success) return errosDeValidacao(dados.error)
+  const { parcelas, modo_valor, vencimento, descricao, valor, ...resto } = dados.data
+  return { resto, lancamentos: gerarParcelas({ descricao, valor, modo: modo_valor, parcelas, vencimento }) }
+}
+
+/** Vários boletos da mesma empresa (uma conta por boleto, em ordem de vencimento). */
+function lerVariosBoletos(formulario: Record<string, unknown>) {
+  const dados = esquemaVariosBoletos.safeParse(formulario)
+  if (!dados.success) return errosDeValidacao(dados.error)
+  const { boletos, descricao, ...resto } = dados.data
+  return { resto, lancamentos: gerarBoletos({ descricao, boletos }) }
+}
+
+/** Lança uma conta variável — ou várias: parcelada (uma por mês) ou com vários boletos (uma por boleto). */
 export async function criarContaVariavel(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
   const { supabase } = await exigirEquipe()
-  const dados = esquemaContaVariavel.safeParse(formParaObjeto(formData))
-  if (!dados.success) return errosDeValidacao(dados.error)
+  const formulario = agruparLista(formParaObjeto(formData), 'boletos')
+  const lido = formulario.boletos.length > 0 ? lerVariosBoletos(formulario) : lerParcelamento(formulario)
+  if (!('lancamentos' in lido)) return lido
 
-  const { parcelas, modo_valor, ja_paga, vencimento, descricao, valor, ...resto } = dados.data
-  const linhas = gerarParcelas({ descricao, valor, modo: modo_valor, parcelas, vencimento }).map((parcela, i) => ({
-    ...resto,
-    ...parcela,
+  const { resto, lancamentos } = lido
+  const { ja_paga, ...comuns } = resto
+  const linhas = lancamentos.map((lancamento, i) => ({
+    ...comuns,
+    ...lancamento,
     tipo: 'variavel' as const,
     ...(ja_paga && i === 0 ? { status: 'paga' as const, pago_em: hojeISO() } : { status: 'pendente' as const }),
   }))
@@ -35,7 +53,7 @@ export async function criarContaVariavel(_: EstadoAcao, formData: FormData): Pro
   if (error) return falha(traduzirErro(error))
 
   atualizarTelas()
-  redirect(`/contas?mes=${vencimento.slice(0, 7)}`)
+  redirect(`/contas?mes=${lancamentos[0].vencimento.slice(0, 7)}`)
 }
 
 /** Cria ou edita um modelo de conta fixa. */

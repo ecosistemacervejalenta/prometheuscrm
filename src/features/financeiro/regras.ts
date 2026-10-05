@@ -19,6 +19,9 @@ export function ordenarCategorias(nomes: string[]): string[] {
 
 export type ModoValor = 'total' | 'parcela'
 
+/** Limite de boletos lançados de uma vez (o mesmo das parcelas). */
+export const MAXIMO_BOLETOS = 36
+
 /**
  * Divide um total em parcelas de centavos inteiros.
  * A diferença do arredondamento fica na 1ª parcela: R$ 100 em 3x → 33,34 + 33,33 + 33,33.
@@ -57,4 +60,24 @@ export function gerarParcelas({
       competencia: `${venc.slice(0, 7)}-01`,
     }
   })
+}
+
+/**
+ * Lançamentos de vários boletos da mesma empresa, em ordem de vencimento.
+ * Cada boleto vira uma conta no mês do seu vencimento, numerada como as parcelas: "Lote (1/3)".
+ */
+export function gerarBoletos({
+  descricao,
+  boletos,
+}: {
+  descricao: string
+  boletos: Array<{ valor: number; vencimento: string }>
+}) {
+  const ordenados = [...boletos].sort((a, b) => a.vencimento.localeCompare(b.vencimento))
+  return ordenados.map(({ valor, vencimento }, i) => ({
+    descricao: ordenados.length > 1 ? `${descricao} (${i + 1}/${ordenados.length})` : descricao,
+    valor,
+    vencimento,
+    competencia: `${vencimento.slice(0, 7)}-01`,
+  }))
 }

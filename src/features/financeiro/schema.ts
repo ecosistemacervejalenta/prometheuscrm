@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { data, dinheiro, texto } from '@/lib/validacao'
 
-import { NOVA_CATEGORIA, type ModoValor } from './regras'
+import { MAXIMO_BOLETOS, NOVA_CATEGORIA, type ModoValor } from './regras'
 
 /** Blocos de validação compartilhados por contas a pagar e a receber. */
 
@@ -50,6 +50,12 @@ export const camposParcelamento = {
     .default(1),
   modo_valor: z.enum(['total', 'parcela']).catch('total'),
 }
+
+/** Vários boletos num só lançamento ("boletos.0.valor", "boletos.0.vencimento"...), cada um com valor e vencimento próprios. */
+export const listaDeBoletos = z
+  .array(z.object({ valor: valorPositivo, vencimento: dataFinanceira('Informe o vencimento.') }))
+  .min(2, 'Informe pelo menos dois boletos.')
+  .max(MAXIMO_BOLETOS, `Lance no máximo ${MAXIMO_BOLETOS} boletos de uma vez.`)
 
 /** No modo "total", cada parcela precisa ter pelo menos 1 centavo. */
 export function validarParcelamento(

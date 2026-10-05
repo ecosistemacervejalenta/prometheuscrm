@@ -106,3 +106,26 @@ export function formParaObjeto(formData: FormData, listas: string[] = []): Recor
   for (const lista of listas) objeto[lista] ??= []
   return objeto
 }
+
+/**
+ * Junta campos indexados ("boletos.0.valor", "boletos.1.valor"...) numa lista de objetos, na ordem dos índices.
+ * O caminho de erro do zod ("boletos.1.valor") volta igual ao `name` do input, então o erro aparece no campo certo.
+ */
+export function agruparLista<Lista extends string>(
+  objeto: Record<string, unknown>,
+  lista: Lista,
+): Record<string, unknown> & Record<Lista, Record<string, unknown>[]> {
+  const padrao = new RegExp(`^${lista}\\.(\\d+)\\.(\\w+)$`)
+  const resto: Record<string, unknown> = {}
+  const itens = new Map<number, Record<string, unknown>>()
+  for (const [chave, valor] of Object.entries(objeto)) {
+    const partes = padrao.exec(chave)
+    if (!partes) resto[chave] = valor
+    else {
+      const indice = Number(partes[1])
+      itens.set(indice, { ...itens.get(indice), [partes[2]]: valor })
+    }
+  }
+  const ordenados = [...itens].sort(([a], [b]) => a - b).map(([, item]) => item)
+  return { ...resto, [lista]: ordenados } as Record<string, unknown> & Record<Lista, Record<string, unknown>[]>
+}

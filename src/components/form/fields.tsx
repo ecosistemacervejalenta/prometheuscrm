@@ -25,6 +25,7 @@ export function Field({
   name,
   dica,
   obrigatorio,
+  rotuloOculto,
   className,
   children,
 }: {
@@ -32,13 +33,15 @@ export function Field({
   name?: string
   dica?: ReactNode
   obrigatorio?: boolean
+  /** Rótulo só para leitores de tela (ex.: linhas repetidas de uma lista, com o rótulo visível na primeira). */
+  rotuloOculto?: boolean
   className?: string
   children: ReactNode
 }) {
   const erro = useErro(name)
   return (
     <div className={cn('min-w-0', className)}>
-      <label htmlFor={name} className="mb-1.5 block text-[13px] font-semibold text-ink">
+      <label htmlFor={name} className={cn('mb-1.5 block text-[13px] font-semibold text-ink', rotuloOculto && 'sr-only')}>
         {label}
         {obrigatorio && <span className="ml-0.5 text-perigo" aria-hidden>*</span>}
       </label>

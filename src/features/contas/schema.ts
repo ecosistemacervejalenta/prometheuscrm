@@ -6,6 +6,7 @@ import {
   comCategoriaNova,
   dataFinanceira,
   dataFinanceiraOpcional,
+  listaDeBoletos,
   validarParcelamento,
 } from '@/features/financeiro/schema'
 import { checkbox, dinheiro, texto, textoOpcional } from '@/lib/validacao'
@@ -16,18 +17,23 @@ const fornecedorOpcional = z.preprocess((v) => (v ? String(v) : null), z.uuid('F
 const mes = (v: unknown) => (typeof v === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(v) ? `${v}-01` : null)
 const mesNoIntervalo = (d: string) => d >= '2000-01-01' && d <= '2099-12-01'
 
+/** Campos comuns a todas as contas de um mesmo lançamento variável. */
+const camposDaContaVariavel = {
+  categoria,
+  fornecedor_id: fornecedorOpcional,
+  ja_paga: checkbox,
+  forma_pagamento: textoOpcional,
+  observacoes: textoOpcional,
+}
+
 /** Conta variável (avulsa), com opção de parcelar mês a mês. */
 export const esquemaContaVariavel = comCategoriaNova(
-  z
-    .object({
-      ...camposParcelamento,
-      categoria,
-      fornecedor_id: fornecedorOpcional,
-      ja_paga: checkbox,
-      forma_pagamento: textoOpcional,
-      observacoes: textoOpcional,
-    })
-    .superRefine(validarParcelamento),
+  z.object({ ...camposParcelamento, ...camposDaContaVariavel }).superRefine(validarParcelamento),
+)
+
+/** Vários boletos da mesma empresa num só cadastro: cada boleto vira uma conta variável. */
+export const esquemaVariosBoletos = comCategoriaNova(
+  z.object({ descricao: camposParcelamento.descricao, boletos: listaDeBoletos, ...camposDaContaVariavel }),
 )
 
 /** Conta fixa (modelo recorrente). Valor 0 é aceito para contas que mudam todo mês. */
