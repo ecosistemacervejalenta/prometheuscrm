@@ -43,7 +43,7 @@ export default async function PaginaPreVendas() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {preVendas.map((pv) => (
-            <Card key={pv.id} className="flex flex-col p-5">
+            <Card key={pv.id} className="flex flex-col p-4 lg:p-5">
               <div className="mb-3 flex flex-wrap items-center gap-1.5">
                 <StatusPreVendaBadge status={pv.status_efetivo} />
                 <CanalBadge canal={pv.canal} />
@@ -54,7 +54,7 @@ export default async function PaginaPreVendas() {
               <p className="tipo-dado mt-1 text-[12px] text-suave">
                 {pv.encerra_em ? `encerra ${formatarDataHora(pv.encerra_em)}` : 'sem data de encerramento'}
               </p>
-              <dl className="my-5 grid grid-cols-3 gap-2 rounded-xl bg-papel p-3 text-center">
+              <dl className="my-4 grid grid-cols-3 gap-2 rounded-xl bg-papel p-3 text-center lg:my-5">
                 <div>
                   <dt className="tipo-rotulo text-suave">Pedidos</dt>
                   <dd className="tipo-numero text-lg">{formatarNumero(pv.pedidos)}</dd>

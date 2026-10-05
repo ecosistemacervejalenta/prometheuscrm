@@ -166,6 +166,76 @@
 }
 
 /* -----------------------------------------------------------------------------
+   Mobile (< 1024px) — comportamento de app iOS
+   Estas regras ficam FORA de @layer de propósito: assim vencem as utilities do
+   Tailwind sem !important e não afetam o desktop.
+   ----------------------------------------------------------------------------- */
+
+@media (max-width: 1023.98px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* iOS dá zoom automático em campos com fonte < 16px. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* Toque sem atraso e sem seleção acidental em elementos de navegação. */
+  a,
+  button,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+
+  nav a,
+  nav button {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+/* Altura da barra de abas inferior (sem a safe area). */
+:root {
+  --altura-abas: 58px;
+}
+
+@keyframes subir-folha {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes aparecer {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@utility animar-folha {
+  animation: subir-folha 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@utility animar-fundo {
+  animation: aparecer 0.2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animar-folha,
+  .animar-fundo {
+    animation: none;
+  }
+}
+
+/* -----------------------------------------------------------------------------
    Impressão (relatórios do Grupo VIP, pedidos)
    ----------------------------------------------------------------------------- */
 

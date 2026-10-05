@@ -35,12 +35,22 @@ export const metadata: Metadata = {
   description: 'CRM integrado: Shopify · App · Grupo VIP.',
   applicationName: 'Prometheus CRM',
   robots: { index: false, follow: false },
+  // iPhone: "Adicionar à Tela de Início" abre como app (sem barra do Safari).
+  appleWebApp: { capable: true, title: 'Prometheus', statusBarStyle: 'default' },
+  // Evita que o iOS transforme números (WhatsApp, CEP, valores) em links azuis.
+  formatDetection: { telephone: false, address: false, email: false, date: false },
 }
 
 export const viewport: Viewport = {
-  themeColor: '#0a0e14',
+  // Mobile usa o fundo claro do app; desktop mantém a cor escura da barra lateral.
+  themeColor: [
+    { media: '(max-width: 1023.98px)', color: '#f5f6f8' },
+    { media: '(min-width: 1024px)', color: '#0a0e14' },
+  ],
   width: 'device-width',
   initialScale: 1,
+  // Ocupa a tela inteira do iPhone (notch / Dynamic Island); o layout respeita as safe areas.
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {

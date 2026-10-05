@@ -21,10 +21,10 @@ const VARIANTES: Record<VarianteBotao, string> = {
 }
 
 const TAMANHOS: Record<TamanhoBotao, string> = {
-  sm: 'h-8 px-3 text-[13px] gap-1.5 rounded-lg',
-  md: 'h-10 px-4 text-sm gap-2 rounded-xl',
+  sm: 'h-9 px-3 text-[13px] gap-1.5 rounded-lg lg:h-8',
+  md: 'h-11 px-4 text-[15px] gap-2 rounded-xl lg:h-10 lg:text-sm',
   lg: 'h-12 px-5 text-[15px] gap-2 rounded-xl',
-  icone: 'h-9 w-9 rounded-lg',
+  icone: 'size-10 rounded-lg lg:size-9',
 }
 
 export function classesBotao({
@@ -39,7 +39,7 @@ export function classesBotao({
   className?: string
 } = {}) {
   return cn(
-    'inline-flex shrink-0 select-none items-center justify-center font-semibold whitespace-nowrap transition-colors',
+    'inline-flex shrink-0 select-none items-center justify-center font-semibold whitespace-nowrap transition-colors active:scale-[0.98] lg:active:scale-100',
     'disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
     VARIANTES[variante],
     TAMANHOS[tamanho],

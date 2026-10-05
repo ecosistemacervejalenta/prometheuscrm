@@ -13,6 +13,8 @@ export type Fornecedor = Tables<'fornecedores'>
 export type Vendedor = Tables<'vendedores'>
 export type ContaFixa = Tables<'contas_fixas'>
 export type ContaPagar = Tables<'contas_pagar'>
+export type ContaReceber = Tables<'contas_receber'>
+export type CategoriaFinanceira = Tables<'categorias_financeiras'>
 export type Cliente = Tables<'clientes'>
 export type Produto = Tables<'produtos'>
 export type PreVenda = Tables<'pre_vendas'>
@@ -29,6 +31,7 @@ export type PedidoResumo = Tables<'vw_pedidos'>
 export type PreVendaResumo = Tables<'vw_pre_vendas'>
 export type PreVendaItemDetalhe = Tables<'vw_pre_venda_itens'>
 export type ContaPagarDetalhe = Tables<'vw_contas_pagar'>
+export type ContaReceberDetalhe = Tables<'vw_contas_receber'>
 
 // Enums
 export type CanalVenda = Enums<'canal_venda'>
@@ -37,6 +40,8 @@ export type StatusPagamento = Enums<'status_pagamento'>
 export type StatusPreVenda = Enums<'status_pre_venda'>
 export type StatusConta = Enums<'status_conta'>
 export type TipoConta = Enums<'tipo_conta'>
+export type StatusRecebimento = Enums<'status_recebimento'>
+export type NaturezaFinanceira = Enums<'natureza_financeira'>
 export type OrigemCliente = Enums<'origem_cliente'>
 export type OrigemPedido = Enums<'origem_pedido'>
 export type PapelUsuario = Enums<'papel_usuario'>

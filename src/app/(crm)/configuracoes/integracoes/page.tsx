@@ -5,6 +5,7 @@ import { ActionButton } from '@/components/ui/action-button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { CopyButton } from '@/components/ui/copy-button'
+import { ListaMobile } from '@/components/ui/lista-mobile'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import {
   alternarWebhook,
@@ -24,6 +25,17 @@ import { urlDoSite } from '@/lib/url'
 export const metadata: Metadata = { title: 'Integrações' }
 
 const TOM_EVENTO: Record<string, Tom> = { pendente: 'alerta', enviado: 'sucesso', erro: 'perigo', ignorado: 'neutro' }
+
+const ENDPOINTS = [
+  { metodo: 'GET', caminho: '/api/v1/clientes?whatsapp=&email=&q=', descricao: 'Busca clientes' },
+  { metodo: 'POST', caminho: '/api/v1/clientes', descricao: 'Cria ou atualiza cliente pelo WhatsApp' },
+  { metodo: 'GET', caminho: '/api/v1/pedidos?status_pagamento=&canal=&pre_venda=&desde=', descricao: 'Lista pedidos com itens' },
+  { metodo: 'GET', caminho: '/api/v1/pedidos/{id}', descricao: 'Pedido completo (cliente, itens, endereço)' },
+  { metodo: 'PATCH', caminho: '/api/v1/pedidos/{id}', descricao: 'Atualiza status / pagamento (ex.: PIX confirmado)' },
+  { metodo: 'POST', caminho: '/api/v1/pedidos/{id}/cobranca', descricao: 'Registra cobrança enviada por automação' },
+  { metodo: 'GET', caminho: '/api/v1/pre-vendas?status=ativa', descricao: 'Pré-vendas com link público' },
+  { metodo: 'GET', caminho: '/api/v1/produtos', descricao: 'Catálogo de cervejas' },
+]
 
 function Status({ ok, sim, nao }: { ok: boolean; sim: string; nao: string }) {
   return ok ? <Badge tom="sucesso" ponto>{sim}</Badge> : <Badge tom="alerta" ponto>{nao}</Badge>
@@ -46,7 +58,7 @@ export default async function PaginaIntegracoes() {
     <>
       <CabecalhoConfiguracoes ativa="integracoes" />
 
-      <div className="space-y-6">
+      <div className="space-y-5 lg:space-y-6">
         {/* n8n / webhooks de saída */}
         <Card>
           <CardHeader
@@ -54,7 +66,32 @@ export default async function PaginaIntegracoes() {
             descricao="Cada evento do CRM é enviado por POST com assinatura HMAC-SHA256 no header X-Prometheus-Assinatura."
           />
           {webhooks.length > 0 && (
-            <Table>
+            <ListaMobile>
+              {webhooks.map((w) => (
+                <li key={w.id} className={w.ativo ? 'px-4 py-3' : 'px-4 py-3 opacity-60'}>
+                  <p className="text-[15px] font-semibold">{w.nome} {!w.ativo && <Badge>Pausado</Badge>}</p>
+                  <p className="tipo-dado truncate text-[12px] text-suave">{w.url}</p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {w.eventos.map((e) => <Badge key={e}>{e === '*' ? 'todos' : e}</Badge>)}
+                  </div>
+                  <div className="mt-3 grid grid-cols-4 gap-2 *:w-full">
+                    <span className="col-span-2"><CopyButton texto={w.segredo} rotulo="Segredo" /></span>
+                    <ActionButton acao={testarWebhook.bind(null, w.id)} titulo="Testar"><Send /></ActionButton>
+                    <ActionButton acao={alternarWebhook.bind(null, w.id, !w.ativo)} titulo={w.ativo ? 'Pausar' : 'Ativar'}>
+                      {w.ativo ? <Pause /> : <Play />}
+                    </ActionButton>
+                  </div>
+                  <div className="mt-2">
+                    <ActionButton acao={excluirWebhook.bind(null, w.id)} variante="perigo" confirmar={`Excluir o webhook ${w.nome}?`} className="w-full">
+                      <Trash2 /> Excluir
+                    </ActionButton>
+                  </div>
+                </li>
+              ))}
+            </ListaMobile>
+          )}
+          {webhooks.length > 0 && (
+            <Table somenteDesktop>
               <THead>
                 <TR>
                   <TH>Destino</TH>
@@ -95,7 +132,7 @@ export default async function PaginaIntegracoes() {
               </TBody>
             </Table>
           )}
-          <CardContent className="border-t border-linha pt-5">
+          <CardContent className="border-t border-linha pt-4 lg:pt-5">
             <FormularioWebhook />
           </CardContent>
         </Card>
@@ -108,9 +145,27 @@ export default async function PaginaIntegracoes() {
             acoes={<ActionButton acao={processarFilaAgora}><RefreshCw /> Processar agora</ActionButton>}
           />
           {eventos.length === 0 ? (
-            <p className="px-5 pb-6 text-sm text-suave">Nenhum evento registrado ainda.</p>
+            <p className="px-4 pb-5 text-sm text-suave lg:px-5 lg:pb-6">Nenhum evento registrado ainda.</p>
           ) : (
-            <Table>
+            <>
+            <ListaMobile>
+              {eventos.map((e) => (
+                <li key={e.id} className="flex items-center gap-3 px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="tipo-dado truncate text-[13px] font-semibold">{e.tipo}</p>
+                    <p className="truncate text-[12px] text-suave">
+                      {formatarDataCurta(e.criado_em)} {formatarHora(e.criado_em)}
+                      {e.ultimo_erro ? ` · ${e.ultimo_erro}` : e.tentativas > 0 ? ` · ${e.tentativas} tentativa(s)` : ''}
+                    </p>
+                  </div>
+                  <Badge tom={TOM_EVENTO[e.status] ?? 'neutro'} ponto>{e.status}</Badge>
+                  {(e.status === 'erro' || e.status === 'ignorado') && (
+                    <ActionButton acao={reenviarEvento.bind(null, e.id)}>Reenviar</ActionButton>
+                  )}
+                </li>
+              ))}
+            </ListaMobile>
+            <Table somenteDesktop>
               <THead>
                 <TR>
                   <TH>Evento</TH>
@@ -138,10 +193,11 @@ export default async function PaginaIntegracoes() {
                 ))}
               </TBody>
             </Table>
+            </>
           )}
         </Card>
 
-        <div className="grid gap-6 xl:grid-cols-2">
+        <div className="grid gap-5 lg:gap-6 xl:grid-cols-2">
           {/* Shopify */}
           <Card>
             <CardHeader
@@ -191,7 +247,18 @@ export default async function PaginaIntegracoes() {
             descricao="Autenticação: header Authorization: Bearer INTEGRATIONS_API_KEY."
             acoes={<Status ok={Boolean(envServidor.apiKey)} sim="Chave configurada" nao="Falta INTEGRATIONS_API_KEY" />}
           />
-          <Table>
+          <ListaMobile>
+            {ENDPOINTS.map((e) => (
+              <li key={e.metodo + e.caminho} className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Badge tom={e.metodo === 'GET' ? 'shopify' : e.metodo === 'POST' ? 'volt' : 'app'}>{e.metodo}</Badge>
+                  <span className="text-[13px] text-suave">{e.descricao}</span>
+                </div>
+                <p className="tipo-dado mt-1 text-[12px] break-all">{e.caminho}</p>
+              </li>
+            ))}
+          </ListaMobile>
+          <Table somenteDesktop>
             <THead>
               <TR>
                 <TH>Método</TH>
@@ -200,14 +267,9 @@ export default async function PaginaIntegracoes() {
               </TR>
             </THead>
             <TBody>
-              <Endpoint metodo="GET" caminho="/api/v1/clientes?whatsapp=&email=&q=" descricao="Busca clientes" />
-              <Endpoint metodo="POST" caminho="/api/v1/clientes" descricao="Cria ou atualiza cliente pelo WhatsApp" />
-              <Endpoint metodo="GET" caminho="/api/v1/pedidos?status_pagamento=&canal=&pre_venda=&desde=" descricao="Lista pedidos com itens" />
-              <Endpoint metodo="GET" caminho="/api/v1/pedidos/{id}" descricao="Pedido completo (cliente, itens, endereço)" />
-              <Endpoint metodo="PATCH" caminho="/api/v1/pedidos/{id}" descricao="Atualiza status / pagamento (ex.: PIX confirmado)" />
-              <Endpoint metodo="POST" caminho="/api/v1/pedidos/{id}/cobranca" descricao="Registra cobrança enviada por automação" />
-              <Endpoint metodo="GET" caminho="/api/v1/pre-vendas?status=ativa" descricao="Pré-vendas com link público" />
-              <Endpoint metodo="GET" caminho="/api/v1/produtos" descricao="Catálogo de cervejas" />
+              {ENDPOINTS.map((e) => (
+                <Endpoint key={e.metodo + e.caminho} metodo={e.metodo} caminho={e.caminho} descricao={e.descricao} />
+              ))}
             </TBody>
           </Table>
           <CardContent className="pt-4 text-[13px] text-suave">

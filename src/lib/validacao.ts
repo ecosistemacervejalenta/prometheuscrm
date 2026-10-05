@@ -41,14 +41,21 @@ export const whatsapp = z
   .refine((v) => whatsappValido(v), 'WhatsApp inválido. Use DDD + número.')
   .transform((v) => normalizarWhatsapp(v) as string)
 
-/** Valor em reais (aceita "1.234,56"). */
+/** Maior valor aceito pelas colunas numeric(12, 2) do banco. */
+const VALOR_MAXIMO = 9_999_999_999.99
+const centavos = (v: number) => Math.round(v * 100) / 100
+
+/** Valor em reais (aceita "1.234,56" e "1.200"), arredondado aos centavos. */
 export const dinheiro = (mensagem = 'Informe um valor válido.') =>
-  z.preprocess((v) => (vazio(v) ? undefined : lerDinheiro(String(v))), z.number({ error: mensagem }).min(0, mensagem))
+  z.preprocess(
+    (v) => (vazio(v) ? undefined : lerDinheiro(String(v))),
+    z.number({ error: mensagem }).min(0, mensagem).max(VALOR_MAXIMO, 'Valor alto demais.').transform(centavos),
+  )
 
 /** Valor em reais opcional (vazio = 0). */
 export const dinheiroOpcional = z.preprocess(
   (v) => (vazio(v) ? 0 : lerDinheiro(String(v))),
-  z.number({ error: 'Valor inválido.' }).min(0, 'Valor inválido.'),
+  z.number({ error: 'Valor inválido.' }).min(0, 'Valor inválido.').max(VALOR_MAXIMO, 'Valor alto demais.').transform(centavos),
 )
 
 /** Inteiro opcional. */

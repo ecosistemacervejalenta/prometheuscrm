@@ -7,6 +7,7 @@ import { ButtonLink } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FilterBar, SearchField } from '@/components/ui/filter-bar'
+import { ItemMobile, ListaMobile } from '@/components/ui/lista-mobile'
 import { PageHeader } from '@/components/ui/page-header'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { TabsLinks } from '@/components/ui/tabs'
@@ -45,7 +46,7 @@ export default async function PaginaFornecedores({ searchParams }: PageProps<'/f
       />
 
       <Card>
-        <div className="border-b border-linha p-4">
+        <div className="border-b border-linha p-3 lg:p-4">
           <FilterBar caminho="/fornecedores">
             <SearchField valor={q} placeholder="Buscar por nome, razão social ou CNPJ" />
           </FilterBar>
@@ -58,7 +59,38 @@ export default async function PaginaFornecedores({ searchParams }: PageProps<'/f
             acao={<ButtonLink href="/fornecedores/novo" variante="primario"><Plus /> Nova empresa</ButtonLink>}
           />
         ) : (
-          <Table>
+          <>
+          <ListaMobile>
+            {fornecedores.map((f) => {
+              const vendedores = f.fornecedor_vendedores.map(({ vendedores: v }) => v?.nome).filter(Boolean)
+              return (
+                <ItemMobile
+                  key={f.id}
+                  href={`/fornecedores/${f.id}/editar`}
+                  inicio={
+                    <span className="grid size-10 place-items-center rounded-xl bg-shopify-50 text-shopify-700">
+                      <Building2 className="size-5" aria-hidden />
+                    </span>
+                  }
+                  titulo={
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate">{f.nome}</span>
+                      {!f.ativo && <Badge className="h-5 px-1.5 text-[10px]">Inativa</Badge>}
+                    </span>
+                  }
+                  subtitulo={[[f.cidade, f.uf].filter(Boolean).join('/'), vendedores.length ? `${vendedores.length} vendedor(es)` : null].filter(Boolean).join(' · ') || 'Sem detalhes'}
+                  extra={
+                    vendedores.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {vendedores.slice(0, 3).map((nome) => <Badge key={nome} tom="app">{nome}</Badge>)}
+                      </div>
+                    )
+                  }
+                />
+              )
+            })}
+          </ListaMobile>
+          <Table somenteDesktop>
             <THead>
               <TR>
                 <TH>Empresa</TH>
@@ -101,6 +133,7 @@ export default async function PaginaFornecedores({ searchParams }: PageProps<'/f
               ))}
             </TBody>
           </Table>
+          </>
         )}
       </Card>
     </>

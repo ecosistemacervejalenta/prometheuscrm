@@ -8,6 +8,7 @@ import { Card, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FilterBar, FilterDate, FilterSelect } from '@/components/ui/filter-bar'
 import { Kpi } from '@/components/ui/kpi'
+import { ListaMobile } from '@/components/ui/lista-mobile'
 import { PageHeader } from '@/components/ui/page-header'
 import { PrintButton } from '@/components/ui/print-button'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
@@ -94,12 +95,13 @@ export default async function PaginaGrupoVip({ searchParams }: PageProps<'/grupo
           }
         />
 
-        <Card className="mb-6 p-4">
+        <Card className="mb-5 p-3 lg:mb-6 lg:p-4">
           <FilterBar caminho="/grupo-vip">
             <FilterSelect
               name="pre_venda"
               valor={preVendaId}
               rotulo="Todas as pré-vendas"
+              className="basis-full"
               opcoes={preVendas.map((p) => ({ valor: p.id ?? '', rotulo: p.titulo ?? '' }))}
             />
             <FilterDate name="de" valor={de} rotulo="De" />
@@ -108,10 +110,11 @@ export default async function PaginaGrupoVip({ searchParams }: PageProps<'/grupo
               name="pagamento"
               valor={param(busca.pagamento)}
               rotulo="Qualquer pagamento"
+              className="basis-full"
               opcoes={Object.entries(FILTROS_PAGAMENTO).map(([valor, { rotulo }]) => ({ valor, rotulo }))}
             />
             {(preVendaId || de || ate || pagamento) && (
-              <Link href="/grupo-vip" className="text-sm font-semibold text-volt-700 hover:text-ink">
+              <Link href="/grupo-vip" className="w-full py-1 text-center text-sm font-semibold text-volt-700 hover:text-ink lg:w-auto lg:py-0">
                 Limpar filtros
               </Link>
             )}
@@ -144,7 +147,25 @@ export default async function PaginaGrupoVip({ searchParams }: PageProps<'/grupo
         <div className="space-y-6">
           <Card className="evitar-quebra">
             <CardHeader titulo="Quantidade por cerveja" descricao="Total vendido de cada modelo — use para pedir ao fornecedor e separar." />
-            <Table>
+            <ListaMobile>
+              {resumo.map((linha) => (
+                <li key={linha.chave} className="flex items-center gap-3 px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-semibold">{linha.descricao}</p>
+                    <p className="tipo-dado text-[12px] text-suave">
+                      {linha.pedidos} pedido(s) · {formatarMoeda(linha.total)}
+                    </p>
+                  </div>
+                  <p className="tipo-numero shrink-0 text-[24px] leading-none">{formatarNumero(linha.quantidade)}</p>
+                </li>
+              ))}
+              <li className="flex items-center gap-3 bg-papel px-4 py-3">
+                <p className="flex-1 font-semibold">Total</p>
+                <p className="tipo-dado text-[13px] text-suave">{formatarMoeda(resumo.reduce((s, l) => s + l.total, 0))}</p>
+                <p className="tipo-numero text-[24px] leading-none">{formatarNumero(totais.unidades)}</p>
+              </li>
+            </ListaMobile>
+            <Table somenteDesktop>
               <THead>
                 <TR>
                   <TH>Cerveja / modelo</TH>

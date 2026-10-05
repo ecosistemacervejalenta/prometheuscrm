@@ -4,76 +4,83 @@ import { ActionForm, SubmitButton, type AcaoFormulario } from '@/components/form
 import { Checkbox, Field, FormActions, FormSection, Input, MoneyInput, Select, Textarea } from '@/components/form/fields'
 import { ButtonLink } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { CampoCategoria } from '@/features/financeiro/components/campo-categoria'
+import { CamposParcelamento } from '@/features/financeiro/components/campos-parcelamento'
 import { valorParaInput } from '@/lib/format'
-import { CATEGORIAS_CONTA, FORMAS_PAGAMENTO } from '@/lib/rotulos'
+import { FORMAS_PAGAMENTO } from '@/lib/rotulos'
 import type { ContaFixa, ContaPagar } from '@/types'
 
-type OpcaoFornecedor = { id: string; nome: string }
+type OpcaoFornecedor = { id: string; nome: string; ativo: boolean }
 
 function CamposBase({
   fornecedores,
+  categorias,
   inicial,
 }: {
   fornecedores: OpcaoFornecedor[]
-  inicial?: { descricao?: string; categoria?: string; fornecedor_id?: string | null; valor?: number }
+  categorias: string[]
+  inicial?: { descricao?: string; categoria?: string; fornecedor_id?: string | null }
 }) {
+  // Fornecedores inativos só aparecem se já estiverem vinculados a esta conta.
+  const opcoes = fornecedores.filter((f) => f.ativo || f.id === inicial?.fornecedor_id)
   return (
     <>
       <Field label="Descrição" name="descricao" obrigatorio className="sm:col-span-6">
-        <Input name="descricao" defaultValue={inicial?.descricao} placeholder="Ex.: Aluguel, Lote de cervejas, Frete" autoFocus={!inicial} />
+        <Input
+          name="descricao"
+          defaultValue={inicial?.descricao}
+          placeholder="Ex.: Aluguel, Lote de cervejas, Frete"
+          maxLength={200}
+          autoFocus={!inicial}
+        />
       </Field>
-      <Field label="Categoria" name="categoria" className="sm:col-span-3">
-        <Input name="categoria" list="categorias-conta" defaultValue={inicial?.categoria ?? 'Outros'} />
-        <datalist id="categorias-conta">
-          {CATEGORIAS_CONTA.map((c) => (
-            <option key={c} value={c} />
-          ))}
-        </datalist>
-      </Field>
+      <CampoCategoria categorias={categorias} inicial={inicial?.categoria} className="sm:col-span-3" />
       <Field label="Fornecedor" name="fornecedor_id" className="sm:col-span-3">
         <Select name="fornecedor_id" defaultValue={inicial?.fornecedor_id ?? ''}>
           <option value="">Nenhum</option>
-          {fornecedores.map((f) => (
+          {opcoes.map((f) => (
             <option key={f.id} value={f.id}>
               {f.nome}
+              {f.ativo ? '' : ' (inativo)'}
             </option>
           ))}
         </Select>
       </Field>
-      <Field label="Valor" name="valor" obrigatorio className="sm:col-span-3">
-        <MoneyInput name="valor" defaultValue={valorParaInput(inicial?.valor)} />
-      </Field>
     </>
+  )
+}
+
+function FormaPagamento({ inicial }: { inicial?: string | null }) {
+  return (
+    <Select name="forma_pagamento" defaultValue={inicial ?? ''}>
+      <option value="">—</option>
+      {FORMAS_PAGAMENTO.map((f) => (
+        <option key={f}>{f}</option>
+      ))}
+      {inicial && !FORMAS_PAGAMENTO.includes(inicial) && <option>{inicial}</option>}
+    </Select>
   )
 }
 
 export function FormularioContaVariavel({
   acao,
   fornecedores,
+  categorias,
   hoje,
 }: {
   acao: AcaoFormulario
   fornecedores: OpcaoFornecedor[]
+  categorias: string[]
   hoje: string
 }) {
   return (
     <Card className="px-5 pt-6 sm:px-6">
       <ActionForm action={acao}>
-        <FormSection titulo="Conta variável" descricao="Lançamento avulso do mês. Pode ser parcelado.">
-          <CamposBase fornecedores={fornecedores} />
-          <Field label="Vencimento" name="vencimento" obrigatorio className="sm:col-span-3">
-            <Input name="vencimento" type="date" defaultValue={hoje} />
-          </Field>
-          <Field label="Parcelas" name="parcelas" className="sm:col-span-2" dica="1 = à vista">
-            <Input name="parcelas" type="number" min={1} max={36} defaultValue={1} />
-          </Field>
-          <Field label="Forma de pagamento" name="forma_pagamento" className="sm:col-span-4">
-            <Select name="forma_pagamento" defaultValue="">
-              <option value="">—</option>
-              {FORMAS_PAGAMENTO.map((f) => (
-                <option key={f}>{f}</option>
-              ))}
-            </Select>
+        <FormSection titulo="Conta variável" descricao="Lançamento avulso. Parcelada, vira uma conta por mês.">
+          <CamposBase fornecedores={fornecedores} categorias={categorias} />
+          <CamposParcelamento hoje={hoje} />
+          <Field label="Forma de pagamento" name="forma_pagamento" className="sm:col-span-3">
+            <FormaPagamento />
           </Field>
           <div className="sm:col-span-6">
             <Checkbox name="ja_paga" label="Já foi paga" descricao="Marca a primeira parcela como paga hoje." />
@@ -94,11 +101,13 @@ export function FormularioContaVariavel({
 export function FormularioContaFixa({
   acao,
   fornecedores,
+  categorias,
   conta,
   mesAtual,
 }: {
   acao: AcaoFormulario
   fornecedores: OpcaoFornecedor[]
+  categorias: string[]
   conta?: ContaFixa | null
   mesAtual: string
 }) {
@@ -106,9 +115,12 @@ export function FormularioContaFixa({
     <Card className="px-5 pt-6 sm:px-6">
       <ActionForm action={acao}>
         <FormSection titulo="Conta fixa" descricao="Gerada automaticamente todo mês (aluguel, internet, contador...).">
-          <CamposBase fornecedores={fornecedores} inicial={conta ?? undefined} />
+          <CamposBase fornecedores={fornecedores} categorias={categorias} inicial={conta ?? undefined} />
+          <Field label="Valor" name="valor" obrigatorio className="sm:col-span-3" dica="Muda todo mês? Use uma estimativa e ajuste na conta do mês.">
+            <MoneyInput name="valor" defaultValue={valorParaInput(conta?.valor)} />
+          </Field>
           <Field label="Dia do vencimento" name="dia_vencimento" obrigatorio className="sm:col-span-3" dica="Em meses curtos, usa o último dia.">
-            <Input name="dia_vencimento" type="number" min={1} max={31} defaultValue={conta?.dia_vencimento ?? 10} />
+            <Input name="dia_vencimento" type="number" inputMode="numeric" min={1} max={31} defaultValue={conta?.dia_vencimento ?? 10} />
           </Field>
           <Field label="Começa em" name="inicio_em" obrigatorio className="sm:col-span-3">
             <Input name="inicio_em" type="month" defaultValue={conta?.inicio_em.slice(0, 7) ?? mesAtual} />
@@ -117,7 +129,12 @@ export function FormularioContaFixa({
             <Input name="fim_em" type="month" defaultValue={conta?.fim_em?.slice(0, 7) ?? ''} />
           </Field>
           <div className="sm:col-span-6">
-            <Checkbox name="ativa" defaultChecked={conta?.ativa ?? true} label="Ativa" descricao="Desmarque para pausar a geração mensal." />
+            <Checkbox
+              name="ativa"
+              defaultChecked={conta?.ativa ?? true}
+              label="Ativa"
+              descricao="Desmarque para pausar: as contas pendentes dos próximos meses são removidas."
+            />
           </div>
           {conta && (
             <div className="sm:col-span-6">
@@ -125,7 +142,7 @@ export function FormularioContaFixa({
                 name="atualizar_pendentes"
                 defaultChecked
                 label="Aplicar às contas pendentes deste mês em diante"
-                descricao="Atualiza valor e descrição das contas já geradas que ainda não foram pagas."
+                descricao="Atualiza descrição, categoria, fornecedor, valor e dia de vencimento das contas já geradas que ainda não foram pagas."
               />
             </div>
           )}
@@ -145,18 +162,29 @@ export function FormularioContaFixa({
 export function FormularioEdicaoConta({
   acao,
   fornecedores,
+  categorias,
   conta,
 }: {
   acao: AcaoFormulario
   fornecedores: OpcaoFornecedor[]
+  categorias: string[]
   conta: ContaPagar
 }) {
   return (
     <Card className="px-5 pt-6 sm:px-6">
       <ActionForm action={acao}>
         <FormSection titulo={conta.tipo === 'fixa' ? 'Conta fixa deste mês' : 'Conta variável'}>
-          <CamposBase fornecedores={fornecedores} inicial={conta} />
-          <Field label="Vencimento" name="vencimento" obrigatorio className="sm:col-span-3">
+          <CamposBase fornecedores={fornecedores} categorias={categorias} inicial={conta} />
+          <Field label="Valor" name="valor" obrigatorio className="sm:col-span-3">
+            <MoneyInput name="valor" defaultValue={valorParaInput(conta.valor)} />
+          </Field>
+          <Field
+            label="Vencimento"
+            name="vencimento"
+            obrigatorio
+            className="sm:col-span-3"
+            dica={conta.tipo === 'variavel' ? 'Mudou de mês? A conta passa para o mês do novo vencimento.' : undefined}
+          >
             <Input name="vencimento" type="date" defaultValue={conta.vencimento} />
           </Field>
           <Field label="Situação" name="status" className="sm:col-span-2">
@@ -166,16 +194,11 @@ export function FormularioEdicaoConta({
               <option value="cancelada">Cancelada</option>
             </Select>
           </Field>
-          <Field label="Pago em" name="pago_em" className="sm:col-span-2">
+          <Field label="Pago em" name="pago_em" className="sm:col-span-2" dica="Vazio = hoje, se paga.">
             <Input name="pago_em" type="date" defaultValue={conta.pago_em ?? ''} />
           </Field>
           <Field label="Forma de pagamento" name="forma_pagamento" className="sm:col-span-2">
-            <Select name="forma_pagamento" defaultValue={conta.forma_pagamento ?? ''}>
-              <option value="">—</option>
-              {FORMAS_PAGAMENTO.map((f) => (
-                <option key={f}>{f}</option>
-              ))}
-            </Select>
+            <FormaPagamento inicial={conta.forma_pagamento} />
           </Field>
           <Field label="Observações" name="observacoes" className="sm:col-span-6">
             <Textarea name="observacoes" defaultValue={conta.observacoes ?? ''} />

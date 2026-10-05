@@ -33,7 +33,7 @@ export function Toaster({ children }: { children: ReactNode }) {
       {children}
       <div
         aria-live="polite"
-        className="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex flex-col items-center gap-2 sm:inset-x-auto sm:right-6 sm:bottom-6 sm:items-end print:hidden"
+        className="pointer-events-none fixed inset-x-4 bottom-[calc(var(--altura-abas)+env(safe-area-inset-bottom)+12px)] z-50 flex flex-col items-center gap-2 lg:inset-x-auto lg:right-6 lg:bottom-6 lg:items-end print:hidden"
       >
         {avisos.map((aviso) => (
           <div

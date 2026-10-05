@@ -4,6 +4,7 @@ import { ActionButton } from '@/components/ui/action-button'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { ListaMobile } from '@/components/ui/lista-mobile'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { atualizarAcessoMembro } from '@/features/configuracoes/actions'
 import { CabecalhoConfiguracoes } from '@/features/configuracoes/components/cabecalho'
@@ -21,10 +22,39 @@ export default async function PaginaEquipe() {
   return (
     <>
       <CabecalhoConfiguracoes ativa="equipe" />
-      <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
+      <div className="grid gap-5 lg:gap-6 xl:grid-cols-[1fr_420px]">
         <Card className="self-start">
           <CardHeader titulo="Membros" descricao="Contas criadas fora do convite ficam inativas até um administrador liberar." />
-          <Table>
+          <ListaMobile>
+            {equipe.map((m) => (
+              <li key={m.id} className="px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <Avatar nome={m.nome || m.email} variante={m.ativo ? 'volt' : 'claro'} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-semibold">
+                      {m.nome || '—'} {m.id === perfil.id && <span className="text-[12px] font-normal text-suave">(você)</span>}
+                    </p>
+                    <p className="truncate text-[13px] text-suave">{m.email}{m.cargo && ` · ${m.cargo}`}</p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    {m.papel === 'admin' ? <Badge tom="escuro">Admin</Badge> : <Badge>Equipe</Badge>}
+                    {m.ativo ? <Badge tom="sucesso" ponto>Ativo</Badge> : <Badge tom="alerta" ponto>Aguardando</Badge>}
+                  </div>
+                </div>
+                {ehAdmin && m.id !== perfil.id && (
+                  <div className="mt-3 grid grid-cols-2 gap-2 *:w-full">
+                    <ActionButton acao={atualizarAcessoMembro.bind(null, m.id, { ativo: !m.ativo })} variante={m.ativo ? 'secundario' : 'primario'}>
+                      {m.ativo ? 'Bloquear' : 'Liberar acesso'}
+                    </ActionButton>
+                    <ActionButton acao={atualizarAcessoMembro.bind(null, m.id, { papel: m.papel === 'admin' ? 'equipe' : 'admin' })}>
+                      {m.papel === 'admin' ? 'Tornar equipe' : 'Tornar admin'}
+                    </ActionButton>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ListaMobile>
+          <Table somenteDesktop>
             <THead>
               <TR>
                 <TH>Pessoa</TH>

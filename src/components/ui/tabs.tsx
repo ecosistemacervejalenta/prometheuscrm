@@ -11,7 +11,10 @@ export function TabsLinks({
   ativa: string
 }) {
   return (
-    <nav className="mb-6 flex gap-1 overflow-x-auto border-b border-linha print:hidden" aria-label="Seções">
+    <nav
+      className="mb-5 flex gap-1 overflow-x-auto rounded-xl bg-ink/[0.06] p-1 lg:mb-6 lg:rounded-none lg:border-b lg:border-linha lg:bg-transparent lg:p-0 print:hidden"
+      aria-label="Seções"
+    >
       {abas.map((aba) => {
         const selecionada = aba.chave === ativa
         return (
@@ -20,8 +23,11 @@ export function TabsLinks({
             href={aba.href}
             aria-current={selecionada ? 'page' : undefined}
             className={cn(
-              '-mb-px inline-flex items-center gap-2 border-b-2 px-3 pt-1 pb-3 text-sm font-semibold whitespace-nowrap transition-colors',
-              selecionada ? 'border-ink text-ink' : 'border-transparent text-suave hover:text-ink',
+              'inline-flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-[13px] font-semibold whitespace-nowrap transition-colors',
+              'lg:-mb-px lg:flex-none lg:justify-start lg:rounded-none lg:border-b-2 lg:px-3 lg:pt-1 lg:pb-3 lg:text-sm',
+              selecionada
+                ? 'bg-superficie text-ink shadow-sm lg:border-ink lg:bg-transparent lg:shadow-none'
+                : 'text-suave hover:text-ink lg:border-transparent',
             )}
           >
             {aba.rotulo}

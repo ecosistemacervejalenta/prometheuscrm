@@ -1,25 +1,26 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
-import { ChevronLeft, ChevronRight, Plus, Repeat } from 'lucide-react'
+import { Plus, Repeat, Tags } from 'lucide-react'
 
 import { ButtonLink } from '@/components/ui/button'
 import { Kpi } from '@/components/ui/kpi'
 import { PageHeader } from '@/components/ui/page-header'
 import { TabelaContas } from '@/features/contas/components/tabela-contas'
-import { contasDoMes, resumirContas } from '@/features/contas/queries'
-import { mesAtual, mesValido, somarMeses } from '@/lib/datas'
-import { formatarMes, formatarMoeda } from '@/lib/format'
+import { contasAtrasadasAntesDe, contasDoMes, resumirContas } from '@/features/contas/queries'
+import { NavegadorMes } from '@/features/financeiro/components/navegador-mes'
+import { mesAtual, mesValido } from '@/lib/datas'
+import { formatarMoeda } from '@/lib/format'
 import { param } from '@/lib/utils'
 
 export const metadata: Metadata = { title: 'Contas a pagar' }
 
 export default async function PaginaContas({ searchParams }: PageProps<'/contas'>) {
   const mes = mesValido(param((await searchParams).mes))
-  const contas = await contasDoMes(mes)
+  const ehMesAtual = mes === mesAtual()
+  const [contas, atrasadas] = await Promise.all([contasDoMes(mes), ehMesAtual ? contasAtrasadasAntesDe(mes) : []])
   const resumo = resumirContas(contas)
   const fixas = contas.filter((c) => c.tipo === 'fixa')
   const variaveis = contas.filter((c) => c.tipo === 'variavel')
-  const classeSeta = 'grid size-10 place-items-center rounded-xl border border-linha bg-superficie hover:bg-papel'
+  const totalAtrasadas = atrasadas.reduce((s, c) => s + Number(c.valor ?? 0), 0)
 
   return (
     <>
@@ -28,6 +29,9 @@ export default async function PaginaContas({ searchParams }: PageProps<'/contas'
         titulo="Contas a pagar"
         acoes={
           <>
+            <ButtonLink href="/contas/categorias">
+              <Tags /> Categorias
+            </ButtonLink>
             <ButtonLink href="/contas/fixas">
               <Repeat /> Contas fixas
             </ButtonLink>
@@ -38,20 +42,7 @@ export default async function PaginaContas({ searchParams }: PageProps<'/contas'
         }
       />
 
-      <div className="mb-6 flex items-center gap-2">
-        <Link href={`/contas?mes=${somarMeses(mes, -1)}`} className={classeSeta} aria-label="Mês anterior">
-          <ChevronLeft className="size-4" />
-        </Link>
-        <p className="tipo-h3 min-w-44 text-center">{formatarMes(mes)}</p>
-        <Link href={`/contas?mes=${somarMeses(mes, 1)}`} className={classeSeta} aria-label="Próximo mês">
-          <ChevronRight className="size-4" />
-        </Link>
-        {mes !== mesAtual() && (
-          <Link href="/contas" className="ml-2 text-sm font-semibold text-volt-700 hover:text-ink">
-            Voltar para o mês atual
-          </Link>
-        )}
-      </div>
+      <NavegadorMes caminho="/contas" mes={mes} />
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi rotulo="Total do mês" valor={formatarMoeda(resumo.total)} detalhe={`${contas.length} contas`} />
@@ -66,6 +57,14 @@ export default async function PaginaContas({ searchParams }: PageProps<'/contas'
       </div>
 
       <div className="space-y-6">
+        {atrasadas.length > 0 && (
+          <TabelaContas
+            titulo="Atrasadas de meses anteriores"
+            descricao={`${atrasadas.length} conta(s) ainda não paga(s) · ${formatarMoeda(totalAtrasadas)}`}
+            contas={atrasadas}
+            dataCompleta
+          />
+        )}
         <TabelaContas
           titulo="Contas fixas"
           contas={fixas}

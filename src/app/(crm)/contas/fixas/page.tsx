@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { ButtonLink } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
+import { ListaMobile } from '@/components/ui/lista-mobile'
 import { PageHeader } from '@/components/ui/page-header'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { alternarContaFixa } from '@/features/contas/actions'
@@ -40,7 +41,30 @@ export default async function PaginaContasFixas() {
             acao={<ButtonLink href="/contas/fixas/nova" variante="primario"><Plus /> Nova conta fixa</ButtonLink>}
           />
         ) : (
-          <Table>
+          <>
+          <ListaMobile className="border-t-0">
+            {contas.map((c) => (
+              <li key={c.id} className={c.ativa ? 'px-4 py-3' : 'px-4 py-3 opacity-60'}>
+                <Link href={`/contas/fixas/${c.id}/editar`} className="flex items-start gap-3 active:opacity-70">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-semibold">{c.descricao}</p>
+                    <p className="truncate text-[13px] text-suave">
+                      todo dia {String(c.dia_vencimento).padStart(2, '0')} · {c.categoria}
+                      {c.fornecedores?.nome && ` · ${c.fornecedores.nome}`}
+                    </p>
+                  </div>
+                  <p className="tipo-dado shrink-0 text-[15px]">{formatarMoeda(c.valor)}</p>
+                </Link>
+                <div className="mt-2.5 flex items-center justify-between gap-2">
+                  {c.ativa ? <Badge tom="sucesso" ponto>Ativa</Badge> : <Badge>Pausada</Badge>}
+                  <ActionButton acao={alternarContaFixa.bind(null, c.id, !c.ativa)}>
+                    {c.ativa ? <><Pause /> Pausar</> : <><Play /> Reativar</>}
+                  </ActionButton>
+                </div>
+              </li>
+            ))}
+          </ListaMobile>
+          <Table somenteDesktop>
             <THead>
               <TR>
                 <TH>Conta</TH>
@@ -79,6 +103,7 @@ export default async function PaginaContasFixas() {
               ))}
             </TBody>
           </Table>
+          </>
         )}
       </Card>
     </>

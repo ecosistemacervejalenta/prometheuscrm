@@ -8,6 +8,7 @@ import { Card, CardHeader } from '@/components/ui/card'
 import { CopyButton } from '@/components/ui/copy-button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Kpi } from '@/components/ui/kpi'
+import { ListaMobile } from '@/components/ui/lista-mobile'
 import { PageHeader } from '@/components/ui/page-header'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
@@ -80,13 +81,13 @@ export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/
         {pv.previsao_entrega && <span className="tipo-dado text-[12px] text-suave">· entrega prevista {formatarData(pv.previsao_entrega)}</span>}
       </div>
 
-      <section className="mb-6 rounded-cartao bg-ink p-5 text-white sm:p-6 print:hidden">
+      <section className="mb-5 rounded-cartao bg-ink p-4 text-white sm:p-6 lg:mb-6 print:hidden">
         <p className="tipo-rotulo text-volt">Link da pré-venda</p>
         <p className="tipo-dado mt-2 text-base break-all text-white sm:text-lg">{link}</p>
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-2 *:w-full sm:flex sm:flex-wrap sm:*:w-auto">
           <CopyButton texto={link} rotulo="Copiar link" variante="primario" />
           <CopyButton texto={mensagem} rotulo="Copiar mensagem" />
-          <ButtonExternal href={link} tamanho="sm" variante="secundario">
+          <ButtonExternal href={link} tamanho="sm" variante="secundario" className="col-span-2">
             <ExternalLink /> Abrir como cliente
           </ButtonExternal>
         </div>
@@ -104,7 +105,34 @@ export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/
 
       <Card className="mb-6">
         <CardHeader titulo="Cervejas da pré-venda" descricao="Vendido e saldo por item." />
-        <Table>
+        <ListaMobile>
+          {itens.map((i) => {
+            const total = i.quantidade_disponivel
+            const progresso = total ? Math.min(100, ((i.vendido ?? 0) / total) * 100) : null
+            return (
+              <li key={i.id} className="flex items-center gap-3 px-4 py-3">
+                <FotoProduto url={i.imagem_url} nome={i.nome ?? ''} className="size-11" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="truncate text-[15px] font-semibold">{i.nome}</p>
+                    <p className="tipo-dado shrink-0 text-[13px]">{formatarMoeda(i.preco)}</p>
+                  </div>
+                  <p className="tipo-dado text-[12px] text-suave">
+                    {formatarNumero(i.vendido)} vendido(s)
+                    {total ? ` · restam ${formatarNumero(i.restante)}` : ''}
+                    {i.limite_por_cliente ? ` · máx. ${i.limite_por_cliente}/cliente` : ''}
+                  </p>
+                  {progresso !== null && (
+                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-papel">
+                      <div className="h-full rounded-full bg-volt" style={{ width: `${progresso}%` }} />
+                    </div>
+                  )}
+                </div>
+              </li>
+            )
+          })}
+        </ListaMobile>
+        <Table somenteDesktop>
           <THead>
             <TR>
               <TH>Cerveja</TH>

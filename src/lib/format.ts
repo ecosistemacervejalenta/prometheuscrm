@@ -28,11 +28,22 @@ export function valorParaInput(valor: number | string | null | undefined): strin
   return Number(valor).toFixed(2).replace('.', ',')
 }
 
-/** Converte texto de dinheiro em número: "1.234,56" | "1234.56" | "R$ 10" → 1234.56 */
+/**
+ * Converte texto de dinheiro em número (NaN se inválido):
+ * "1.234,56" | "1234,56" | "1234.56" | "R$ 10" | "1.200" (mil e duzentos) | "1,234.56".
+ * Com vírgula e ponto, o último separador é o decimal. Só com ponto, grupos de
+ * 3 dígitos ("1.200", "12.500.000") são milhares, como se escreve no Brasil.
+ */
 export function lerDinheiro(texto: string): number {
   const limpo = texto.replace(/[R$\s]/g, '')
-  const normalizado = limpo.includes(',') ? limpo.replace(/\./g, '').replace(',', '.') : limpo
-  return Number(normalizado)
+  const virgula = limpo.lastIndexOf(',')
+  const ponto = limpo.lastIndexOf('.')
+  if (virgula >= 0 && ponto >= 0) {
+    return virgula > ponto ? Number(limpo.replace(/\./g, '').replace(',', '.')) : Number(limpo.replace(/,/g, ''))
+  }
+  if (virgula >= 0) return Number(limpo.replace(',', '.'))
+  if (/^-?\d{1,3}(\.\d{3})+$/.test(limpo)) return Number(limpo.replace(/\./g, ''))
+  return Number(limpo)
 }
 
 function data(iso: string) {

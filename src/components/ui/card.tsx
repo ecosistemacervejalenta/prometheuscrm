@@ -27,7 +27,7 @@ export function CardHeader({
   className?: string
 }) {
   return (
-    <header className={cn('flex flex-wrap items-start justify-between gap-3 px-5 pt-5 pb-3', className)}>
+    <header className={cn('flex flex-wrap items-start justify-between gap-3 px-4 pt-4 pb-3 lg:px-5 lg:pt-5', className)}>
       <div className="min-w-0">
         <h2 className="tipo-h3 text-[16px] leading-6">{titulo}</h2>
         {descricao && <p className="mt-0.5 text-sm text-suave">{descricao}</p>}
@@ -38,5 +38,5 @@ export function CardHeader({
 }
 
 export function CardContent({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('px-5 pb-5', className)}>{children}</div>
+  return <div className={cn('px-4 pb-4 lg:px-5 lg:pb-5', className)}>{children}</div>
 }

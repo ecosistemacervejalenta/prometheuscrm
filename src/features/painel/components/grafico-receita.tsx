@@ -26,7 +26,8 @@ const ALTURA = 200
 
 export function GraficoReceita({ semanas }: { semanas: SemanaReceita[] }) {
   const [ativa, setAtiva] = useState<number | null>(null)
-  const maximo = Math.max(...semanas.map((s) => s.total), 1)
+  // Escala mínima de R$ 100 evita eixo sem sentido quando ainda não há vendas.
+  const maximo = Math.max(...semanas.map((s) => s.total), 100)
   const escala = Math.pow(10, Math.floor(Math.log10(maximo)))
   const teto = Math.ceil(maximo / escala) * escala
   const presentes = SERIES.filter((s) => semanas.some((sem) => (sem.valores[s.canal] ?? 0) > 0))

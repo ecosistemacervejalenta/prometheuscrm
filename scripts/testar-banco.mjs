@@ -55,6 +55,15 @@ const show = (label, v) => {
   if (process.env.VERBOSE) console.log(`\n— ${label}\n`, JSON.stringify(v, null, 2))
   else console.log(`• ${label}`)
 }
+const expectEq = (label, atual, esperado) => {
+  const a = JSON.stringify(atual)
+  const e = JSON.stringify(esperado)
+  if (a === e) console.log(`✓ ${label}`)
+  else {
+    falhas++
+    console.log(`✗ ${label}: esperado ${e}, veio ${a}`)
+  }
+}
 const expectError = async (label, sql, params) => {
   try {
     await db.query(sql, params)
@@ -160,8 +169,132 @@ show('salvar_pre_venda', await q(`select pv.titulo, pv.slug, pv.canal, i.preco, 
 await expectError('pré-venda sem itens', `select salvar_pre_venda('{"titulo":"x"}'::jsonb, '[]'::jsonb, $1)`, [pv2.id])
 await expectError('slug inválido', `select salvar_pre_venda('{"titulo":"x","slug":"Com Espaço"}'::jsonb, $1::jsonb)`, [JSON.stringify([{ produto_id: itens[0].produto_id, preco: 1 }])])
 
+// Financeiro --------------------------------------------------------------------
+const um = async (sql, params) => (await q(sql, params))[0]
+const mes = async (deslocamento) =>
+  (await um(`select to_char(date_trunc('month', hoje_brasilia()) + make_interval(months => $1), 'YYYY-MM-DD') m`, [deslocamento])).m
+
+// Categorias: iniciais, cadastro automático, grafia reaproveitada, sem duplicatas
+const cats = await um(`select
+  count(*) filter (where natureza = 'pagar') pagar, count(*) filter (where natureza = 'receber') receber,
+  bool_and(nome <> '') ok from categorias_financeiras`)
+expectEq('categorias iniciais (pagar ≥ 11, receber ≥ 6)', Number(cats.pagar) >= 11 && Number(cats.receber) >= 6, true)
+const cpCat = await um(`insert into contas_pagar (descricao, categoria, competencia, vencimento, valor)
+  values ('Teste categoria', '  mercadorias ', hoje_brasilia(), hoje_brasilia(), 10) returning id, categoria`)
+expectEq('categoria reaproveita a grafia cadastrada', cpCat.categoria, 'Mercadorias')
+const cpNova = await um(`insert into contas_pagar (descricao, categoria, competencia, vencimento, valor)
+  values ('Teste categoria nova', 'Frete   Expresso', hoje_brasilia(), hoje_brasilia(), 10) returning categoria`)
+expectEq('categoria nova é normalizada', cpNova.categoria, 'Frete Expresso')
+await q(`insert into contas_fixas (descricao, categoria, valor, dia_vencimento) values ('Teste fixa categoria', 'FRETE EXPRESSO', 1, 1)`)
+expectEq('categoria nova cadastrada uma única vez',
+  Number((await um(`select count(*) n from categorias_financeiras where natureza = 'pagar' and lower(nome) = 'frete expresso'`)).n), 1)
+expectEq('categoria vazia vira Outros',
+  (await um(`insert into contas_pagar (descricao, categoria, competencia, vencimento, valor) values ('x', '   ', hoje_brasilia(), hoje_brasilia(), 1) returning categoria`)).categoria, 'Outros')
+await expectError('categoria duplicada (maiúsculas)', `insert into categorias_financeiras (natureza, nome) values ('pagar', 'OUTROS')`)
+await expectError('categoria com mais de 60 caracteres', `insert into categorias_financeiras (natureza, nome) values ('pagar', repeat('a', 61))`)
+await q(`insert into categorias_financeiras (natureza, nome) values ('receber', 'Frete Expresso')`)
+show('mesma categoria nas duas naturezas', await q(`select natureza, nome from categorias_financeiras where nome = 'Frete Expresso' order by natureza`))
+
+// Contas a pagar: competência, data de pagamento e situação (fuso de Brasília)
+const variavel = await um(`insert into contas_pagar (descricao, competencia, vencimento, valor)
+  values ('Variável que muda de mês', hoje_brasilia(), hoje_brasilia(), 50) returning id`)
+await q(`update contas_pagar set vencimento = (date_trunc('month', hoje_brasilia()) + interval '1 month 4 days')::date where id = $1`, [variavel.id])
+expectEq('variável muda de mês junto com o vencimento',
+  (await um(`select to_char(competencia, 'YYYY-MM-DD') c from contas_pagar where id = $1`, [variavel.id])).c, await mes(1))
+await q(`update contas_pagar set status = 'paga' where id = $1`, [variavel.id])
+expectEq('pagamento sem data usa hoje (Brasília) e o valor da conta',
+  await um(`select pago_em = hoje_brasilia() as hoje, valor_pago::float as valor from contas_pagar where id = $1`, [variavel.id]), { hoje: true, valor: 50 })
+await q(`update contas_pagar set status = 'pendente' where id = $1`, [variavel.id])
+expectEq('reabrir limpa data e valor pagos',
+  await um(`select pago_em, valor_pago from contas_pagar where id = $1`, [variavel.id]), { pago_em: null, valor_pago: null })
+await q(`insert into contas_pagar (descricao, competencia, vencimento, valor) values
+  ('Situação 1 ontem', hoje_brasilia(), hoje_brasilia() - 1, 1),
+  ('Situação 2 hoje', hoje_brasilia(), hoje_brasilia(), 1),
+  ('Situação 3 daqui 10 dias', hoje_brasilia(), hoje_brasilia() + 10, 1)`)
+expectEq('vencida / vence logo / em dia',
+  (await q(`select situacao from vw_contas_pagar where descricao like 'Situação %' order by descricao`)).map((r) => r.situacao),
+  ['vencida', 'vence_logo', 'em_dia'])
+
+// Contas fixas: geração, pausa, fim, aplicar ao pendente e exclusão
+const fixa = await um(`insert into contas_fixas (descricao, categoria, valor, dia_vencimento, inicio_em)
+  values ('Fixa de teste', 'Estrutura', 100, 31, date_trunc('month', hoje_brasilia()) - interval '2 months') returning id`)
+for (const d of [0, 1, 2]) await q(`select gerar_contas_fixas($1::date)`, [await mes(d)])
+const lancamentos = async () => (await q(`select to_char(competencia, 'YYYY-MM') m, status, valor::float valor, extract(day from vencimento)::int dia
+  from contas_pagar where conta_fixa_id = $1 order by competencia`, [fixa.id]))
+expectEq('fixa gerada no mês atual e nos 2 próximos', (await lancamentos()).length, 3)
+expectEq('dia 31 vira o último dia do mês',
+  (await um(`select vencimento = (date_trunc('month', hoje_brasilia()) + interval '1 month - 1 day')::date ok from contas_pagar where conta_fixa_id = $1 and competencia = date_trunc('month', hoje_brasilia())`, [fixa.id])).ok, true)
+expectEq('gerar de novo não duplica', (await um(`select gerar_contas_fixas($1::date) n`, [await mes(1)])).n, 0)
+await q(`update contas_fixas set ativa = false where id = $1`, [fixa.id])
+expectEq('pausar remove só os pendentes dos próximos meses', (await lancamentos()).map((l) => l.m), [(await mes(0)).slice(0, 7)])
+expectEq('pausada não é gerada', (await um(`select gerar_contas_fixas($1::date) n`, [await mes(1)])).n, 0)
+await q(`update contas_fixas set ativa = true where id = $1`, [fixa.id])
+for (const d of [1, 2]) await q(`select gerar_contas_fixas($1::date)`, [await mes(d)])
+await q(`update contas_fixas set valor = 150, dia_vencimento = 10 where id = $1`, [fixa.id])
+expectEq('aplicar modelo às pendentes', (await um(`select aplicar_conta_fixa_aos_pendentes($1) n`, [fixa.id])).n, 3)
+expectEq('valor e dia atualizados', (await lancamentos()).map((l) => [l.valor, l.dia]), [[150, 10], [150, 10], [150, 10]])
+await q(`update contas_pagar set status = 'paga' where conta_fixa_id = $1 and competencia = date_trunc('month', hoje_brasilia())`, [fixa.id])
+expectEq('aplicar não mexe em conta paga', (await um(`select aplicar_conta_fixa_aos_pendentes($1) n`, [fixa.id])).n, 2)
+await q(`update contas_fixas set fim_em = date_trunc('month', hoje_brasilia()) - interval '1 month' where id = $1`, [fixa.id])
+expectEq('encerrar remove pendentes depois do fim e mantém a paga', (await lancamentos()).map((l) => l.status), ['paga'])
+const fixa2 = await um(`insert into contas_fixas (descricao, valor, dia_vencimento) values ('Fixa excluída', 80, 5) returning id`)
+for (const d of [0, 1]) await q(`select gerar_contas_fixas($1::date)`, [await mes(d)])
+await q(`delete from contas_fixas where id = $1`, [fixa2.id])
+expectEq('excluir modelo mantém o mês atual e remove os próximos',
+  (await q(`select to_char(competencia, 'YYYY-MM') m, conta_fixa_id from contas_pagar where descricao = 'Fixa excluída' order by competencia`)),
+  [{ m: (await mes(0)).slice(0, 7), conta_fixa_id: null }])
+const fixaAdiada = await um(`update contas_pagar set vencimento = vencimento + 40 where descricao = 'Aluguel do galpão' and competencia = date_trunc('month', hoje_brasilia()) returning to_char(competencia, 'YYYY-MM-DD') c`)
+expectEq('fixa com vencimento adiado continua no mês de origem', fixaAdiada.c, await mes(0))
+expectEq('e não é gerada de novo', (await um(`select gerar_contas_fixas(hoje_brasilia()) n`)).n, 0)
+
+// Contas a receber
+const rec = await um(`insert into contas_receber (descricao, categoria, pagador, competencia, vencimento, valor)
+  values ('Venda a prazo', 'vendas a PRAZO', '   ', hoje_brasilia(), (date_trunc('month', hoje_brasilia()) + interval '1 month 9 days')::date, 300)
+  returning id, categoria, pagador, to_char(competencia, 'YYYY-MM-DD') competencia`)
+expectEq('receber: categoria, pagador vazio e mês do vencimento', { ...rec, id: undefined },
+  { categoria: 'Vendas a prazo', pagador: null, competencia: await mes(1) })
+await q(`insert into contas_receber (descricao, categoria, competencia, vencimento, valor) values ('Patrocínio', 'Patrocínio', hoje_brasilia(), hoje_brasilia(), 1000)`)
+expectEq('receber: categoria nova cadastrada como receber',
+  (await q(`select natureza from categorias_financeiras where nome = 'Patrocínio'`)).map((r) => r.natureza), ['receber'])
+await q(`update contas_receber set status = 'recebida' where id = $1`, [rec.id])
+expectEq('receber: recebida sem data usa hoje e o valor',
+  await um(`select recebido_em = hoje_brasilia() as hoje, valor_recebido::float as valor from contas_receber where id = $1`, [rec.id]), { hoje: true, valor: 300 })
+await q(`update contas_receber set status = 'pendente' where id = $1`, [rec.id])
+expectEq('receber: reabrir limpa o recebimento',
+  await um(`select recebido_em, valor_recebido from contas_receber where id = $1`, [rec.id]), { recebido_em: null, valor_recebido: null })
+await q(`update contas_receber set vencimento = hoje_brasilia() - 1 where id = $1`, [rec.id])
+expectEq('receber: muda de mês e fica vencida',
+  await um(`select to_char(competencia, 'YYYY-MM-DD') c, situacao from vw_contas_receber where id = $1`, [rec.id]),
+  { c: (await um(`select to_char(date_trunc('month', hoje_brasilia() - 1), 'YYYY-MM-DD') m`)).m, situacao: 'vencida' })
+await expectError('receber: valor negativo', `insert into contas_receber (descricao, competencia, vencimento, valor) values ('x', hoje_brasilia(), hoje_brasilia(), -1)`)
+await expectError('receber: sem descrição', `insert into contas_receber (descricao, competencia, vencimento, valor) values ('  ', hoje_brasilia(), hoje_brasilia(), 1)`)
+// Renomear e excluir categorias
+const catFrete = await um(`select id from categorias_financeiras where natureza = 'pagar' and nome = 'Frete Expresso'`)
+const contasFrete = (await um(`select count(*)::int n from contas_pagar where categoria = 'Frete Expresso'`)).n
+await q(`select renomear_categoria_financeira($1, '  Frete   rápido ')`, [catFrete.id])
+expectEq('renomear leva as contas e o modelo junto', await um(`select
+  (select count(*)::int from contas_pagar where categoria = 'Frete rápido') contas,
+  (select count(*)::int from contas_fixas where categoria = 'Frete rápido') fixas,
+  (select count(*)::int from contas_pagar where categoria = 'Frete Expresso') antigas,
+  (select count(*)::int from categorias_financeiras where natureza = 'receber' and nome = 'Frete Expresso') receber_intacta`),
+  { contas: contasFrete, fixas: 1, antigas: 0, receber_intacta: 1 })
+await q(`select renomear_categoria_financeira($1, 'FRETE RÁPIDO')`, [catFrete.id])
+expectEq('renomear só mudando maiúsculas', (await um(`select nome from categorias_financeiras where id = $1`, [catFrete.id])).nome, 'FRETE RÁPIDO')
+await expectError('renomear para nome existente', `select renomear_categoria_financeira($1, 'mercadorias')`, [catFrete.id])
+await expectError('renomear para vazio', `select renomear_categoria_financeira($1, '   ')`, [catFrete.id])
+await expectError('renomear Outros', `select renomear_categoria_financeira((select id from categorias_financeiras where natureza = 'pagar' and nome = 'Outros'), 'Diversos')`)
+await expectError('excluir Outros', `select excluir_categoria_financeira((select id from categorias_financeiras where natureza = 'receber' and nome = 'Outros'))`)
+await q(`select excluir_categoria_financeira($1)`, [catFrete.id])
+expectEq('excluir manda as contas para Outros', await um(`select
+  (select count(*)::int from contas_pagar where descricao = 'Teste categoria nova' and categoria = 'Outros') contas,
+  (select count(*)::int from contas_fixas where descricao = 'Teste fixa categoria' and categoria = 'Outros') fixas,
+  (select count(*)::int from categorias_financeiras where id = $1) categoria`, [catFrete.id]),
+  { contas: 1, fixas: 1, categoria: 0 })
+
+show('contas a receber (seed + testes)', await q(`select descricao, categoria, pagador, vencimento, valor, status, situacao from vw_contas_receber order by vencimento`))
+
 // RLS ---------------------------------------------------------------------------
-const uid = (await q(`insert into auth.users (email, raw_user_meta_data) values ('ana@prometheus.beer', '{"nome":"Ana Ribeiro"}') returning id`))[0].id
+const uid =(await q(`insert into auth.users (email, raw_user_meta_data) values ('ana@prometheus.beer', '{"nome":"Ana Ribeiro"}') returning id`))[0].id
 const uid2 = (await q(`insert into auth.users (email) values ('joao@prometheus.beer') returning id`))[0].id
 show('perfis', await q(`select nome, email, papel from perfis order by criado_em`))
 
@@ -169,10 +302,28 @@ await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub'
 show('autenticado (membro) vê clientes', (await q(`select count(*) from clientes`))[0])
 show('autenticado cria pedido manual', (await q(`select numero, total, criado_por is not null as tem_autor from criar_pedido((select id from clientes where nome='Bruno Ferreira'), $1::jsonb, null, 'loja')`, [JSON.stringify([{ produto_id: itens[0].produto_id, quantidade: 1 }])]))[0])
 await expectError('autenticado não chama função do link público', `select identificar_cliente_pre_venda('11987654321')`)
+const recMembro = await um(`insert into contas_receber (descricao, categoria, competencia, vencimento, valor)
+  values ('Lançada pela equipe', 'Categoria da equipe', hoje_brasilia(), hoje_brasilia() + 5, 99.9) returning id`).catch((e) => ({ erro: e.message }))
+expectEq('membro lança conta a receber com categoria nova', recMembro.erro ?? Boolean(recMembro.id), true)
+expectEq('membro vê a categoria criada', Number((await um(`select count(*) n from categorias_financeiras where nome = 'Categoria da equipe'`)).n), 1)
+await q(`select renomear_categoria_financeira((select id from categorias_financeiras where nome = 'Categoria da equipe'), 'Categoria renomeada')`)
+expectEq('membro renomeia categoria', (await um(`select categoria from contas_receber where id = $1`, [recMembro.id])).categoria, 'Categoria renomeada')
+await q(`update contas_receber set status = 'recebida' where id = $1`, [recMembro.id])
+expectEq('membro lê vw_contas_receber', (await um(`select situacao from vw_contas_receber where id = $1`, [recMembro.id])).situacao, 'recebida')
+expectEq('membro lê vw_contas_pagar (hoje_brasilia liberada)', Number((await um(`select count(*) n from vw_contas_pagar`)).n) > 0, true)
+const fixaMembro = await um(`insert into contas_fixas (descricao, valor, dia_vencimento) values ('Fixa da equipe', 10, 1) returning id`)
+await q(`select gerar_contas_fixas(hoje_brasilia())`)
+await q(`update contas_fixas set valor = 12 where id = $1`, [fixaMembro.id])
+expectEq('membro aplica modelo às pendentes', (await um(`select aplicar_conta_fixa_aos_pendentes($1) n`, [fixaMembro.id])).n, 1)
+await q(`update contas_fixas set ativa = false where id = $1`, [fixaMembro.id])
+await q(`delete from contas_fixas where id = $1`, [fixaMembro.id])
 await db.exec(`reset role;`)
 
 await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${uid2}', false);`)
 show('autenticado inativo (novo usuário) vê clientes (0)', (await q(`select count(*) from clientes`))[0])
+expectEq('inativo não vê contas a receber', Number((await um(`select count(*) n from contas_receber`)).n), 0)
+expectEq('inativo não vê categorias', Number((await um(`select count(*) n from categorias_financeiras`)).n), 0)
+await expectError('inativo não lança conta a receber', `insert into contas_receber (descricao, competencia, vencimento, valor) values ('x', current_date, current_date, 1)`)
 await db.exec(`reset role; update perfis set ativo = true where id = '${uid2}'; set role authenticated; select set_config('request.jwt.claim.sub', '${uid2}', false);`)
 await q(`update perfis set nome = 'João Silva' where id = $1`, [uid2])
 await expectError('equipe tenta virar admin', `update perfis set papel = 'admin' where id = $1`, [uid2])
@@ -184,6 +335,10 @@ show('perfil do João', (await q(`select nome, cargo, papel, ativo from perfis w
 await db.exec(`set role anon; select set_config('request.jwt.claim.sub', '', false);`)
 await expectError('anon lê clientes', `select * from clientes`)
 await expectError('anon chama função', `select identificar_cliente_pre_venda('11987654321')`)
+await expectError('anon lê contas a receber', `select * from contas_receber`)
+await expectError('anon lê categorias', `select * from categorias_financeiras`)
+await expectError('anon lê vw_contas_receber', `select * from vw_contas_receber`)
+await expectError('anon chama aplicar_conta_fixa_aos_pendentes', `select aplicar_conta_fixa_aos_pendentes(gen_random_uuid())`)
 await db.exec(`reset role;`)
 
 await db.exec(`set role service_role;`)

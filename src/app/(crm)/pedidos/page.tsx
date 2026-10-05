@@ -6,6 +6,7 @@ import { ButtonLink } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FilterBar, FilterSelect, SearchField } from '@/components/ui/filter-bar'
+import { ItemMobile, ListaMobile } from '@/components/ui/lista-mobile'
 import { PageHeader } from '@/components/ui/page-header'
 import { Pagination } from '@/components/ui/pagination'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
@@ -46,7 +47,7 @@ export default async function PaginaPedidos({ searchParams }: PageProps<'/pedido
         }
       />
       <Card>
-        <div className="border-b border-linha p-4">
+        <div className="border-b border-linha p-3 lg:p-4">
           <FilterBar caminho="/pedidos">
             <SearchField valor={q} placeholder="Nº do pedido ou nome do cliente" />
             <FilterSelect
@@ -84,7 +85,33 @@ export default async function PaginaPedidos({ searchParams }: PageProps<'/pedido
           />
         ) : (
           <>
-            <Table>
+            <ListaMobile>
+              {pedidos.map((p) => (
+                <ItemMobile
+                  key={p.id}
+                  href={`/pedidos/${p.id}`}
+                  titulo={p.cliente_nome}
+                  subtitulo={
+                    <span className="tipo-dado text-[12px]">
+                      {numeroPedido(p.numero)} · {formatarDataCurta(p.criado_em)} {formatarHora(p.criado_em)} · {p.unidades} un.
+                    </span>
+                  }
+                  extra={
+                    <div className="flex flex-wrap gap-1">
+                      <CanalBadge canal={p.canal} />
+                      <StatusPedidoBadge status={p.status} />
+                    </div>
+                  }
+                  fim={
+                    <>
+                      <p className="tipo-dado text-[14px]">{formatarMoeda(p.total)}</p>
+                      <div className="mt-1"><PagamentoBadge status={p.status_pagamento} /></div>
+                    </>
+                  }
+                />
+              ))}
+            </ListaMobile>
+            <Table somenteDesktop>
               <THead>
                 <TR>
                   <TH>Pedido</TH>

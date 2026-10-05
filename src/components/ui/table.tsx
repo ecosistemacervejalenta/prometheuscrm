@@ -2,10 +2,22 @@ import type { ComponentProps, ReactNode } from 'react'
 
 import { cn } from '@/lib/utils'
 
-/** Tabela com o visual do mockup: cabeçalho em mono caixa alta e linhas finas. */
-export function Table({ className, children }: { className?: string; children: ReactNode }) {
+/**
+ * Tabela com o visual do mockup: cabeçalho em mono caixa alta e linhas finas.
+ * `somenteDesktop`: no celular a tabela some e a página mostra uma <ListaMobile>
+ * (a tabela continua aparecendo na impressão).
+ */
+export function Table({
+  className,
+  children,
+  somenteDesktop = false,
+}: {
+  className?: string
+  children: ReactNode
+  somenteDesktop?: boolean
+}) {
   return (
-    <div className={cn('-mx-px overflow-x-auto', className)}>
+    <div className={cn('-mx-px overflow-x-auto', somenteDesktop && 'hidden lg:block print:block', className)}>
       <table className="w-full min-w-[640px] border-collapse text-left text-sm print:min-w-0">{children}</table>
     </div>
   )

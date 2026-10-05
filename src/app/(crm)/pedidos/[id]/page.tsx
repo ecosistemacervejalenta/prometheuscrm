@@ -7,6 +7,7 @@ import { LinhaDoTempo } from '@/components/dominio/linha-do-tempo'
 import { PrintButton } from '@/components/ui/print-button'
 import { ButtonExternal } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { ListaMobile } from '@/components/ui/lista-mobile'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
 import { linkDeCobranca } from '@/features/pedidos/cobranca'
@@ -40,7 +41,7 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
 
   return (
     <>
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <header className="mb-5 flex flex-wrap items-end justify-between gap-4 lg:mb-6">
         <div>
           <Link href="/pedidos" className="text-sm font-medium text-volt-700 hover:text-ink print:hidden">‹ Pedidos</Link>
           <p className="tipo-dado text-[13px] text-suave">{formatarDataHora(pedido.criado_em)}</p>
@@ -55,7 +56,7 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
             )}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 print:hidden">
+        <div className="flex w-full flex-wrap items-center gap-2 *:grow lg:w-auto lg:*:grow-0 print:hidden">
           <SeletorStatus pedidoId={pedido.id} status={pedido.status} />
           <PrintButton><Printer /> Imprimir</PrintButton>
           {emAberto && <BotaoCobrar pedidoId={pedido.id} href={linkCobranca} tamanho="md" rotulo="Cobrar no WhatsApp" />}
@@ -66,7 +67,21 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
         <div className="space-y-6">
           <Card>
             <CardHeader titulo="Itens" descricao={`${pedido.pedido_itens.reduce((s, i) => s + i.quantidade, 0)} unidade(s)`} />
-            <Table>
+            <ListaMobile>
+              {pedido.pedido_itens.map((i) => (
+                <li key={i.id} className="flex items-center gap-3 px-4 py-3">
+                  <span className="tipo-dado grid size-9 shrink-0 place-items-center rounded-xl bg-volt-50 text-[13px] font-semibold text-volt-700">
+                    {i.quantidade}×
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-medium">{i.descricao}</p>
+                    <p className="tipo-dado text-[12px] text-suave">{formatarMoeda(i.preco_unitario)} cada</p>
+                  </div>
+                  <p className="tipo-dado shrink-0 text-[14px]">{formatarMoeda(i.total)}</p>
+                </li>
+              ))}
+            </ListaMobile>
+            <Table somenteDesktop>
               <THead>
                 <TR>
                   <TH>Produto</TH>
@@ -86,7 +101,7 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
                 ))}
               </TBody>
             </Table>
-            <dl className="space-y-1.5 border-t border-linha px-5 py-4 text-sm">
+            <dl className="space-y-1.5 border-t border-linha px-4 py-4 text-sm lg:px-5">
               <div className="flex justify-between"><dt className="text-suave">Subtotal</dt><dd className="tipo-dado">{formatarMoeda(pedido.subtotal)}</dd></div>
               <div className="flex justify-between"><dt className="text-suave">Entrega</dt><dd className="tipo-dado">{formatarMoeda(pedido.taxa_entrega)}</dd></div>
               {Number(pedido.desconto) > 0 && (

@@ -8,6 +8,7 @@ import { ButtonLink } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FilterBar, SearchField } from '@/components/ui/filter-bar'
+import { ItemMobile, ListaMobile } from '@/components/ui/lista-mobile'
 import { PageHeader } from '@/components/ui/page-header'
 import { Pagination } from '@/components/ui/pagination'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
@@ -40,15 +41,15 @@ export default async function PaginaClientes({ searchParams }: PageProps<'/clien
       />
 
       <Card>
-        <div className="flex flex-wrap items-center gap-2 border-b border-linha p-4">
-          <FilterBar caminho="/clientes" className="flex-1">
+        <div className="flex flex-nowrap items-center gap-2 border-b border-linha p-3 lg:flex-wrap lg:p-4">
+          <FilterBar caminho="/clientes" className="min-w-0 flex-1">
             <SearchField valor={q} placeholder="Buscar por nome, e-mail ou WhatsApp" />
             {vip && <input type="hidden" name="vip" value="1" />}
           </FilterBar>
           <Link
             href={vip ? '/clientes' : '/clientes?vip=1'}
             className={cn(
-              'inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-semibold',
+              'inline-flex h-11 shrink-0 items-center gap-2 rounded-xl border px-3 text-sm font-semibold lg:h-10',
               vip ? 'border-vip bg-vip-50 text-vip-700' : 'border-linha bg-superficie text-ink hover:bg-papel',
             )}
           >
@@ -65,7 +66,38 @@ export default async function PaginaClientes({ searchParams }: PageProps<'/clien
           />
         ) : (
           <>
-            <Table>
+            <ListaMobile>
+              {clientes.map((c) => {
+                const situacao = situacaoCliente(c.ultimo_pedido_em, diasDesde(c.ultimo_pedido_em))
+                return (
+                  <ItemMobile
+                    key={c.id}
+                    href={`/clientes/${c.id}`}
+                    inicio={<Avatar nome={c.nome} />}
+                    titulo={
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate">{c.nome}</span>
+                        {c.vip && <Badge tom="vip" className="h-5 px-1.5 text-[10px]">VIP</Badge>}
+                      </span>
+                    }
+                    subtitulo={
+                      c.pedidos
+                        ? `${formatarNumero(c.pedidos)} pedido(s) · último ${formatarRelativo(c.ultimo_pedido_em)}`
+                        : formatarWhatsapp(c.whatsapp)
+                    }
+                    fim={
+                      <>
+                        <p className="tipo-dado text-[13px]">{formatarMoeda(c.total_gasto)}</p>
+                        <Badge tom={situacao.tom} className="mt-1 h-5 px-2 text-[11px]">
+                          {situacao.rotulo}
+                        </Badge>
+                      </>
+                    }
+                  />
+                )
+              })}
+            </ListaMobile>
+            <Table somenteDesktop>
               <THead>
                 <TR>
                   <TH>Cliente</TH>

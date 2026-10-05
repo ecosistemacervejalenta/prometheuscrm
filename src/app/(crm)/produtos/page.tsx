@@ -7,6 +7,7 @@ import { ButtonLink } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FilterBar, SearchField } from '@/components/ui/filter-bar'
+import { ItemMobile, ListaMobile } from '@/components/ui/lista-mobile'
 import { PageHeader } from '@/components/ui/page-header'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { FotoProduto } from '@/features/produtos/components/foto-produto'
@@ -34,15 +35,15 @@ export default async function PaginaProdutos({ searchParams }: PageProps<'/produ
         }
       />
       <Card>
-        <div className="flex flex-wrap items-center gap-2 border-b border-linha p-4">
-          <FilterBar caminho="/produtos" className="flex-1">
+        <div className="flex flex-wrap items-center gap-2 border-b border-linha p-3 lg:p-4">
+          <FilterBar caminho="/produtos" className="min-w-0 flex-1">
             <SearchField valor={q} placeholder="Buscar por nome, estilo, cervejaria ou SKU" />
             {inativos && <input type="hidden" name="inativos" value="1" />}
           </FilterBar>
           <Link
             href={inativos ? '/produtos' : '/produtos?inativos=1'}
             className={cn(
-              'inline-flex h-10 items-center rounded-xl border px-3 text-sm font-semibold',
+              'inline-flex h-11 w-full items-center justify-center rounded-xl border px-3 text-sm font-semibold lg:h-10 lg:w-auto lg:justify-start',
               inativos ? 'border-ink bg-ink text-white' : 'border-linha bg-superficie hover:bg-papel',
             )}
           >
@@ -57,7 +58,30 @@ export default async function PaginaProdutos({ searchParams }: PageProps<'/produ
             acao={<ButtonLink href="/produtos/novo" variante="primario"><Plus /> Novo produto</ButtonLink>}
           />
         ) : (
-          <Table>
+          <>
+          <ListaMobile>
+            {produtos.map((p) => (
+              <ItemMobile
+                key={p.id}
+                href={`/produtos/${p.id}/editar`}
+                className={p.ativo ? undefined : 'opacity-60'}
+                inicio={<FotoProduto url={p.imagem_url} nome={p.nome} />}
+                titulo={p.nome}
+                subtitulo={
+                  [p.estilo, p.volume_ml ? `${p.volume_ml} ml` : null, p.teor_alcoolico !== null ? `${String(p.teor_alcoolico).replace('.', ',')}%` : null]
+                    .filter(Boolean)
+                    .join(' · ') || (p.cervejaria ?? '—')
+                }
+                fim={
+                  <>
+                    <p className="tipo-dado text-[14px]">{formatarMoeda(p.preco)}</p>
+                    {!p.ativo && <p className="text-[11px] text-suave">inativo</p>}
+                  </>
+                }
+              />
+            ))}
+          </ListaMobile>
+          <Table somenteDesktop>
             <THead>
               <TR>
                 <TH>Cerveja</TH>
@@ -93,6 +117,7 @@ export default async function PaginaProdutos({ searchParams }: PageProps<'/produ
               ))}
             </TBody>
           </Table>
+          </>
         )}
       </Card>
     </>

@@ -10,6 +10,7 @@ import { ButtonExternal, ButtonLink } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Kpi } from '@/components/ui/kpi'
+import { ItemMobile, ListaMobile } from '@/components/ui/lista-mobile'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { atividadesDoCliente, obterCliente, pedidosDoCliente } from '@/features/clientes/queries'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
@@ -64,7 +65,7 @@ export default async function PaginaCliente({ params }: PageProps<'/clientes/[id
 
   return (
     <>
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+      <header className="mb-5 flex flex-wrap items-start justify-between gap-4 lg:mb-6">
         <div className="flex min-w-0 items-center gap-4">
           <Avatar nome={cliente.nome} tamanho="lg" variante="volt" />
           <div className="min-w-0">
@@ -77,7 +78,7 @@ export default async function PaginaCliente({ params }: PageProps<'/clientes/[id
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-wrap gap-2 *:grow lg:w-auto lg:*:grow-0">
           {cliente.whatsapp && (
             <ButtonExternal href={linkWhatsapp(cliente.whatsapp, `Oi, ${primeiroNome(cliente.nome)}!`)} variante="whatsapp">
               <MessageCircle /> Mensagem
@@ -117,7 +118,24 @@ export default async function PaginaCliente({ params }: PageProps<'/clientes/[id
           {pedidos.length === 0 ? (
             <EmptyState icone={ShoppingBag} titulo="Nenhum pedido ainda" acao={<ButtonLink href={`/pedidos/novo?cliente=${id}`}>Lançar pedido</ButtonLink>} />
           ) : (
-            <Table>
+            <>
+            <ListaMobile>
+              {pedidos.map((p) => (
+                <ItemMobile
+                  key={p.id}
+                  href={`/pedidos/${p.id}`}
+                  titulo={<span className="tipo-dado">{numeroPedido(p.numero)}</span>}
+                  subtitulo={`${formatarData(p.criado_em)}${p.pre_venda_titulo ? ` · ${p.pre_venda_titulo}` : ''}`}
+                  fim={
+                    <>
+                      <p className="tipo-dado text-[13px]">{formatarMoeda(p.total)}</p>
+                      <div className="mt-1"><PagamentoBadge status={p.status_pagamento} /></div>
+                    </>
+                  }
+                />
+              ))}
+            </ListaMobile>
+            <Table somenteDesktop>
               <THead>
                 <TR>
                   <TH>Pedido</TH>
@@ -144,6 +162,7 @@ export default async function PaginaCliente({ params }: PageProps<'/clientes/[id
                 ))}
               </TBody>
             </Table>
+            </>
           )}
         </Card>
 

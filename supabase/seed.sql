@@ -166,5 +166,15 @@ begin
       (date_trunc('month', current_date))::date, current_date + 7, 3120.00),
     ('Frete Serra Alta', 'Logística', 'variavel', v_serra,
       (date_trunc('month', current_date))::date, current_date + 3, 420.00);
+
+  -- Contas a receber ---------------------------------------------------------------
+  insert into public.contas_receber (descricao, categoria, pagador, competencia, vencimento, valor, status)
+  values
+    ('Barril IPA 30L — Bar do Zé', 'Bares e restaurantes', 'Bar do Zé',
+      (date_trunc('month', current_date))::date, current_date + 10, 1450.00, 'pendente'),
+    ('Repasse maquininha', 'Repasse de cartão', 'Stone',
+      (date_trunc('month', current_date))::date, current_date - 2, 2380.50, 'recebida'),
+    ('Degustação corporativa', 'Eventos', 'Empresa Alfa',
+      (date_trunc('month', current_date - interval '1 month'))::date, (current_date - interval '1 month')::date, 900.00, 'pendente');
 end;
 $$;

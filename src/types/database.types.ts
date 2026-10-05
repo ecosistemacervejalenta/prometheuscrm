@@ -73,6 +73,27 @@ export type Database = {
           },
         ]
       }
+      categorias_financeiras: {
+        Row: {
+          id: string
+          natureza: Database["public"]["Enums"]["natureza_financeira"]
+          nome: string
+          criado_em: string
+        }
+        Insert: {
+          id?: string
+          natureza: Database["public"]["Enums"]["natureza_financeira"]
+          nome: string
+          criado_em?: string
+        }
+        Update: {
+          id?: string
+          natureza?: Database["public"]["Enums"]["natureza_financeira"]
+          nome?: string
+          criado_em?: string
+        }
+        Relationships: []
+      }
       clientes: {
         Row: {
           id: string
@@ -305,6 +326,57 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      contas_receber: {
+        Row: {
+          id: string
+          descricao: string
+          categoria: string
+          pagador: string | null
+          competencia: string
+          vencimento: string
+          valor: number
+          status: Database["public"]["Enums"]["status_recebimento"]
+          recebido_em: string | null
+          valor_recebido: number | null
+          forma_pagamento: string | null
+          observacoes: string | null
+          criado_em: string
+          atualizado_em: string
+        }
+        Insert: {
+          id?: string
+          descricao: string
+          categoria?: string
+          pagador?: string | null
+          competencia: string
+          vencimento: string
+          valor: number
+          status?: Database["public"]["Enums"]["status_recebimento"]
+          recebido_em?: string | null
+          valor_recebido?: number | null
+          forma_pagamento?: string | null
+          observacoes?: string | null
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Update: {
+          id?: string
+          descricao?: string
+          categoria?: string
+          pagador?: string | null
+          competencia?: string
+          vencimento?: string
+          valor?: number
+          status?: Database["public"]["Enums"]["status_recebimento"]
+          recebido_em?: string | null
+          valor_recebido?: number | null
+          forma_pagamento?: string | null
+          observacoes?: string | null
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Relationships: []
       }
       eventos_integracao: {
         Row: {
@@ -889,6 +961,26 @@ export type Database = {
         }
         Relationships: []
       }
+      vw_contas_receber: {
+        Row: {
+          id: string | null
+          descricao: string | null
+          categoria: string | null
+          pagador: string | null
+          competencia: string | null
+          vencimento: string | null
+          valor: number | null
+          status: Database["public"]["Enums"]["status_recebimento"] | null
+          recebido_em: string | null
+          valor_recebido: number | null
+          forma_pagamento: string | null
+          observacoes: string | null
+          criado_em: string | null
+          atualizado_em: string | null
+          situacao: string | null
+        }
+        Relationships: []
+      }
       vw_pedidos: {
         Row: {
           id: string | null
@@ -965,6 +1057,12 @@ export type Database = {
       }
     }
     Functions: {
+      aplicar_conta_fixa_aos_pendentes: {
+        Args: {
+          p_conta_fixa_id: string
+        }
+        Returns: number
+      }
       criar_pedido: {
         Args: {
           p_cliente_id: string
@@ -1030,11 +1128,21 @@ export type Database = {
         }
         Returns: Json
       }
+      excluir_categoria_financeira: {
+        Args: {
+          p_id: string
+        }
+        Returns: undefined
+      }
       gerar_contas_fixas: {
         Args: {
           p_competencia: string
         }
         Returns: number
+      }
+      hoje_brasilia: {
+        Args: never
+        Returns: string
       }
       identificar_cliente_pre_venda: {
         Args: {
@@ -1161,6 +1269,13 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      renomear_categoria_financeira: {
+        Args: {
+          p_id: string
+          p_nome: string
+        }
+        Returns: undefined
+      }
       resumo_produtos_vendidos: {
         Args: {
           p_canal?: Database["public"]["Enums"]["canal_venda"]
@@ -1214,6 +1329,7 @@ export type Database = {
     }
     Enums: {
       canal_venda: "grupo_vip" | "whatsapp" | "loja" | "shopify" | "app"
+      natureza_financeira: "pagar" | "receber"
       origem_cliente: "manual" | "pre_venda" | "shopify" | "app" | "importacao"
       origem_pedido: "link" | "manual" | "shopify" | "app" | "api"
       papel_usuario: "admin" | "equipe"
@@ -1222,6 +1338,7 @@ export type Database = {
       status_pagamento: "pendente" | "cobrado" | "pago" | "estornado"
       status_pedido: "novo" | "confirmado" | "separado" | "entregue" | "cancelado"
       status_pre_venda: "rascunho" | "ativa" | "encerrada"
+      status_recebimento: "pendente" | "recebida" | "cancelada"
       tipo_conta: "fixa" | "variavel"
     }
     CompositeTypes: {
@@ -1334,6 +1451,7 @@ export const Constants = {
   public: {
     Enums: {
       canal_venda: ["grupo_vip", "whatsapp", "loja", "shopify", "app"],
+      natureza_financeira: ["pagar", "receber"],
       origem_cliente: ["manual", "pre_venda", "shopify", "app", "importacao"],
       origem_pedido: ["link", "manual", "shopify", "app", "api"],
       papel_usuario: ["admin", "equipe"],
@@ -1342,6 +1460,7 @@ export const Constants = {
       status_pagamento: ["pendente", "cobrado", "pago", "estornado"],
       status_pedido: ["novo", "confirmado", "separado", "entregue", "cancelado"],
       status_pre_venda: ["rascunho", "ativa", "encerrada"],
+      status_recebimento: ["pendente", "recebida", "cancelada"],
       tipo_conta: ["fixa", "variavel"],
     },
   },

@@ -21,7 +21,7 @@ export function TelaAcesso({ titulo, descricao, children }: { titulo: string; de
         </div>
       </section>
 
-      <section className="flex items-center justify-center px-5 py-12 sm:px-10">
+      <section className="flex items-center justify-center px-5 pt-[max(48px,env(safe-area-inset-top))] pb-[max(48px,env(safe-area-inset-bottom))] sm:px-10 lg:py-12">
         <div className="w-full max-w-sm">
           <div className="mb-10 lg:hidden">
             <Logo variante="cor" largura={150} prioridade />

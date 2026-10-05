@@ -71,11 +71,11 @@ export function ControlePagamento({ pedidoId, status }: { pedidoId: string; stat
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 *:grow lg:flex-nowrap lg:*:grow-0">
       <select
         value={forma}
         onChange={(e) => setForma(e.target.value)}
-        className="h-8 rounded-lg border border-linha bg-superficie px-2 text-[13px] font-medium"
+        className="h-9 rounded-lg border border-linha bg-superficie px-2 text-[13px] font-medium lg:h-8"
         aria-label="Forma de pagamento"
       >
         {FORMAS_PAGAMENTO.map((f) => (
@@ -90,9 +90,13 @@ export function ControlePagamento({ pedidoId, status }: { pedidoId: string; stat
 }
 
 /** Atalho "Pago" para tabelas (forma PIX). */
-export function BotaoPago({ pedidoId }: { pedidoId: string }) {
+export function BotaoPago({ pedidoId, className }: { pedidoId: string; className?: string }) {
   return (
-    <ActionButton acao={definirPagamento.bind(null, pedidoId, 'pago', 'PIX')} titulo="Marcar como pago (PIX)">
+    <ActionButton
+      acao={definirPagamento.bind(null, pedidoId, 'pago', 'PIX')}
+      titulo="Marcar como pago (PIX)"
+      className={className}
+    >
       <Check /> Pago
     </ActionButton>
   )
@@ -115,7 +119,7 @@ export function SeletorStatus({ pedidoId, status }: { pedidoId: string; status: 
           if (r.mensagem) avisar(r.mensagem, r.ok === false ? 'erro' : 'sucesso')
         })
       }}
-      className={cn('h-10 rounded-xl border border-linha bg-superficie px-3 text-sm font-semibold', pendente && 'opacity-60')}
+      className={cn('h-11 rounded-xl border border-linha bg-superficie px-3 text-sm font-semibold lg:h-10', pendente && 'opacity-60')}
       aria-label="Status do pedido"
     >
       {(Object.keys(STATUS_PEDIDO) as StatusPedido[]).map((s) => (

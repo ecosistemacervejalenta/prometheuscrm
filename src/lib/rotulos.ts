@@ -65,19 +65,15 @@ export const SITUACAO_CONTA: Record<string, { rotulo: string; tom: Tom }> = {
   em_dia: { rotulo: 'Em dia', tom: 'neutro' },
 }
 
-export const FORMAS_PAGAMENTO = ['PIX', 'Dinheiro', 'Cartão de crédito', 'Cartão de débito', 'Transferência', 'Boleto']
+export const SITUACAO_RECEBIMENTO: Record<string, { rotulo: string; tom: Tom }> = {
+  recebida: { rotulo: 'Recebida', tom: 'sucesso' },
+  cancelada: { rotulo: 'Cancelada', tom: 'neutro' },
+  vencida: { rotulo: 'Atrasada', tom: 'perigo' },
+  vence_logo: { rotulo: 'Vence logo', tom: 'alerta' },
+  em_dia: { rotulo: 'Em dia', tom: 'neutro' },
+}
 
-export const CATEGORIAS_CONTA = [
-  'Mercadorias',
-  'Estrutura',
-  'Logística',
-  'Marketing',
-  'Software',
-  'Serviços',
-  'Impostos',
-  'Pessoal',
-  'Outros',
-]
+export const FORMAS_PAGAMENTO = ['PIX', 'Dinheiro', 'Cartão de crédito', 'Cartão de débito', 'Transferência', 'Boleto']
 
 /** Situação do relacionamento a partir do último pedido. */
 export function situacaoCliente(ultimoPedidoEm: string | null, diasSemComprar: number | null) {

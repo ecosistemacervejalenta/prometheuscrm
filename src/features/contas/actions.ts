@@ -3,15 +3,17 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
+import { gerarParcelas } from '@/features/financeiro/regras'
 import { errosDeValidacao, falha, sucesso, traduzirErro, type EstadoAcao } from '@/lib/acoes'
 import { exigirEquipe } from '@/lib/auth'
-import { hojeISO, mesAtual, primeiroDia, somarMesesData } from '@/lib/datas'
+import { hojeISO, mesAtual, primeiroDia } from '@/lib/datas'
 import { formParaObjeto } from '@/lib/validacao'
 
 import { esquemaContaFixa, esquemaContaVariavel, esquemaEdicaoConta } from './schema'
 
 function atualizarTelas() {
   revalidatePath('/contas', 'layout')
+  revalidatePath('/fornecedores', 'layout')
   revalidatePath('/')
 }
 
@@ -21,18 +23,13 @@ export async function criarContaVariavel(_: EstadoAcao, formData: FormData): Pro
   const dados = esquemaContaVariavel.safeParse(formParaObjeto(formData))
   if (!dados.success) return errosDeValidacao(dados.error)
 
-  const { parcelas, ja_paga, vencimento, descricao, ...resto } = dados.data
-  const linhas = Array.from({ length: parcelas }, (_, i) => {
-    const venc = somarMesesData(vencimento, i)
-    return {
-      ...resto,
-      tipo: 'variavel' as const,
-      descricao: parcelas > 1 ? `${descricao} (${i + 1}/${parcelas})` : descricao,
-      vencimento: venc,
-      competencia: `${venc.slice(0, 7)}-01`,
-      status: ja_paga && i === 0 ? ('paga' as const) : ('pendente' as const),
-    }
-  })
+  const { parcelas, modo_valor, ja_paga, vencimento, descricao, valor, ...resto } = dados.data
+  const linhas = gerarParcelas({ descricao, valor, modo: modo_valor, parcelas, vencimento }).map((parcela, i) => ({
+    ...resto,
+    ...parcela,
+    tipo: 'variavel' as const,
+    ...(ja_paga && i === 0 ? { status: 'paga' as const, pago_em: hojeISO() } : { status: 'pendente' as const }),
+  }))
 
   const { error } = await supabase.from('contas_pagar').insert(linhas)
   if (error) return falha(traduzirErro(error))
@@ -50,28 +47,21 @@ export async function salvarContaFixa(id: string | null, _: EstadoAcao, formData
   const { atualizar_pendentes, ...modelo } = dados.data
 
   if (id) {
+    // Pausar, encerrar ou adiar o início remove (no banco) os lançamentos pendentes que deixaram de valer.
     const { error } = await supabase.from('contas_fixas').update(modelo).eq('id', id)
     if (error) return falha(traduzirErro(error))
 
     if (atualizar_pendentes) {
-      const { error: erroPendentes } = await supabase
-        .from('contas_pagar')
-        .update({
-          descricao: modelo.descricao,
-          categoria: modelo.categoria,
-          fornecedor_id: modelo.fornecedor_id,
-          valor: modelo.valor,
-        })
-        .eq('conta_fixa_id', id)
-        .eq('status', 'pendente')
-        .gte('competencia', primeiroDia(mesAtual()))
-      if (erroPendentes) return falha(traduzirErro(erroPendentes))
+      const aplicar = await supabase.rpc('aplicar_conta_fixa_aos_pendentes', { p_conta_fixa_id: id })
+      if (aplicar.error) return falha(traduzirErro(aplicar.error))
     }
   } else {
     const { error } = await supabase.from('contas_fixas').insert(modelo)
     if (error) return falha(traduzirErro(error))
-    await supabase.rpc('gerar_contas_fixas', { p_competencia: primeiroDia(mesAtual()) })
   }
+
+  const gerar = await supabase.rpc('gerar_contas_fixas', { p_competencia: primeiroDia(mesAtual()) })
+  if (gerar.error) return falha(traduzirErro(gerar.error))
 
   atualizarTelas()
   redirect('/contas/fixas')
@@ -82,14 +72,17 @@ export async function atualizarConta(id: string, _: EstadoAcao, formData: FormDa
   const dados = esquemaEdicaoConta.safeParse(formParaObjeto(formData))
   if (!dados.success) return errosDeValidacao(dados.error)
 
-  const { error } = await supabase
+  // Variáveis vão para o mês do novo vencimento; fixas ficam no mês em que foram geradas.
+  const { data, error } = await supabase
     .from('contas_pagar')
     .update({ ...dados.data, valor_pago: dados.data.status === 'paga' ? dados.data.valor : null })
     .eq('id', id)
+    .select('competencia')
+    .single()
   if (error) return falha(traduzirErro(error))
 
   atualizarTelas()
-  redirect(`/contas?mes=${dados.data.vencimento.slice(0, 7)}`)
+  redirect(`/contas?mes=${data.competencia.slice(0, 7)}`)
 }
 
 export async function pagarConta(id: string): Promise<EstadoAcao> {
@@ -124,6 +117,10 @@ export async function alternarContaFixa(id: string, ativa: boolean): Promise<Est
   const { supabase } = await exigirEquipe()
   const { error } = await supabase.from('contas_fixas').update({ ativa }).eq('id', id)
   if (error) return falha(traduzirErro(error))
+  if (ativa) {
+    const gerar = await supabase.rpc('gerar_contas_fixas', { p_competencia: primeiroDia(mesAtual()) })
+    if (gerar.error) return falha(traduzirErro(gerar.error))
+  }
   atualizarTelas()
   return sucesso(ativa ? 'Conta fixa reativada.' : 'Conta fixa pausada: não será gerada nos próximos meses.')
 }

@@ -38,7 +38,7 @@ export function SearchField({
   className?: string
 }) {
   return (
-    <label className={cn('relative block min-w-[220px] flex-1', className)}>
+    <label className={cn('relative block w-full min-w-[220px] flex-1 lg:w-auto', className)}>
       <span className="sr-only">{placeholder}</span>
       <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-sutil" aria-hidden />
       <input
@@ -46,7 +46,7 @@ export function SearchField({
         name={name}
         defaultValue={valor}
         placeholder={placeholder}
-        className="h-10 w-full rounded-xl border border-linha bg-superficie pr-3 pl-9 text-sm outline-none placeholder:text-sutil focus:border-ink focus:ring-4 focus:ring-volt/25"
+        className="h-11 w-full rounded-xl border border-linha bg-superficie pr-3 pl-9 text-sm outline-none placeholder:text-sutil focus:border-ink focus:ring-4 focus:ring-volt/25 lg:h-10"
       />
     </label>
   )
@@ -57,20 +57,22 @@ export function FilterSelect({
   valor,
   opcoes,
   rotulo,
+  className,
 }: {
   name: string
   valor?: string
   opcoes: Array<{ valor: string; rotulo: string }>
   rotulo: string
+  className?: string
 }) {
   return (
-    <label className="block">
+    <label className={cn('block min-w-0 grow basis-[calc(50%-4px)] lg:grow-0 lg:basis-auto', className)}>
       <span className="sr-only">{rotulo}</span>
       <select
         name={name}
         defaultValue={valor ?? ''}
         onChange={(e) => e.currentTarget.form?.requestSubmit()}
-        className="h-10 rounded-xl border border-linha bg-superficie px-3 text-sm font-medium outline-none focus:border-ink"
+        className="h-11 w-full rounded-xl border border-linha bg-superficie px-3 text-sm font-medium outline-none focus:border-ink lg:h-10 lg:w-auto"
       >
         <option value="">{rotulo}</option>
         {opcoes.map((o) => (
@@ -85,14 +87,14 @@ export function FilterSelect({
 
 export function FilterDate({ name, valor, rotulo }: { name: string; valor?: string; rotulo: string }) {
   return (
-    <label className="flex items-center gap-2 text-sm text-suave">
+    <label className="flex min-w-0 grow basis-[calc(50%-4px)] items-center gap-2 text-sm text-suave lg:grow-0 lg:basis-auto">
       <span className="tipo-rotulo">{rotulo}</span>
       <input
         type="date"
         name={name}
         defaultValue={valor}
         onChange={(e) => e.currentTarget.form?.requestSubmit()}
-        className="h-10 rounded-xl border border-linha bg-superficie px-3 text-sm text-ink outline-none focus:border-ink"
+        className="h-11 min-w-0 flex-1 rounded-xl border border-linha bg-superficie px-3 text-sm text-ink outline-none focus:border-ink lg:h-10 lg:flex-none"
       />
     </label>
   )

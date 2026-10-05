@@ -31,7 +31,7 @@ export default async function PaginaPublicaPreVenda({ params, searchParams }: Pa
 
   return (
     <main className="min-h-screen bg-papel">
-      <div className="mx-auto max-w-md px-4 pt-6 pb-10">
+      <div className="mx-auto max-w-md px-4 pt-[max(24px,env(safe-area-inset-top))] pb-10">
         <header className="mb-6 flex justify-center">
           <Logo variante="cor" largura={130} prioridade />
         </header>

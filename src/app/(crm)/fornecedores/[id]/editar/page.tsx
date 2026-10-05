@@ -5,6 +5,7 @@ import { Trash2 } from 'lucide-react'
 import { ActionButton } from '@/components/ui/action-button'
 import { PageHeader } from '@/components/ui/page-header'
 import { excluirFornecedor, salvarFornecedor } from '@/features/fornecedores/actions'
+import { ContasDoFornecedor } from '@/features/fornecedores/components/contas-do-fornecedor'
 import { FormularioFornecedor } from '@/features/fornecedores/components/formularios'
 import { obterFornecedor } from '@/features/fornecedores/queries'
 
@@ -34,7 +35,10 @@ export default async function PaginaEditarFornecedor({ params }: PageProps<'/for
           </ActionButton>
         }
       />
-      <FormularioFornecedor acao={salvarFornecedor.bind(null, id)} fornecedor={fornecedor} />
+      <div className="space-y-6">
+        <FormularioFornecedor acao={salvarFornecedor.bind(null, id)} fornecedor={fornecedor} />
+        <ContasDoFornecedor fornecedorId={id} />
+      </div>
     </>
   )
 }

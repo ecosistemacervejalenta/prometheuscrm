@@ -36,6 +36,8 @@ const RESTRICOES: Record<string, string> = {
   clientes_whatsapp_key: 'Já existe um cliente com este WhatsApp.',
   clientes_shopify_customer_id_key: 'Já existe um cliente com este ID da Shopify.',
   fornecedores_cnpj_key: 'Já existe um fornecedor com este CNPJ.',
+  categorias_financeiras_nome_key: 'Já existe uma categoria com este nome.',
+  categorias_financeiras_nome_check: 'O nome da categoria deve ter de 1 a 60 caracteres.',
   produtos_sku_key: 'Já existe um produto com este SKU.',
   produtos_shopify_variant_id_key: 'Já existe um produto com esta variante da Shopify.',
   pre_vendas_slug_key: 'Este endereço de link já está em uso. Escolha outro.',

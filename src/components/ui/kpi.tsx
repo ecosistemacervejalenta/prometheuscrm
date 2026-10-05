@@ -24,18 +24,18 @@ export function Kpi({
   return (
     <div
       className={cn(
-        'flex min-w-0 flex-col justify-between gap-3 rounded-cartao border p-5',
+        'flex min-w-0 flex-col justify-between gap-2 rounded-cartao border p-4 lg:gap-3 lg:p-5',
         destaque ? 'border-volt bg-volt text-ink' : 'border-linha bg-superficie shadow-cartao',
         'print:border print:border-linha print:bg-white print:shadow-none',
         className,
       )}
     >
       <p className={cn('tipo-rotulo', destaque ? 'text-ink/70' : 'text-suave')}>{rotulo}</p>
-      <p className="tipo-numero truncate text-[28px] leading-8 sm:text-[32px] sm:leading-9">{valor}</p>
+      <p className="tipo-numero truncate text-[22px] leading-7 sm:text-[28px] sm:leading-8 lg:text-[32px] lg:leading-9">{valor}</p>
       {detalhe && (
         <p
           className={cn(
-            'text-[13px] font-medium',
+            'text-[12px] leading-4 font-medium lg:text-[13px] lg:leading-6',
             destaque && 'text-ink',
             !destaque && tendencia === 'positiva' && 'text-sucesso',
             !destaque && tendencia === 'negativa' && 'text-perigo',

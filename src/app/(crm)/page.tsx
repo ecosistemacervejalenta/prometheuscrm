@@ -8,9 +8,11 @@ import { ButtonLink } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { FilterBar, SearchField } from '@/components/ui/filter-bar'
 import { Kpi } from '@/components/ui/kpi'
+import { ItemMobile, ListaMobile } from '@/components/ui/lista-mobile'
 import { PageHeader } from '@/components/ui/page-header'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
-import { contasDoMes, resumirContas } from '@/features/contas/queries'
+import { contasDoMes, resumirContas, resumoContasVencidas } from '@/features/contas/queries'
+import { resumoContasReceberAtrasadas } from '@/features/contas-receber/queries'
 import { GraficoReceita } from '@/features/painel/components/grafico-receita'
 import {
   atividadesRecentes,
@@ -49,14 +51,17 @@ function variacao(atual: number, anterior: number) {
 
 export default async function PaginaVisaoGeral() {
   const { perfil } = await exigirEquipe()
-  const [{ mes, atual, anterior }, semanas, pendencias, encerrando, atividades, pedidos] = await Promise.all([
-    metricasComparadas(),
-    receitaSemanal(12),
-    pendenciasDeCobranca(),
-    preVendasEncerrando(),
-    atividadesRecentes(),
-    pedidosRecentes(),
-  ])
+  const [{ mes, atual, anterior }, semanas, pendencias, encerrando, atividades, pedidos, vencidas, receberAtrasado] =
+    await Promise.all([
+      metricasComparadas(),
+      receitaSemanal(12),
+      pendenciasDeCobranca(),
+      preVendasEncerrando(),
+      atividadesRecentes(),
+      pedidosRecentes(),
+      resumoContasVencidas(),
+      resumoContasReceberAtrasadas(),
+    ])
   const contas = resumirContas(await contasDoMes(mes))
   const nomeMesAnterior = formatarMes(somarMeses(mes, -1)).split(' ')[0].toLowerCase()
   const varReceita = variacao(atual.receita, anterior.receita)
@@ -73,10 +78,15 @@ export default async function PaginaVisaoGeral() {
       texto: `${pendencias.aguardando} cobrança(s) aguardando pagamento`,
       href: '/pedidos?pagamento=cobrado',
     },
-    contas.qtdVencidas > 0 && {
+    vencidas.quantidade > 0 && {
       tom: 'perigo' as Tom,
-      texto: `${contas.qtdVencidas} conta(s) vencida(s) · ${formatarMoeda(contas.vencido)}`,
+      texto: `${vencidas.quantidade} conta(s) a pagar vencida(s) · ${formatarMoeda(vencidas.total)}`,
       href: '/contas',
+    },
+    receberAtrasado.quantidade > 0 && {
+      tom: 'alerta' as Tom,
+      texto: `${receberAtrasado.quantidade} conta(s) a receber atrasada(s) · ${formatarMoeda(receberAtrasado.total)}`,
+      href: '/receber',
     },
     ...encerrando.map((pv) => ({
       tom: 'vip' as Tom,
@@ -102,7 +112,7 @@ export default async function PaginaVisaoGeral() {
         }
       />
 
-      <div className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-2.5 lg:mb-6 lg:gap-3 xl:grid-cols-4">
         <Kpi
           destaque
           rotulo={`Receita · ${formatarMes(mes).split(' ')[0]}`}
@@ -129,7 +139,7 @@ export default async function PaginaVisaoGeral() {
         />
       </div>
 
-      <div className="mb-6 grid gap-6 xl:grid-cols-[1fr_380px]">
+      <div className="mb-5 grid gap-5 lg:mb-6 lg:gap-6 xl:grid-cols-[1fr_380px]">
         <Card>
           <CardHeader titulo="Receita por canal · semanal" descricao="Últimas 12 semanas (pedidos não cancelados)." />
           <CardContent>
@@ -162,7 +172,7 @@ export default async function PaginaVisaoGeral() {
         </Card>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
+      <div className="grid gap-5 lg:gap-6 xl:grid-cols-[1fr_380px]">
         <Card>
           <CardHeader
             titulo="Pedidos recentes"
@@ -173,9 +183,27 @@ export default async function PaginaVisaoGeral() {
             }
           />
           {pedidos.length === 0 ? (
-            <p className="px-5 pb-6 text-sm text-suave">Nenhum pedido ainda.</p>
+            <p className="px-4 pb-5 text-sm text-suave lg:px-5 lg:pb-6">Nenhum pedido ainda.</p>
           ) : (
-            <Table>
+            <>
+            <ListaMobile>
+              {pedidos.map((p) => (
+                <ItemMobile
+                  key={p.id}
+                  href={`/pedidos/${p.id}`}
+                  inicio={<Avatar nome={p.cliente_nome} />}
+                  titulo={p.cliente_nome}
+                  subtitulo={<span className="tipo-dado text-[12px]">{numeroPedido(p.numero)} · {formatarRelativo(p.criado_em)}</span>}
+                  fim={
+                    <>
+                      <p className="tipo-dado text-[13px]">{formatarMoeda(p.total)}</p>
+                      <div className="mt-1"><PagamentoBadge status={p.status_pagamento} /></div>
+                    </>
+                  }
+                />
+              ))}
+            </ListaMobile>
+            <Table somenteDesktop>
               <THead>
                 <TR>
                   <TH>Cliente</TH>
@@ -205,6 +233,7 @@ export default async function PaginaVisaoGeral() {
                 ))}
               </TBody>
             </Table>
+            </>
           )}
         </Card>
 

@@ -168,7 +168,7 @@ export function FormSection({
 /** Barra de ações no rodapé do formulário. */
 export function FormActions({ children }: { children: ReactNode }) {
   return (
-    <div className="sticky bottom-0 -mx-5 mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-linha bg-superficie/95 px-5 py-4 backdrop-blur sm:-mx-6 sm:px-6">
+    <div className="sticky bottom-[calc(var(--altura-abas)+env(safe-area-inset-bottom))] -mx-5 mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-linha bg-superficie/95 px-5 py-3 backdrop-blur *:grow max-lg:[&>a]:hidden sm:-mx-6 sm:px-6 lg:bottom-0 lg:py-4 lg:*:grow-0">
       {children}
     </div>
   )

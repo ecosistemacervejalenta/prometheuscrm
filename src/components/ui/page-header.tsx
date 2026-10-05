@@ -17,7 +17,7 @@ export function PageHeader({
   voltar?: { href: string; rotulo: string }
 }) {
   return (
-    <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+    <header className="mb-5 flex flex-wrap items-end justify-between gap-3 lg:mb-6 lg:gap-4">
       <div className="min-w-0">
         {voltar && (
           <Link
@@ -32,7 +32,9 @@ export function PageHeader({
         <h1 className="tipo-h2 sm:tipo-h1 mt-0.5 break-words">{titulo}</h1>
         {descricao && <div className="mt-1 max-w-2xl text-suave">{descricao}</div>}
       </div>
-      {acoes && <div className="flex flex-wrap items-center gap-2 print:hidden">{acoes}</div>}
+      {acoes && (
+        <div className="flex w-full flex-wrap items-center gap-2 *:grow lg:w-auto lg:*:grow-0 print:hidden">{acoes}</div>
+      )}
     </header>
   )
 }
