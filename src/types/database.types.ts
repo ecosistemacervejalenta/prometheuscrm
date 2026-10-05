@@ -1419,6 +1419,12 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      situacao_erp_conta_venda: {
+        Args: {
+          p_situacao: number
+        }
+        Returns: boolean
+      }
       somente_digitos: {
         Args: {
           p_texto: string
@@ -1429,12 +1435,36 @@ export type Database = {
         Args: never
         Returns: Json
       }
+      vendas_crm_por_dia: {
+        Args: {
+          p_canal: Database["public"]["Enums"]["canal_venda"]
+          p_inicio: string
+          p_fim: string
+        }
+        Returns: {
+          dia: string
+          valor: number
+          pedidos: number
+        }[]
+      }
       vendas_erp_por_canal: {
         Args: {
           p_inicio: string
           p_fim: string
         }
         Returns: {
+          canal: string
+          valor: number
+          pedidos: number
+        }[]
+      }
+      vendas_erp_por_dia: {
+        Args: {
+          p_inicio: string
+          p_fim: string
+        }
+        Returns: {
+          dia: string
           canal: string
           valor: number
           pedidos: number

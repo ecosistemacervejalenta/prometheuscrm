@@ -18,7 +18,7 @@ export async function sincronizarOlistAgora(): Promise<EstadoAcao> {
   await exigirEquipe()
   if (!envServidor.cronSecret) return falha('Configure CRON_SECRET na Vercel para sincronizar com o Olist.')
 
-  const resultado = await dispararSincronizacao(await urlDoSite())
+  const resultado = await dispararSincronizacao(await urlDoSite(), 'rapida')
   atualizarTelas()
   if (!resultado) return falha('Não foi possível iniciar a sincronização. Tente de novo em instantes.')
   if (resultado.ok) {

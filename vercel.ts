@@ -14,6 +14,10 @@ export const config: VercelConfig = {
     { path: '/api/cron/eventos', schedule: '0 9 * * *' },
     // Olist ERP: sincroniza as vendas e renova o token (o refresh vale 1 dia).
     // Seis rotinas diárias (cada uma 1x/dia, compatível com o Hobby) = a cada ~4 h.
-    ...[1, 5, 9, 13, 17, 21].map((hora) => ({ path: `/api/cron/olist?h=${hora}`, schedule: `0 ${hora} * * *` })),
+    // A das 5h UTC (2h em Brasília) reconcilia os 13 meses inteiros.
+    ...[1, 5, 9, 13, 17, 21].map((hora) => ({
+      path: hora === 5 ? '/api/cron/olist?modo=completa' : `/api/cron/olist?h=${hora}`,
+      schedule: `0 ${hora} * * *`,
+    })),
   ],
 }

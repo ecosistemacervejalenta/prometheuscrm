@@ -522,7 +522,9 @@ Já preparado: canal `app`, coluna `clientes.app_usuario_id`, origem `app`, API 
 
 ### 11.5 Olist ERP (API v3) — painel "Vendas por canal"
 
-O painel da Visão geral mostra as vendas do **Mercado Livre, Shopee e Loja Virtual (Shopify)** a partir do Olist ERP e as do **Grupo VIP** a partir dos pedidos do próprio CRM. Contam todos os pedidos, **exceto os cancelados**; pedidos do e-commerce "API Tiny" (e sem e-commerce) ficam de fora.
+O painel da Visão geral mostra as vendas do **Mercado Livre, Shopee e Loja Virtual (Shopify)** a partir do Olist ERP e as do **Grupo VIP** a partir dos pedidos do próprio CRM, com filtros (hoje, 7/30/60/90 dias, este mês, mês passado), gráfico de pizza da participação por canal e gráfico de evolução (por dia até 45 dias; por semana acima disso).
+
+**Critério = Dashboard de vendas do Olist** (conferido ao centavo: 189 pedidos / R$ 29.122,53 nos mesmos 30 dias): pela data do pedido, todas as situações **exceto Aberta, Cancelada e Dados incompletos**. A regra fica num só lugar, a função `situacao_erp_conta_venda()` no banco. "Últimos N dias" = de hoje − N até hoje (inclusive), como no Olist. Pedidos de outros e-commerces (ex.: Magalu, API Tiny) e sem e-commerce ficam de fora. Grupo VIP: pedidos do CRM não cancelados.
 
 **Configuração (uma vez):**
 
@@ -533,8 +535,8 @@ O painel da Visão geral mostra as vendas do **Mercado Livre, Shopee e Loja Virt
 **Como funciona:**
 
 - OAuth2 (Keycloak do Olist): o token de acesso vale 4 h e o de renovação, 1 dia. Os tokens ficam em `integracao_olist`, tabela sem acesso pela equipe (só o servidor); a interface lê apenas o status por `status_integracao_olist()`.
-- A rota `/api/cron/olist` (protegida por `CRON_SECRET`) renova o token e sincroniza para `pedidos_erp`: pedidos criados nos últimos 62 dias + alterados desde a última execução (cancelamentos antigos). É a única parte que usa a chave secreta do Supabase.
-- Quem chama a rota: a Vercel Cron 6x por dia (a cada ~4 h, compatível com o plano Hobby — mantém o token vivo), o botão **Atualizar** do painel e a própria Visão geral quando os dados têm mais de 15 min.
+- A rota `/api/cron/olist` (protegida por `CRON_SECRET`) renova o token e sincroniza para `pedidos_erp` os pedidos criados na janela do modo + os alterados desde a última execução. É a única parte que usa a chave secreta do Supabase. Modos: `?modo=rapida` (7 dias), padrão (62 dias) e `?modo=completa` (13 meses, reconcilia tudo).
+- Quem chama a rota: a Vercel Cron 6x por dia (a cada ~4 h, compatível com o plano Hobby — mantém o token vivo; a das 2h de Brasília é a reconciliação completa), o botão **Atualizar** e a Visão geral: se os dados têm mais de 10 min, ela sincroniza (modo rápido) **antes** de mostrar os números, esperando no máximo 8 s.
 - Se a renovação falhar por mais de 1 dia, a conexão expira: o painel avisa e basta **Reconectar** (o histórico importado é mantido).
 - Limite da API: 60 requisições/min no plano Evoluir (por conta, compartilhado entre aplicativos). Uma sincronização normal usa poucas requisições; a importação inicial, ~1 por 100 pedidos.
 - Código: `src/features/olist/` (OAuth, cliente da API, sincronização) e `src/features/vendas/` (painel).

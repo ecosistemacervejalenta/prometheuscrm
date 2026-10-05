@@ -44,6 +44,6 @@ export async function GET(request: NextRequest) {
     return voltar('erro-token')
   }
 
-  after(() => dispararSincronizacao(site))
+  after(() => dispararSincronizacao(site, 'completa'))
   return voltar('conectado')
 }

@@ -1,21 +1,20 @@
 import Link from 'next/link'
-import { after } from 'next/server'
 import { CircleAlert, Info, Minus, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react'
 
 import { ActionButton } from '@/components/ui/action-button'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Card } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { sincronizarOlistAgora } from '@/features/olist/actions'
-import { dispararSincronizacao, sincronizacaoDesatualizada } from '@/features/olist/disparo'
+import { garantirDadosRecentesDoOlist } from '@/features/olist/disparo'
 import { formatarHaQuanto, formatarMoeda, formatarMoedaCompacta, formatarNumero } from '@/lib/format'
-import { urlDoSite } from '@/lib/url'
 import { cn } from '@/lib/utils'
 
 import { CANAIS } from '../canais'
 import type { ChavePeriodo } from '../periodos'
 import { vendasPorCanal, type DadosVendasPorCanal, type ResumoCanal } from '../queries'
-import { BarraParticipacao } from './barra-participacao'
+import { GraficoEvolucao } from './grafico-evolucao'
+import { GraficoPizza } from './grafico-pizza'
 import { MarcaCanal } from './marca-canal'
 import { SeletorPeriodo } from './seletor-periodo'
 
@@ -72,7 +71,7 @@ function CartaoCanal({ canal, comparacao, textoAguardando }: { canal: ResumoCana
               <Variacao valor={canal.variacao} comparacao={comparacao} compacta />
             </>
           ) : canal.estado === 'erro' ? (
-            <Badge tom="perigo" ponto>Erro no Olist</Badge>
+            <Badge tom="perigo" ponto>{canal.origem.tipo === 'crm' ? 'Erro ao ler' : 'Erro no Olist'}</Badge>
           ) : (
             <Badge tom="neutro" ponto>Aguardando Olist</Badge>
           )}
@@ -91,7 +90,7 @@ function CartaoCanal({ canal, comparacao, textoAguardando }: { canal: ResumoCana
             )}
           </>
         ) : canal.estado === 'erro' ? (
-          'Não foi possível ler as vendas do Olist agora.'
+          `Não foi possível ler as vendas ${canal.origem.tipo === 'crm' ? 'do CRM' : 'do Olist'} agora.`
         ) : (
           textoAguardando
         )}
@@ -105,22 +104,15 @@ function CartaoCanal({ canal, comparacao, textoAguardando }: { canal: ResumoCana
  * no período escolhido, com o total, a variação e a participação de cada canal.
  */
 export async function VendasPorCanal({ periodo, comExemplo }: { periodo: ChavePeriodo; comExemplo: boolean }) {
+  // Números do Olist com mais de 10 min são atualizados antes de aparecer (até 8 s de espera).
+  if (!comExemplo) await garantirDadosRecentesDoOlist()
   const dados = await vendasPorCanal(periodo, { comExemplo })
-
-  // Dados do Olist com mais de 15 min: pede uma sincronização depois de responder
-  // (quem abrir a tela em seguida já vê os números novos).
-  const { olist } = dados
-  if (olist?.conectado && olist.sincronizacaoDisponivel && sincronizacaoDesatualizada(olist.ultimaSincronizacao)) {
-    const site = await urlDoSite()
-    after(() => dispararSincronizacao(site))
-  }
-
   return <PainelVendasPorCanal dados={dados} periodo={periodo} />
 }
 
 /** Apresentação do painel (sem buscar dados). */
 export function PainelVendasPorCanal({ dados, periodo }: { dados: DadosVendasPorCanal; periodo: ChavePeriodo }) {
-  const { periodo: intervalos, canais, total, pendentes, olist, comExemplo } = dados
+  const { periodo: intervalos, canais, serie, total, pendentes, olist, comExemplo } = dados
   const comDados = canais.filter((c) => c.estado === 'ok' && c.atual)
   const nomesPendentes = pendentes.map((c) => c.nome)
   const listaPendentes =
@@ -212,7 +204,7 @@ export function PainelVendasPorCanal({ dados, periodo }: { dados: DadosVendasPor
               )}
               <span>
                 {comErro
-                  ? `Não foi possível ler as vendas do Olist: ${listaPendentes} ficaram de fora do total.`
+                  ? `Não foi possível ler as vendas agora: ${listaPendentes} ficaram de fora do total.`
                   : olist?.conectado
                     ? `Importando o histórico do Olist — ${listaPendentes} aparecem em instantes.`
                     : `${listaPendentes} entram no total quando o Olist for conectado.`}{' '}
@@ -237,22 +229,20 @@ export function PainelVendasPorCanal({ dados, periodo }: { dados: DadosVendasPor
         </div>
 
         <div className="min-w-0 lg:border-l lg:border-linha lg:pl-10">
-          <p className="tipo-rotulo mb-3 text-suave">Participação no total</p>
-          {comDados.length >= 2 && total.valor > 0 ? (
-            <BarraParticipacao
-              segmentos={comDados.map((c) => ({
+          <p className="tipo-rotulo mb-4 text-suave">Participação no faturamento</p>
+          {comDados.length > 0 ? (
+            <GraficoPizza
+              fatias={comDados.map((c) => ({
                 id: c.id,
                 nome: c.nome,
                 cor: c.cor,
                 valor: c.atual?.valor ?? 0,
-                participacao: c.participacao,
+                pedidos: c.atual?.pedidos ?? 0,
               }))}
             />
           ) : (
             <p className="rounded-xl border border-dashed border-linha-forte px-4 py-6 text-center text-[13px] text-suave">
-              {comDados.length < 2
-                ? 'A divisão entre os canais aparece quando houver vendas de pelo menos dois deles.'
-                : 'Nenhuma venda no período.'}
+              A divisão entre os canais aparece quando houver dados.
             </p>
           )}
         </div>
@@ -263,6 +253,35 @@ export function PainelVendasPorCanal({ dados, periodo }: { dados: DadosVendasPor
           <CartaoCanal key={canal.id} canal={canal} comparacao={intervalos.comparacao} textoAguardando={textoAguardando} />
         ))}
       </div>
+
+      <Card>
+        <CardHeader
+          titulo="Evolução das vendas"
+          descricao={`${serie.granularidade === 'semana' ? 'Por semana' : 'Por dia'} · ${intervalos.descricao}`}
+        />
+        <CardContent>
+          {serie.pontos.length < 2 ? (
+            <p className="rounded-xl border border-dashed border-linha-forte px-4 py-8 text-center text-[13px] text-suave">
+              A evolução aparece a partir de 2 dias — escolha 7, 30, 60 ou 90 dias, este mês ou o mês passado.
+            </p>
+          ) : comDados.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-linha-forte px-4 py-8 text-center text-[13px] text-suave">
+              A evolução aparece quando houver dados.
+            </p>
+          ) : (
+            <GraficoEvolucao
+              pontos={serie.pontos}
+              canais={comDados.map((c) => ({ id: c.id, nome: c.nome, cor: c.cor }))}
+              granularidade={serie.granularidade}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      <p className="text-[12px] leading-5 text-suave">
+        Critério igual ao Dashboard de vendas do Olist: contam todos os pedidos de Mercado Livre, Shopee e Loja Virtual pela
+        data do pedido, exceto os em aberto, cancelados e com dados incompletos. Grupo VIP: pedidos do CRM não cancelados.
+      </p>
     </section>
   )
 }
@@ -272,12 +291,13 @@ export function EsqueletoVendasPorCanal() {
   return (
     <section aria-busy="true" aria-label="Carregando vendas por canal" className="mb-5 space-y-3 lg:mb-6 lg:space-y-4">
       <div className="h-11 w-56 animate-pulse rounded-lg bg-linha/60" />
-      <div className="h-48 animate-pulse rounded-cartao bg-linha/50" />
+      <div className="h-60 animate-pulse rounded-cartao bg-linha/50" />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {CANAIS.map((c) => (
           <div key={c.id} className="h-36 animate-pulse rounded-cartao bg-linha/50" />
         ))}
       </div>
+      <div className="h-80 animate-pulse rounded-cartao bg-linha/50" />
     </section>
   )
 }

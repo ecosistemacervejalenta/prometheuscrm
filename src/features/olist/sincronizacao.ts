@@ -14,12 +14,17 @@ import { ConexaoOlistExpirada, renovarTokens } from './oauth'
  *
  * Cada execução:
  *   1. trava (evita duas sincronizações simultâneas) e renova o token se preciso;
- *   2. busca os pedidos criados nos últimos 62 dias (na 1ª vez, 13 meses de histórico);
+ *   2. busca os pedidos criados na janela do modo (abaixo);
  *   3. busca os pedidos alterados desde a última execução (ex.: cancelamentos antigos);
  *   4. grava tudo e remove o que sumiu do Olist dentro da janela consultada.
+ *
+ * Modos: "rapida" (7 dias — ao abrir a Visão geral e no botão Atualizar),
+ * "padrao" (62 dias — crons a cada 4 h) e "completa" (13 meses — 1x por dia e na
+ * 1ª conexão; reconcilia qualquer mudança antiga, garantindo os números do Olist).
  */
 
-const JANELA_DIAS = 62
+export type ModoSincronizacao = 'rapida' | 'padrao' | 'completa'
+const JANELA_DIAS: Record<Exclude<ModoSincronizacao, 'completa'>, number> = { rapida: 7, padrao: 62 }
 const HISTORICO_MESES = 13
 const MARGEM_MINUTOS = 15
 const TRAVA_MINUTOS = 10
@@ -47,7 +52,7 @@ function dataHoraBrasilia(data: Date): string {
   return `${v('year')}-${v('month')}-${v('day')} ${v('hour')}:${v('minute')}:${v('second')}`
 }
 
-export async function sincronizarOlist(): Promise<ResultadoSincronizacao> {
+export async function sincronizarOlist(modo: ModoSincronizacao = 'padrao'): Promise<ResultadoSincronizacao> {
   const supabase = createAdminClient()
   const inicio = new Date().toISOString()
   const travaVencida = new Date(Date.now() - TRAVA_MINUTOS * 60_000).toISOString()
@@ -87,8 +92,8 @@ export async function sincronizarOlist(): Promise<ResultadoSincronizacao> {
     }
 
     const hoje = hojeISO()
-    const completa = !conexao.sincronizado_ate
-    const dataInicial = completa ? `${somarMeses(hoje.slice(0, 7), -HISTORICO_MESES)}-01` : somarDias(hoje, -JANELA_DIAS)
+    const completa = modo === 'completa' || !conexao.sincronizado_ate
+    const dataInicial = completa ? `${somarMeses(hoje.slice(0, 7), -HISTORICO_MESES)}-01` : somarDias(hoje, -JANELA_DIAS[modo as 'rapida' | 'padrao'])
     // dataFinal = amanhã: cobre o dia de hoje mesmo se o filtro da API for exclusivo.
     const porCriacao = await listarPedidos(accessToken, { dataInicial, dataFinal: somarDias(hoje, 1) })
     const porAtualizacao = completa

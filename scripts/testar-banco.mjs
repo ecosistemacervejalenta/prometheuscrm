@@ -301,11 +301,35 @@ await q(`insert into pedidos_erp (id, numero, canal, ecommerce, situacao, data_p
   (4, 104, 'shopee', 'Shopee', 0, '2026-09-01', 80.00),
   (5, 105, 'shopify', 'Shopify', 9, '2026-09-20', 120.00),
   (6, 106, 'outro', 'API Tiny', 1, '2026-09-20', 70.00),
-  (7, 107, 'shopee', 'Shopee', 1, '2026-10-01', 55.00)`)
-expectEq('vendas ERP por canal: sem cancelados e dentro do intervalo',
+  (7, 107, 'shopee', 'Shopee', 1, '2026-10-01', 55.00),
+  (8, 108, 'shopee', 'Shopee', 8, '2026-09-12', 33.00)`)
+expectEq('regra do Olist: Aberta (0), Cancelada (2) e Dados incompletos (8) não contam',
+  (await q(`select s, situacao_erp_conta_venda(s::smallint) conta from generate_series(0, 9) s order by s`)).filter((r) => !r.conta).map((r) => r.s),
+  [0, 2, 8])
+expectEq('vendas ERP por canal: regra do Olist e dentro do intervalo',
   (await q(`select canal, valor::float valor, pedidos from vendas_erp_por_canal('2026-09-01', '2026-09-30') order by canal`)),
   [{ canal: 'mercado_livre', valor: 150, pedidos: 2 }, { canal: 'outro', valor: 70, pedidos: 1 },
-   { canal: 'shopee', valor: 80, pedidos: 1 }, { canal: 'shopify', valor: 120, pedidos: 1 }])
+   { canal: 'shopify', valor: 120, pedidos: 1 }])
+expectEq('vendas ERP por dia: mesma regra, um registro por dia e canal',
+  (await q(`select to_char(dia, 'MM-DD') dia, canal, valor::float valor, pedidos from vendas_erp_por_dia('2026-09-01', '2026-09-30') order by dia, canal`)),
+  [{ dia: '09-10', canal: 'mercado_livre', valor: 100.5, pedidos: 1 }, { dia: '09-20', canal: 'outro', valor: 70, pedidos: 1 },
+   { dia: '09-20', canal: 'shopify', valor: 120, pedidos: 1 }, { dia: '09-30', canal: 'mercado_livre', valor: 49.5, pedidos: 1 }])
+expectEq('séries batem com o total por canal',
+  (await um(`select (select sum(valor) from vendas_erp_por_dia('2026-09-01', '2026-09-30'))::float dias,
+                    (select sum(valor) from vendas_erp_por_canal('2026-09-01', '2026-09-30'))::float canais`)),
+  { dias: 340, canais: 340 })
+// Grupo VIP (CRM): o dia é o de Brasília
+const vips = (await q(`select id from pedidos where canal = 'grupo_vip' and status <> 'cancelado' order by numero limit 2`)).map((r) => r.id)
+await q(`update pedidos set criado_em = '2026-09-10 23:30:00-03' where id = $1`, [vips[0]])
+await q(`update pedidos set criado_em = '2026-09-11 00:10:00-03' where id = $1`, [vips[1]])
+expectEq('vendas CRM por dia: virada do dia no horário de Brasília',
+  (await q(`select to_char(dia, 'MM-DD') dia, pedidos from vendas_crm_por_dia('grupo_vip', '2026-09-10', '2026-09-11') order by dia`)),
+  [{ dia: '09-10', pedidos: 1 }, { dia: '09-11', pedidos: 1 }])
+expectEq('vendas CRM por dia: intervalo de um dia não pega o dia seguinte',
+  (await q(`select pedidos from vendas_crm_por_dia('grupo_vip', '2026-09-10', '2026-09-10')`)).map((r) => r.pedidos), [1])
+await q(`update pedidos set status = 'cancelado' where id = $1`, [vips[1]])
+expectEq('vendas CRM por dia: cancelado não conta',
+  (await q(`select count(*)::int n from vendas_crm_por_dia('grupo_vip', '2026-09-11', '2026-09-11')`)), [{ n: 0 }])
 expectEq('vendas ERP: intervalo de um dia (inclusivo)',
   (await q(`select canal, pedidos from vendas_erp_por_canal('2026-10-01', '2026-10-01')`)), [{ canal: 'shopee', pedidos: 1 }])
 await q(`insert into integracao_olist (id, access_token, refresh_token, access_expira_em, refresh_expira_em, conectado_em, ultima_sincronizacao)
@@ -336,8 +360,11 @@ await q(`update contas_fixas set valor = 12 where id = $1`, [fixaMembro.id])
 expectEq('membro aplica modelo às pendentes', (await um(`select aplicar_conta_fixa_aos_pendentes($1) n`, [fixaMembro.id])).n, 1)
 await q(`update contas_fixas set ativa = false where id = $1`, [fixaMembro.id])
 await q(`delete from contas_fixas where id = $1`, [fixaMembro.id])
-expectEq('membro lê pedidos do ERP', Number((await um(`select count(*) n from pedidos_erp`)).n), 7)
-expectEq('membro soma vendas do ERP', (await q(`select canal from vendas_erp_por_canal('2026-09-01', '2026-09-30') order by canal`)).length, 4)
+expectEq('membro lê pedidos do ERP', Number((await um(`select count(*) n from pedidos_erp`)).n), 8)
+expectEq('membro soma vendas do ERP', (await q(`select canal from vendas_erp_por_canal('2026-09-01', '2026-09-30') order by canal`)).length, 3)
+expectEq('membro consulta séries por dia (ERP e CRM)', await um(`select
+  (select count(*)::int from vendas_erp_por_dia('2026-09-01', '2026-09-30')) erp,
+  (select count(*)::int from vendas_crm_por_dia('grupo_vip', '2026-09-10', '2026-09-10')) crm`), { erp: 4, crm: 1 })
 await expectError('membro não grava pedidos do ERP', `insert into pedidos_erp (id, canal, data_pedido) values (99, 'shopee', current_date)`)
 await expectError('membro não altera pedidos do ERP', `update pedidos_erp set valor = 0 where id = 1 returning id`)
 await expectError('membro não lê os tokens do Olist', `select access_token from integracao_olist`)
@@ -350,6 +377,7 @@ show('autenticado inativo (novo usuário) vê clientes (0)', (await q(`select co
 expectEq('inativo não vê contas a receber', Number((await um(`select count(*) n from contas_receber`)).n), 0)
 expectEq('inativo não vê categorias', Number((await um(`select count(*) n from categorias_financeiras`)).n), 0)
 expectEq('inativo não vê pedidos do ERP', Number((await um(`select count(*) n from pedidos_erp`)).n), 0)
+expectEq('inativo não vê vendas do CRM por dia', (await q(`select * from vendas_crm_por_dia('grupo_vip', '2026-01-01', '2026-12-31')`)).length, 0)
 expectEq('inativo não vê o status do Olist', (await um(`select status_integracao_olist() s`)).s, null)
 await expectError('inativo não lança conta a receber', `insert into contas_receber (descricao, competencia, vencimento, valor) values ('x', current_date, current_date, 1)`)
 await db.exec(`reset role; update perfis set ativo = true where id = '${uid2}'; set role authenticated; select set_config('request.jwt.claim.sub', '${uid2}', false);`)
@@ -371,7 +399,7 @@ await q(`select desconectar_olist()`)
 await db.exec(`reset role;`)
 expectEq('desconectar apaga os tokens e mantém os pedidos', await um(`select
   (select access_token is null and refresh_token is null from integracao_olist) sem_tokens,
-  (select count(*)::int from pedidos_erp) pedidos`), { sem_tokens: true, pedidos: 7 })
+  (select count(*)::int from pedidos_erp) pedidos`), { sem_tokens: true, pedidos: 8 })
 show('perfil do João', (await q(`select nome, cargo, papel, ativo from perfis where id = $1`, [uid2]))[0])
 
 await db.exec(`set role anon; select set_config('request.jwt.claim.sub', '', false);`)
@@ -384,6 +412,8 @@ await expectError('anon chama aplicar_conta_fixa_aos_pendentes', `select aplicar
 await expectError('anon lê pedidos do ERP', `select * from pedidos_erp`)
 await expectError('anon lê tokens do Olist', `select * from integracao_olist`)
 await expectError('anon consulta status do Olist', `select status_integracao_olist()`)
+await expectError('anon consulta séries do ERP', `select * from vendas_erp_por_dia('2026-09-01', '2026-09-30')`)
+await expectError('anon consulta séries do CRM', `select * from vendas_crm_por_dia('grupo_vip', '2026-09-01', '2026-09-30')`)
 await db.exec(`reset role;`)
 
 await db.exec(`set role service_role;`)

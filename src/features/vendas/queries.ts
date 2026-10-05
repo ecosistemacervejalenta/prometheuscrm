@@ -2,12 +2,13 @@ import 'server-only'
 
 import { statusOlist, type StatusOlist } from '@/features/olist/queries'
 import { exigirEquipe } from '@/lib/auth'
-import { hojeISO, inicioDoDia, somarDias } from '@/lib/datas'
+import { hojeISO, somarDias } from '@/lib/datas'
 import type { CanalVenda } from '@/types'
 
 import { CANAIS, type Canal, type IdCanal } from './canais'
-import { vendasDoErp, type Vendas } from './erp'
+import { vendasDoErp, vendasDoErpPorDia } from './erp'
 import { intervalosDoPeriodo, type ChavePeriodo, type Intervalo } from './periodos'
+import { montarSerie, somarVendas, totaisDaSerie, type Serie, type Vendas, type VendasPorCanal } from './serie'
 
 export type EstadoCanal = 'ok' | 'aguardando' | 'erro'
 
@@ -23,107 +24,146 @@ export type ResumoCanal = Canal & {
 }
 
 const ZERO: Vendas = { valor: 0, pedidos: 0 }
-const PAGINA = 1000
 
 const variacao = (atual: Vendas, anterior: Vendas | null) =>
   anterior && anterior.valor > 0 ? (atual.valor - anterior.valor) / anterior.valor : null
 
 const ticket = (v: Vendas | null) => (v && v.pedidos > 0 ? v.valor / v.pedidos : null)
 
-/** Pedidos não cancelados de um canal do CRM no intervalo (paginado: o Supabase limita a 1.000 linhas). */
-async function vendasDoCrm(canal: CanalVenda, intervalo: Intervalo): Promise<Vendas> {
+/** Vendas por dia de um canal do CRM (função no banco: sem cancelados, dia de Brasília). */
+async function vendasDoCrmPorDia(canal: CanalVenda, intervalo: Intervalo): Promise<Map<string, Vendas>> {
   const { supabase } = await exigirEquipe()
-  const vendas = { ...ZERO }
-  for (let de = 0; ; de += PAGINA) {
-    const { data, error } = await supabase
-      .from('pedidos')
-      .select('total')
-      .eq('canal', canal)
-      .neq('status', 'cancelado')
-      .gte('criado_em', inicioDoDia(intervalo.inicio))
-      .lt('criado_em', inicioDoDia(somarDias(intervalo.fim, 1)))
-      .order('id')
-      .range(de, de + PAGINA - 1)
-    if (error) throw error
-    vendas.valor += data.reduce((s, p) => s + Number(p.total ?? 0), 0)
-    vendas.pedidos += data.length
-    if (data.length < PAGINA) return vendas
+  const { data, error } = await supabase.rpc('vendas_crm_por_dia', { p_canal: canal, p_inicio: intervalo.inicio, p_fim: intervalo.fim })
+  if (error) throw error
+  return new Map((data ?? []).map((l) => [String(l.dia).slice(0, 10), { valor: Number(l.valor), pedidos: Number(l.pedidos) }]))
+}
+
+const somarMapa = (mapa: Map<string, Vendas>) => [...mapa.values()].reduce<Vendas>((t, v) => somarVendas(t, v), { ...ZERO })
+
+/** Números fictícios (modo "dados de exemplo"): média diária por canal e variação vs. período anterior. */
+const EXEMPLO: Record<IdCanal, { porDia: Vendas; crescimento: number }> = {
+  mercado_livre: { porDia: { valor: 631.35, pedidos: 4.7 }, crescimento: 0.168 },
+  shopee: { porDia: { valor: 329.01, pedidos: 3.2 }, crescimento: -0.056 },
+  shopify: { porDia: { valor: 410.33, pedidos: 2 }, crescimento: 0.246 },
+  grupo_vip: { porDia: { valor: 240.5, pedidos: 1.6 }, crescimento: 0.199 },
+}
+
+function exemploPorDia(intervalo: Intervalo): Map<string, VendasPorCanal> {
+  const porDia = new Map<string, VendasPorCanal>()
+  let i = 0
+  for (let dia = intervalo.inicio; dia <= intervalo.fim; dia = somarDias(dia, 1), i++) {
+    const vendas: VendasPorCanal = {}
+    CANAIS.forEach((canal, c) => {
+      // Oscilação determinística (sem aleatoriedade: a tela não muda a cada recarga).
+      const fator = 1 + 0.45 * Math.sin(i / 2.3 + c * 1.7) + 0.2 * Math.cos(i / 5.1 + c)
+      const base = EXEMPLO[canal.id].porDia
+      vendas[canal.id] = {
+        valor: Math.max(0, Math.round(base.valor * fator * 100) / 100),
+        pedidos: Math.max(0, Math.round(base.pedidos * fator)),
+      }
+    })
+    porDia.set(dia, vendas)
   }
-}
-
-/** Números fictícios (modo "dados de exemplo"), só para visualizar a tela antes do ERP. */
-const EXEMPLO: Record<IdCanal, [Vendas, Vendas]> = {
-  mercado_livre: [{ valor: 18940.5, pedidos: 142 }, { valor: 16210, pedidos: 128 }],
-  shopee: [{ valor: 9870.3, pedidos: 97 }, { valor: 10450.9, pedidos: 104 }],
-  shopify: [{ valor: 12310, pedidos: 61 }, { valor: 9880, pedidos: 52 }],
-  grupo_vip: [{ valor: 7215, pedidos: 48 }, { valor: 6020, pedidos: 41 }],
-}
-const ESCALA_EXEMPLO: Record<ChavePeriodo, number> = {
-  hoje: 0.05,
-  '7d': 0.25,
-  '30d': 1,
-  '60d': 2,
-  '90d': 3,
-  mes: 1,
-  mes_anterior: 1.12,
-}
-
-function exemplo(id: IdCanal, chave: ChavePeriodo): [Vendas, Vendas] {
-  const k = ESCALA_EXEMPLO[chave]
-  return EXEMPLO[id].map((v) => ({
-    valor: Math.round(v.valor * k * 100) / 100,
-    pedidos: Math.max(1, Math.round(v.pedidos * k)),
-  })) as [Vendas, Vendas]
+  return porDia
 }
 
 /**
  * Vendas por canal no período: Olist ERP para os marketplaces e a loja virtual,
- * CRM para o Grupo VIP. Os canais do Olist só têm números depois da primeira
- * sincronização; uma falha na leitura não derruba o painel (estado "erro").
+ * CRM para o Grupo VIP. Os totais saem da mesma série diária do gráfico, então
+ * cartões, pizza e evolução sempre batem entre si. Os canais do Olist só têm
+ * números depois da 1ª sincronização; uma falha na leitura não derruba o painel.
  */
 export async function vendasPorCanal(chave: ChavePeriodo, { comExemplo = false } = {}) {
   const periodo = intervalosDoPeriodo(chave, hojeISO())
 
   let olist: StatusOlist | null = null
-  let erp: [Partial<Record<IdCanal, Vendas>> | null, Partial<Record<IdCanal, Vendas>> | null] = [null, null]
   let erroErp = false
-  if (!comExemplo) {
+  let erpPorDia: Map<string, VendasPorCanal> | null = null
+  let erpAnterior: VendasPorCanal | null = null
+  const crmPorDia = new Map<IdCanal, Map<string, Vendas>>()
+  const crmAnterior = new Map<IdCanal, Vendas>()
+  const crmComErro = new Set<IdCanal>()
+
+  if (comExemplo) {
+    erpPorDia = exemploPorDia(periodo.atual)
+  } else {
     try {
       olist = await statusOlist()
-      if (olist.ultimaSincronizacao) erp = await Promise.all([vendasDoErp(periodo.atual), vendasDoErp(periodo.anterior)])
+      if (olist.ultimaSincronizacao) {
+        ;[erpPorDia, erpAnterior] = await Promise.all([vendasDoErpPorDia(periodo.atual), vendasDoErp(periodo.anterior)])
+      }
     } catch (erro) {
       console.error('[vendas] falha ao ler as vendas do Olist', erro)
       erroErp = true
     }
-  }
-
-  const doCrm = new Map<IdCanal, [Vendas, Vendas]>()
-  if (!comExemplo) {
     await Promise.all(
       CANAIS.map(async (canal) => {
         if (canal.origem.tipo !== 'crm') return
-        const origem = canal.origem.canal
-        doCrm.set(canal.id, await Promise.all([vendasDoCrm(origem, periodo.atual), vendasDoCrm(origem, periodo.anterior)]))
+        try {
+          const [atual, anterior] = await Promise.all([
+            vendasDoCrmPorDia(canal.origem.canal, periodo.atual),
+            vendasDoCrmPorDia(canal.origem.canal, periodo.anterior),
+          ])
+          crmPorDia.set(canal.id, atual)
+          crmAnterior.set(canal.id, somarMapa(anterior))
+        } catch (erro) {
+          console.error(`[vendas] falha ao ler as vendas do CRM (${canal.id})`, erro)
+          crmComErro.add(canal.id)
+        }
       }),
     )
   }
 
+  const estados = new Map<IdCanal, EstadoCanal>(
+    CANAIS.map((canal) => [
+      canal.id,
+      comExemplo
+        ? 'ok'
+        : canal.origem.tipo === 'crm'
+          ? crmComErro.has(canal.id)
+            ? 'erro'
+            : 'ok'
+          : erroErp
+            ? 'erro'
+            : erpPorDia
+              ? 'ok'
+              : 'aguardando',
+    ]),
+  )
+
+  // Série diária única com os canais que têm dados.
+  const porDia = new Map<string, VendasPorCanal>()
+  for (let dia = periodo.atual.inicio; dia <= periodo.atual.fim; dia = somarDias(dia, 1)) {
+    const vendas: VendasPorCanal = {}
+    for (const canal of CANAIS) {
+      if (estados.get(canal.id) !== 'ok') continue
+      const v = canal.origem.tipo === 'crm' && !comExemplo ? crmPorDia.get(canal.id)?.get(dia) : erpPorDia?.get(dia)?.[canal.id]
+      if (v) vendas[canal.id] = v
+    }
+    porDia.set(dia, vendas)
+  }
+  const serie: Serie = montarSerie(periodo.atual, porDia)
+  const totaisAtuais = totaisDaSerie(serie)
+
+  const anteriorDe = (canal: Canal): Vendas => {
+    if (comExemplo) {
+      const atual = totaisAtuais[canal.id] ?? ZERO
+      const k = 1 + EXEMPLO[canal.id].crescimento
+      return { valor: Math.round((atual.valor / k) * 100) / 100, pedidos: Math.round(atual.pedidos / k) }
+    }
+    return canal.origem.tipo === 'crm' ? (crmAnterior.get(canal.id) ?? ZERO) : (erpAnterior?.[canal.id] ?? ZERO)
+  }
+
   const linhas = CANAIS.map((canal) => {
-    let estado: EstadoCanal = 'ok'
-    let par: [Vendas, Vendas] | null = null
-    if (comExemplo) par = exemplo(canal.id, chave)
-    else if (canal.origem.tipo === 'crm') par = doCrm.get(canal.id) ?? null
-    else if (erroErp) estado = 'erro'
-    else if (!erp[0]) estado = 'aguardando'
-    else par = [erp[0][canal.id] ?? ZERO, erp[1]?.[canal.id] ?? ZERO]
-    return { canal, estado, atual: par?.[0] ?? null, anterior: par?.[1] ?? null }
+    const estado = estados.get(canal.id)!
+    return estado === 'ok'
+      ? { canal, estado, atual: totaisAtuais[canal.id] ?? { ...ZERO }, anterior: anteriorDe(canal) }
+      : { canal, estado, atual: null, anterior: null }
   })
 
   const comDados = linhas.filter((l) => l.estado === 'ok' && l.atual)
-  const somar = (lista: Array<Vendas | null>) =>
-    lista.reduce<Vendas>((t, v) => ({ valor: t.valor + (v?.valor ?? 0), pedidos: t.pedidos + (v?.pedidos ?? 0) }), { ...ZERO })
-  const totalAtual = somar(comDados.map((l) => l.atual))
-  const totalAnterior = somar(comDados.map((l) => l.anterior))
+  const totalAtual = comDados.reduce<Vendas>((t, l) => somarVendas(t, l.atual!), { ...ZERO })
+  const totalAnterior = comDados.reduce<Vendas>((t, l) => somarVendas(t, l.anterior ?? undefined), { ...ZERO })
 
   const canais: ResumoCanal[] = linhas.map(({ canal, estado, atual, anterior }) => ({
     ...canal,
@@ -138,6 +178,7 @@ export async function vendasPorCanal(chave: ChavePeriodo, { comExemplo = false }
   return {
     periodo,
     canais,
+    serie,
     total: {
       ...totalAtual,
       ticket: ticket(totalAtual),
