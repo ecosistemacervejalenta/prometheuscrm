@@ -1,6 +1,7 @@
 'use client'
 
 import { ArrowRight, CalendarClock, Truck } from 'lucide-react'
+import Image from 'next/image'
 import type { ReactNode } from 'react'
 
 import { formatarData, formatarDataHora, formatarMoeda } from '@/lib/format'
@@ -15,6 +16,17 @@ export type PreVendaDoLink = {
   grupoVip: boolean
   encerra_em: string | null
   previsao_entrega: string | null
+}
+
+/** Foto de perfil da Cerveja Lenta VIP: redonda e centralizada, como um perfil do Instagram. */
+export function PerfilDaLoja({ className }: { className?: string }) {
+  return (
+    <div className={cn('flex justify-center', className)}>
+      <span className="grid size-[76px] place-items-center rounded-full bg-superficie p-1 shadow-cartao ring-1 ring-linha">
+        <Image src="/brand/cerveja-lenta-vip.png" alt="Cerveja Lenta VIP" width={68} height={68} priority className="size-full rounded-full object-contain" />
+      </span>
+    </div>
+  )
 }
 
 /**
@@ -42,6 +54,7 @@ export function AberturaPreVenda({
 
   return (
     <>
+      <PerfilDaLoja className="mb-5" />
       <section className="rounded-[28px] bg-volt p-2 pb-6 sm:pb-8">
         {capa ? (
           <div className="relative aspect-square w-full overflow-hidden rounded-[22px]">{capa}</div>

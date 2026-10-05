@@ -35,7 +35,7 @@ import {
 } from './armazenamento'
 import { CLASSE_CAMPO, CLASSE_RESPOSTA, classeBotaoGrande } from './estilos'
 import { TelaPagamento } from './pagamento'
-import { AberturaPreVenda } from './abertura'
+import { AberturaPreVenda, PerfilDaLoja } from './abertura'
 import { CartaoCervejaLink, textosDaEscolha } from './cartao-cerveja'
 import type { PreVendaPublica } from './queries'
 
@@ -857,6 +857,7 @@ function PreVendaEncerrada({ dados }: { dados: PreVendaPublica }) {
   const { preVenda, loja } = dados
   return (
     <Moldura>
+      <PerfilDaLoja className="mb-5" />
       <div className="animar-passo rounded-[28px] bg-ink p-8 text-center text-white">
         <Lock className="mx-auto size-10 text-volt" aria-hidden />
         <h1 className="tipo-h2 mt-4">{preVenda.titulo}</h1>
