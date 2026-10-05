@@ -15,9 +15,9 @@ import {
   Truck,
   User,
 } from 'lucide-react'
-import { useRef, useState, useTransition, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, useTransition, type FormEvent, type ReactNode } from 'react'
+import { flushSync } from 'react-dom'
 
-import { Logo } from '@/components/marca/marca'
 import { buscarCep, mascararCep } from '@/lib/cep'
 import { formatarData, formatarDataHora, formatarMoeda } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -42,6 +42,9 @@ import type { PreVendaPublica } from './queries'
 type Etapa = 'inicio' | 'cervejas' | 'conferir' | 'nome' | 'sobrenome' | 'whatsapp' | 'cep' | 'numero' | 'revisao' | 'pago'
 type Item = PreVendaPublica['itens'][number]
 type ConsultaCep = { cep: string; buscando: boolean; naoEncontrado: boolean; vip: boolean | null }
+
+/** Etapas que entram no histórico do navegador (#passo-nome...): o "voltar" do Android e o gesto do iPhone voltam uma pergunta. */
+const NO_HISTORICO: Etapa[] = ['cervejas', 'conferir', 'nome', 'sobrenome', 'whatsapp', 'cep', 'numero', 'revisao']
 
 /** Etapas que contam na barra de progresso. */
 const PROGRESSO: Etapa[] = ['cervejas', 'nome', 'sobrenome', 'whatsapp', 'cep', 'numero', 'revisao']
@@ -103,7 +106,6 @@ function Fluxo({
     () => clienteSalvo ?? { ...CLIENTE_VAZIO, whatsapp: whatsappInicial ? mascararWhatsapp(whatsappInicial.replace(/^55/, '')) : '' },
   )
   const [lembrado, setLembrado] = useState(clienteSalvo !== null)
-  const [pelaConferencia, setPelaConferencia] = useState(false)
   const [consulta, setConsulta] = useState<ConsultaCep | null>(null)
   const [editandoEndereco, setEditandoEndereco] = useState(false)
   const [observacoes, setObservacoes] = useState('')
@@ -126,22 +128,50 @@ function Fluxo({
 
   const alterar = (campo: keyof DadosCliente) => (valor: string) => setCliente((c) => ({ ...c, [campo]: valor }))
 
-  function ir(proxima: Etapa) {
-    setErro(null)
-    setEtapa(proxima)
+  /**
+   * Avança (ou volta) uma etapa. Cada pergunta vira uma entrada no histórico do navegador, e o
+   * campo da próxima pergunta recebe o foco ainda dentro do toque — no iPhone é o único jeito
+   * de o teclado continuar aberto entre uma pergunta e outra.
+   */
+  function ir(proxima: Etapa, { substituir = false } = {}) {
+    flushSync(() => {
+      setErro(null)
+      setEtapa(proxima)
+    })
+    const url = NO_HISTORICO.includes(proxima) ? `#passo-${proxima}` : window.location.pathname + window.location.search
+    if (substituir) window.history.replaceState(null, '', url)
+    else window.history.pushState(null, '', url)
     window.scrollTo({ top: 0 })
+    document.querySelector<HTMLElement>('[data-foco]')?.focus({ preventScroll: true })
   }
 
-  const voltarPara: Partial<Record<Etapa, Etapa>> = {
-    cervejas: 'inicio',
-    conferir: 'cervejas',
-    nome: lembrado ? 'conferir' : 'cervejas',
-    sobrenome: 'nome',
-    whatsapp: 'sobrenome',
-    cep: 'whatsapp',
-    numero: 'cep',
-    revisao: pelaConferencia ? 'conferir' : 'numero',
-  }
+  // Botão "voltar" do Android / gesto do iPhone → etapa anterior (sem sair do link).
+  const atual = useRef({ pedido, lembrado })
+  useEffect(() => {
+    atual.current = { pedido, lembrado }
+  })
+  useEffect(() => {
+    if (window.location.hash.startsWith('#passo-')) window.history.replaceState(null, '', window.location.pathname + window.location.search)
+    function aoNavegar() {
+      const alvo = window.location.hash.replace('#passo-', '') as Etapa
+      setErro(null)
+      if (atual.current.pedido) setEtapa('pago')
+      else if (!NO_HISTORICO.includes(alvo)) setEtapa('inicio')
+      else setEtapa(alvo === 'conferir' && !atual.current.lembrado ? 'nome' : alvo)
+      window.scrollTo({ top: 0 })
+    }
+    window.addEventListener('popstate', aoNavegar)
+    return () => window.removeEventListener('popstate', aoNavegar)
+  }, [])
+
+  // Android: "puxar para atualizar" recarregaria a página no meio do pedido.
+  useEffect(() => {
+    const raiz = document.documentElement
+    raiz.style.overscrollBehaviorY = 'none'
+    return () => {
+      raiz.style.overscrollBehaviorY = ''
+    }
+  }, [])
 
   function definirQuantidade(item: Item, quantidade: number) {
     const valor = Math.max(0, Math.min(Number.isFinite(quantidade) ? quantidade : 0, maximoDo(item)))
@@ -211,18 +241,15 @@ function Fluxo({
   }
 
   function aposNumero(evento: FormEvent) {
-    setPelaConferencia(false)
     aposPergunta(evento, Boolean(cliente.numero.trim()), 'Digite o número da casa ou do prédio (ou toque em “Sem número”).', 'revisao')
   }
 
   function continuarConferido() {
-    setPelaConferencia(true)
     if (cepDigitos.length === 8 && consulta?.cep !== cepDigitos) consultarCep(cepDigitos, false)
     ir('revisao')
   }
 
   function corrigirDados() {
-    setPelaConferencia(false)
     ir('nome')
   }
 
@@ -271,7 +298,7 @@ function Fluxo({
         lembrarPedido(preVenda.slug, feito)
         setPedido(feito)
         setLembrado(true)
-        ir('pago')
+        ir('pago', { substituir: true })
       } catch {
         setErro('Sem conexão com a internet. Confira e toque em “Confirmar pedido” de novo.')
       }
@@ -283,8 +310,7 @@ function Fluxo({
     setPedido(null)
     setQuantidades({})
     setObservacoes('')
-    setPelaConferencia(false)
-    ir(preVenda.ativa ? 'inicio' : 'pago')
+    ir(preVenda.ativa ? 'inicio' : 'pago', { substituir: true })
   }
 
   // ---------------------------------------------------------------------------
@@ -299,10 +325,12 @@ function Fluxo({
   if (!preVenda.ativa) return <PreVendaEncerrada dados={dados} />
 
   const indice = PROGRESSO.indexOf(etapa === 'conferir' ? 'numero' : etapa)
-  const voltar = voltarPara[etapa]
 
   return (
-    <Moldura progresso={indice >= 0 ? (indice + 1) / PROGRESSO.length : undefined} aoVoltar={voltar ? () => ir(voltar) : undefined}>
+    <Moldura
+      progresso={indice >= 0 ? (indice + 1) / PROGRESSO.length : undefined}
+      aoVoltar={etapa === 'inicio' ? undefined : () => window.history.back()}
+    >
       <div key={etapa} className="animar-passo">
         {/* Boas-vindas ------------------------------------------------------ */}
         {etapa === 'inicio' && (
@@ -383,7 +411,7 @@ function Fluxo({
             </ul>
             <BarraInferior erro={erro}>
               <div className="min-w-0 flex-1">
-                <p className="text-[13px] text-white/60">{unidades === 1 ? '1 cerveja' : `${unidades} cervejas`}</p>
+                <p className="text-[13px] text-white/60">{unidades === 0 ? 'Escolha suas cervejas' : unidades === 1 ? '1 cerveja' : `${unidades} cervejas`}</p>
                 <p className="tipo-numero text-2xl whitespace-nowrap text-white max-[360px]:text-lg">{formatarMoeda(subtotal)}</p>
               </div>
               <button type="button" disabled={unidades === 0} onClick={() => ir(lembrado ? 'conferir' : 'nome')} className={classeBotaoGrande('volt')}>
@@ -439,8 +467,11 @@ function Fluxo({
             <input
               id="nome"
               autoFocus
+              data-foco
               autoComplete="given-name"
               autoCapitalize="words"
+              autoCorrect="off"
+              spellCheck={false}
               enterKeyHint="next"
               maxLength={60}
               placeholder="Digite aqui…"
@@ -463,8 +494,11 @@ function Fluxo({
             <input
               id="sobrenome"
               autoFocus
+              data-foco
               autoComplete="family-name"
               autoCapitalize="words"
+              autoCorrect="off"
+              spellCheck={false}
               enterKeyHint="next"
               maxLength={60}
               placeholder="Digite aqui…"
@@ -490,6 +524,7 @@ function Fluxo({
               type="tel"
               inputMode="tel"
               autoFocus
+              data-foco
               autoComplete="tel-national"
               enterKeyHint="next"
               placeholder="(11) 98765-4321"
@@ -515,6 +550,7 @@ function Fluxo({
               id="cep"
               inputMode="numeric"
               autoFocus
+              data-foco
               autoComplete="postal-code"
               enterKeyHint="next"
               placeholder="00000-000"
@@ -574,6 +610,7 @@ function Fluxo({
                 id="numero"
                 inputMode="numeric"
                 autoFocus
+                data-foco
                 enterKeyHint="next"
                 maxLength={20}
                 placeholder="123"
@@ -711,36 +748,34 @@ function Fluxo({
 // -----------------------------------------------------------------------------
 
 function Moldura({ progresso, aoVoltar, children }: { progresso?: number; aoVoltar?: () => void; children: ReactNode }) {
+  const comCabecalho = Boolean(aoVoltar) || progresso !== undefined
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col px-5 pb-[max(24px,env(safe-area-inset-bottom))]">
-      <header className="sticky top-0 z-30 -mx-5 bg-papel px-5 pt-[max(12px,env(safe-area-inset-top))] pb-3">
-        <div className="grid grid-cols-[44px_1fr_44px] items-center">
+      {comCabecalho && (
+        <header className="sticky top-0 z-30 -mx-5 flex items-center gap-3 bg-papel px-5 pt-[max(8px,env(safe-area-inset-top))] pb-2">
           {aoVoltar ? (
-            <button type="button" onClick={aoVoltar} aria-label="Voltar" className="-ml-2 grid size-11 place-items-center rounded-full hover:bg-ink/5">
+            <button type="button" onClick={aoVoltar} aria-label="Voltar" className="-ml-2.5 grid size-11 shrink-0 place-items-center rounded-full active:bg-ink/10 lg:hover:bg-ink/5">
               <ArrowLeft className="size-5" aria-hidden />
             </button>
           ) : (
-            <span />
+            <span className="size-11 shrink-0" />
           )}
-          <div className="flex justify-center">
-            <Logo variante="cor" largura={120} prioridade />
-          </div>
-          <span />
-        </div>
-        {progresso !== undefined && (
-          <div
-            className="mt-3 h-1 overflow-hidden rounded-full bg-ink/10"
-            role="progressbar"
-            aria-label="Progresso do pedido"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(progresso * 100)}
-          >
-            <div className="h-full rounded-full bg-ink transition-[width] duration-500 ease-out" style={{ width: `${progresso * 100}%` }} />
-          </div>
-        )}
-      </header>
-      <main className="flex-1 pt-6">{children}</main>
+          {progresso !== undefined && (
+            <div
+              className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink/10"
+              role="progressbar"
+              aria-label="Progresso do pedido"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(progresso * 100)}
+            >
+              <div className="h-full rounded-full bg-ink transition-[width] duration-500 ease-out" style={{ width: `${progresso * 100}%` }} />
+            </div>
+          )}
+          <span className="w-2 shrink-0" />
+        </header>
+      )}
+      <main className={cn('flex-1', comCabecalho ? 'pt-4' : 'pt-[max(16px,env(safe-area-inset-top))]')}>{children}</main>
     </div>
   )
 }
@@ -860,7 +895,7 @@ function CamposEndereco({ cliente, alterar }: { cliente: DadosCliente; alterar: 
 /** Barra fixa no rodapé (total + ação). O erro aparece logo acima, sempre visível. */
 function BarraInferior({ erro, children }: { erro: string | null; children: ReactNode }) {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-20 px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
+    <div className="fixed inset-x-0 bottom-0 z-20 px-4 pb-[max(16px,env(safe-area-inset-bottom))] max-lg:[body:has(:is(input,textarea):focus)_&]:hidden">
       <div className="mx-auto max-w-xl">
         {erro && (
           <div className="animar-passo mb-2 shadow-flutuante">
