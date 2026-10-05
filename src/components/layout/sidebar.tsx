@@ -2,8 +2,10 @@
 
 import {
   Beer,
+  BookUser,
   Building2,
   Crown,
+  HandCoins,
   LayoutDashboard,
   LogOut,
   Rocket,
@@ -41,12 +43,14 @@ function itensMenu(contagens: PropsSidebar['contagens']): ItemMenu[] {
   return [
     { href: '/', rotulo: 'Visão geral', icone: LayoutDashboard },
     { href: '/clientes', rotulo: 'Clientes', icone: Users, contagem: contagens.clientes },
+    { href: '/leads', rotulo: 'Banco de Leads', icone: BookUser },
     { href: '/pedidos', rotulo: 'Pedidos', icone: ShoppingBag, contagem: contagens.aReceber },
     { href: '/pre-vendas', rotulo: 'Pré-vendas', icone: Rocket, destaque: contagens.preVendasAtivas },
     { href: '/grupo-vip', rotulo: 'Grupo VIP', icone: Crown },
     { href: '/produtos', rotulo: 'Produtos', icone: Beer },
     { href: '/fornecedores', rotulo: 'Fornecedores', icone: Building2 },
     { href: '/contas', rotulo: 'Contas a pagar', icone: Wallet },
+    { href: '/receber', rotulo: 'Contas a receber', icone: HandCoins },
     { href: '/configuracoes', rotulo: 'Configurações', icone: Settings },
   ]
 }

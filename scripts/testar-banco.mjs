@@ -336,6 +336,43 @@ await q(`insert into integracao_olist (id, access_token, refresh_token, access_e
   values (1, 'segredo-access', 'segredo-refresh', now() + interval '4 hours', now() + interval '1 day', now(), now())`)
 await expectError('só existe uma linha de conexão do Olist', `insert into integracao_olist (id) values (2)`)
 
+// Banco de Leads ----------------------------------------------------------------
+const pasta = await um(`insert into leads_pastas (nome, descricao) values ('  Central   da Cerveja ', 'Listas do WhatsApp') returning id, nome`)
+expectEq('pasta: nome normalizado', pasta.nome, 'Central da Cerveja')
+await expectError('pasta: nome repetido (maiúsculas)', `insert into leads_pastas (nome) values ('CENTRAL DA CERVEJA')`)
+const lista = await um(`insert into leads_listas (pasta_id, nome, origem, arquivo_nome, colunas, coluna_nome, coluna_whatsapp)
+  values ($1, 'Grupo VIP', 'WhatsApp', 'grupo-vip.xlsx', $2::jsonb, 'c0', 'c1') returning id, status`,
+  [pasta.id, JSON.stringify([{ chave: 'c0', rotulo: 'Nome', tipo: 'nome' }, { chave: 'c1', rotulo: 'Telefone', tipo: 'telefone' }])])
+expectEq('lista nasce "importando"', lista.status, 'importando')
+const lote = [
+  { linha: 1, nome: ' João   Silva ', whatsapp: '(11) 98765-4321', dados: { c0: 'João Silva', c1: '(11) 98765-4321' } },
+  { linha: 2, nome: 'Maria', whatsapp: '11987654321', dados: { c0: 'Maria', c1: '11987654321' } },
+  { linha: 3, nome: 'Sem número', whatsapp: '123', dados: { c0: 'Sem número', c1: '123' } },
+  { linha: 4, nome: 'Gringo', whatsapp: '+351 912 345 678', dados: { c0: 'Gringo', c1: '+351 912 345 678' } },
+  { linha: 5, nome: 'Ana', email: ' ANA@EXEMPLO.COM ', dados: { c0: 'Ana' } },
+]
+expectEq('importar: número repetido na lista é ignorado', (await um(`select importar_leads($1, $2::jsonb) n`, [lista.id, JSON.stringify(lote)])).n, 4)
+expectEq('importar de novo o mesmo lote não duplica nada', (await um(`select importar_leads($1, $2::jsonb) n`, [lista.id, JSON.stringify(lote)])).n, 0)
+expectEq('leads normalizados', await q(`select linha, nome, whatsapp, email from leads where lista_id = $1 order by linha`, [lista.id]), [
+  { linha: 1, nome: 'João Silva', whatsapp: '5511987654321', email: null },
+  { linha: 3, nome: 'Sem número', whatsapp: null, email: null },
+  { linha: 4, nome: 'Gringo', whatsapp: '351912345678', email: null },
+  { linha: 5, nome: 'Ana', whatsapp: null, email: 'ana@exemplo.com' },
+])
+await q(`select concluir_importacao_leads($1)`, [lista.id])
+expectEq('concluir: totais e status', await um(`select status, total, com_whatsapp from leads_listas where id = $1`, [lista.id]), { status: 'pronta', total: 4, com_whatsapp: 2 })
+expectEq('vw_leads marca quem já é cliente', await q(`select linha, ja_cliente from vw_leads where lista_id = $1 order by linha`, [lista.id]),
+  [{ linha: 1, ja_cliente: true }, { linha: 3, ja_cliente: false }, { linha: 4, ja_cliente: false }, { linha: 5, ja_cliente: false }])
+expectEq('busca encontra por qualquer coluna', (await q(`select linha from leads where lista_id = $1 and busca like '%912 345%' order by linha`, [lista.id])).map((r) => r.linha), [4])
+expectEq('vw_leads_pastas soma listas e leads', await um(`select listas, leads, com_whatsapp from vw_leads_pastas where id = $1`, [pasta.id]), { listas: 1, leads: 4, com_whatsapp: 2 })
+await expectError('não exclui pasta com listas', `delete from leads_pastas where id = $1`, [pasta.id])
+await expectError('lista com nome repetido na mesma pasta', `insert into leads_listas (pasta_id, nome) values ($1, 'grupo vip')`, [pasta.id])
+await expectError('lote acima de 5.000 é recusado', `select importar_leads($1, (select jsonb_agg(jsonb_build_object('linha', g)) from generate_series(1, 5001) g))`, [lista.id])
+const listaTemp = await um(`insert into leads_listas (pasta_id, nome) values ($1, 'Temporária') returning id`, [pasta.id])
+await q(`select importar_leads($1, '[{"linha":1,"nome":"x","whatsapp":"11911112222"}]'::jsonb)`, [listaTemp.id])
+await q(`delete from leads_listas where id = $1`, [listaTemp.id])
+expectEq('excluir lista apaga os leads dela', Number((await um(`select count(*) n from leads where lista_id = $1`, [listaTemp.id])).n), 0)
+
 // RLS ---------------------------------------------------------------------------
 const uid =(await q(`insert into auth.users (email, raw_user_meta_data) values ('ana@prometheus.beer', '{"nome":"Ana Ribeiro"}') returning id`))[0].id
 const uid2 = (await q(`insert into auth.users (email) values ('joao@prometheus.beer') returning id`))[0].id
@@ -368,6 +405,12 @@ expectEq('membro consulta séries por dia (ERP e CRM)', await um(`select
 await expectError('membro não grava pedidos do ERP', `insert into pedidos_erp (id, canal, data_pedido) values (99, 'shopee', current_date)`)
 await expectError('membro não altera pedidos do ERP', `update pedidos_erp set valor = 0 where id = 1 returning id`)
 await expectError('membro não lê os tokens do Olist', `select access_token from integracao_olist`)
+const pastaMembro = await um(`insert into leads_pastas (nome) values ('Pasta da equipe') returning id, criado_por`)
+expectEq('membro cria pasta (autor registrado)', pastaMembro.criado_por, uid)
+const listaMembro = await um(`insert into leads_listas (pasta_id, nome) values ($1, 'Lista da equipe') returning id`, [pastaMembro.id])
+expectEq('membro importa leads', (await um(`select importar_leads($1, '[{"linha":1,"nome":"Lead","whatsapp":"21999998888"}]'::jsonb) n`, [listaMembro.id])).n, 1)
+await q(`select concluir_importacao_leads($1)`, [listaMembro.id])
+expectEq('membro vê a lista pronta e o lead', await um(`select (select status from leads_listas where id = $1) status, (select count(*)::int from vw_leads where lista_id = $1) leads`, [listaMembro.id]), { status: 'pronta', leads: 1 })
 const statusOlist = (await um(`select status_integracao_olist() s`)).s
 expectEq('status do Olist sem expor tokens', { conectado: statusOlist.conectado, expirada: statusOlist.expirada, temToken: JSON.stringify(statusOlist).includes('segredo') }, { conectado: true, expirada: false, temToken: false })
 await db.exec(`reset role;`)
@@ -377,6 +420,8 @@ show('autenticado inativo (novo usuário) vê clientes (0)', (await q(`select co
 expectEq('inativo não vê contas a receber', Number((await um(`select count(*) n from contas_receber`)).n), 0)
 expectEq('inativo não vê categorias', Number((await um(`select count(*) n from categorias_financeiras`)).n), 0)
 expectEq('inativo não vê pedidos do ERP', Number((await um(`select count(*) n from pedidos_erp`)).n), 0)
+expectEq('inativo não vê leads nem pastas', await um(`select (select count(*)::int from leads) leads, (select count(*)::int from leads_pastas) pastas`), { leads: 0, pastas: 0 })
+await expectError('inativo não cria pasta de leads', `insert into leads_pastas (nome) values ('Invasor')`)
 expectEq('inativo não vê vendas do CRM por dia', (await q(`select * from vendas_crm_por_dia('grupo_vip', '2026-01-01', '2026-12-31')`)).length, 0)
 expectEq('inativo não vê o status do Olist', (await um(`select status_integracao_olist() s`)).s, null)
 await expectError('inativo não lança conta a receber', `insert into contas_receber (descricao, competencia, vencimento, valor) values ('x', current_date, current_date, 1)`)
@@ -412,6 +457,9 @@ await expectError('anon chama aplicar_conta_fixa_aos_pendentes', `select aplicar
 await expectError('anon lê pedidos do ERP', `select * from pedidos_erp`)
 await expectError('anon lê tokens do Olist', `select * from integracao_olist`)
 await expectError('anon consulta status do Olist', `select status_integracao_olist()`)
+await expectError('anon lê leads', `select * from leads`)
+await expectError('anon lê vw_leads', `select * from vw_leads`)
+await expectError('anon importa leads', `select importar_leads(gen_random_uuid(), '[]'::jsonb)`)
 await expectError('anon consulta séries do ERP', `select * from vendas_erp_por_dia('2026-09-01', '2026-09-30')`)
 await expectError('anon consulta séries do CRM', `select * from vendas_crm_por_dia('grupo_vip', '2026-09-01', '2026-09-30')`)
 await db.exec(`reset role;`)

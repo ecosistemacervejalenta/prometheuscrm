@@ -554,6 +554,146 @@ export type Database = {
           },
         ]
       }
+      leads: {
+        Row: {
+          id: string
+          lista_id: string
+          linha: number
+          nome: string | null
+          whatsapp: string | null
+          email: string | null
+          dados: Json
+          busca: string
+          criado_em: string
+        }
+        Insert: {
+          id?: string
+          lista_id: string
+          linha: number
+          nome?: string | null
+          whatsapp?: string | null
+          email?: string | null
+          dados?: Json
+          busca?: never
+          criado_em?: string
+        }
+        Update: {
+          id?: string
+          lista_id?: string
+          linha?: number
+          nome?: string | null
+          whatsapp?: string | null
+          email?: string | null
+          dados?: Json
+          busca?: never
+          criado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_lista_id_fkey"
+            columns: ["lista_id"]
+            isOneToOne: false
+            referencedRelation: "leads_listas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leads_listas: {
+        Row: {
+          id: string
+          pasta_id: string
+          nome: string
+          origem: string | null
+          arquivo_nome: string | null
+          colunas: Json
+          coluna_nome: string | null
+          coluna_whatsapp: string | null
+          coluna_email: string | null
+          status: Database["public"]["Enums"]["status_lista_leads"]
+          total: number
+          com_whatsapp: number
+          criado_por: string | null
+          criado_em: string
+          atualizado_em: string
+        }
+        Insert: {
+          id?: string
+          pasta_id: string
+          nome: string
+          origem?: string | null
+          arquivo_nome?: string | null
+          colunas?: Json
+          coluna_nome?: string | null
+          coluna_whatsapp?: string | null
+          coluna_email?: string | null
+          status?: Database["public"]["Enums"]["status_lista_leads"]
+          total?: number
+          com_whatsapp?: number
+          criado_por?: string | null
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Update: {
+          id?: string
+          pasta_id?: string
+          nome?: string
+          origem?: string | null
+          arquivo_nome?: string | null
+          colunas?: Json
+          coluna_nome?: string | null
+          coluna_whatsapp?: string | null
+          coluna_email?: string | null
+          status?: Database["public"]["Enums"]["status_lista_leads"]
+          total?: number
+          com_whatsapp?: number
+          criado_por?: string | null
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_listas_pasta_id_fkey"
+            columns: ["pasta_id"]
+            isOneToOne: false
+            referencedRelation: "leads_pastas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_listas_pasta_id_fkey"
+            columns: ["pasta_id"]
+            isOneToOne: false
+            referencedRelation: "vw_leads_pastas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leads_pastas: {
+        Row: {
+          id: string
+          nome: string
+          descricao: string | null
+          criado_por: string | null
+          criado_em: string
+          atualizado_em: string
+        }
+        Insert: {
+          id?: string
+          nome: string
+          descricao?: string | null
+          criado_por?: string | null
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Update: {
+          id?: string
+          nome?: string
+          descricao?: string | null
+          criado_por?: string | null
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Relationships: []
+      }
       pedido_itens: {
         Row: {
           id: string
@@ -1067,6 +1207,36 @@ export type Database = {
         }
         Relationships: []
       }
+      vw_leads: {
+        Row: {
+          id: string | null
+          lista_id: string | null
+          linha: number | null
+          nome: string | null
+          whatsapp: string | null
+          email: string | null
+          dados: Json | null
+          busca: string | null
+          criado_em: string | null
+          ja_cliente: boolean | null
+        }
+        Relationships: []
+      }
+      vw_leads_pastas: {
+        Row: {
+          id: string | null
+          nome: string | null
+          descricao: string | null
+          criado_por: string | null
+          criado_em: string | null
+          atualizado_em: string | null
+          listas: number | null
+          leads: number | null
+          com_whatsapp: number | null
+          ultima_lista_em: string | null
+        }
+        Relationships: []
+      }
       vw_pedidos: {
         Row: {
           id: string | null
@@ -1148,6 +1318,12 @@ export type Database = {
           p_conta_fixa_id: string
         }
         Returns: number
+      }
+      concluir_importacao_leads: {
+        Args: {
+          p_lista_id: string
+        }
+        Returns: undefined
       }
       criar_pedido: {
         Args: {
@@ -1239,6 +1415,13 @@ export type Database = {
           p_whatsapp: string
         }
         Returns: Json
+      }
+      importar_leads: {
+        Args: {
+          p_lista_id: string
+          p_leads: Json
+        }
+        Returns: number
       }
       importar_pedido_shopify: {
         Args: {
@@ -1479,6 +1662,7 @@ export type Database = {
       papel_usuario: "admin" | "equipe"
       status_conta: "pendente" | "paga" | "cancelada"
       status_evento: "pendente" | "enviado" | "erro" | "ignorado"
+      status_lista_leads: "importando" | "pronta"
       status_pagamento: "pendente" | "cobrado" | "pago" | "estornado"
       status_pedido: "novo" | "confirmado" | "separado" | "entregue" | "cancelado"
       status_pre_venda: "rascunho" | "ativa" | "encerrada"
@@ -1601,6 +1785,7 @@ export const Constants = {
       papel_usuario: ["admin", "equipe"],
       status_conta: ["pendente", "paga", "cancelada"],
       status_evento: ["pendente", "enviado", "erro", "ignorado"],
+      status_lista_leads: ["importando", "pronta"],
       status_pagamento: ["pendente", "cobrado", "pago", "estornado"],
       status_pedido: ["novo", "confirmado", "separado", "entregue", "cancelado"],
       status_pre_venda: ["rascunho", "ativa", "encerrada"],

@@ -2,9 +2,11 @@
 
 import {
   Beer,
+  BookUser,
   Building2,
   ChevronRight,
   Crown,
+  HandCoins,
   LayoutDashboard,
   LogOut,
   Rocket,
@@ -46,12 +48,14 @@ type ItemMais = { href: string; rotulo: string; icone: LucideIcon; cor: string; 
 
 const TITULOS: Array<[string, string]> = [
   ['/clientes', 'Clientes'],
+  ['/leads', 'Banco de Leads'],
   ['/pedidos', 'Pedidos'],
   ['/pre-vendas', 'Pré-vendas'],
   ['/grupo-vip', 'Grupo VIP'],
   ['/produtos', 'Produtos'],
   ['/fornecedores', 'Fornecedores'],
   ['/contas', 'Contas a pagar'],
+  ['/receber', 'Contas a receber'],
   ['/configuracoes', 'Configurações'],
 ]
 
@@ -66,9 +70,11 @@ export function MobileNav({ perfil, contagens }: PropsSidebar) {
 
   const itensMais: ItemMais[] = [
     { href: '/pedidos', rotulo: 'Pedidos', icone: ShoppingBag, cor: '#2a78d6', contagem: contagens.aReceber },
+    { href: '/leads', rotulo: 'Banco de Leads', icone: BookUser, cor: '#0f8a8a' },
     { href: '/produtos', rotulo: 'Produtos', icone: Beer, cor: '#eda100' },
     { href: '/fornecedores', rotulo: 'Fornecedores', icone: Building2, cor: '#4a3aa7' },
     { href: '/contas', rotulo: 'Contas a pagar', icone: Wallet, cor: '#1baf7a' },
+    { href: '/receber', rotulo: 'Contas a receber', icone: HandCoins, cor: '#d6455d' },
     { href: '/configuracoes', rotulo: 'Configurações', icone: Settings, cor: '#6b7280' },
   ]
   const maisAtivo = itensMais.some((i) => ativo(caminho, i.href))

@@ -15,6 +15,9 @@ export type ContaFixa = Tables<'contas_fixas'>
 export type ContaPagar = Tables<'contas_pagar'>
 export type ContaReceber = Tables<'contas_receber'>
 export type CategoriaFinanceira = Tables<'categorias_financeiras'>
+export type PastaLeads = Tables<'leads_pastas'>
+export type ListaLeads = Tables<'leads_listas'>
+export type Lead = Tables<'leads'>
 export type Cliente = Tables<'clientes'>
 export type Produto = Tables<'produtos'>
 export type PreVenda = Tables<'pre_vendas'>
@@ -32,6 +35,8 @@ export type PreVendaResumo = Tables<'vw_pre_vendas'>
 export type PreVendaItemDetalhe = Tables<'vw_pre_venda_itens'>
 export type ContaPagarDetalhe = Tables<'vw_contas_pagar'>
 export type ContaReceberDetalhe = Tables<'vw_contas_receber'>
+export type LeadDetalhe = Tables<'vw_leads'>
+export type PastaLeadsResumo = Tables<'vw_leads_pastas'>
 
 // Enums
 export type CanalVenda = Enums<'canal_venda'>

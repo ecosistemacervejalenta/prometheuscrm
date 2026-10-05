@@ -36,6 +36,7 @@ O Prometheus CRM é o sistema interno da loja para:
 |---|---|
 | **Visão geral** | Receita do mês (vs. mês anterior), pedidos, valores a receber, contas do mês, gráfico de receita semanal por canal, “precisa de atenção”, pedidos e atividades recentes. |
 | **Clientes** | Cadastro manual completo (dados, WhatsApp, endereço com busca de CEP, VIP, tags). Ficha com LTV, ticket médio, pedidos, linha do tempo e envio de pré-venda personalizada. |
+| **Banco de Leads** | Pastas com listas de contatos importadas de **CSV, Excel (XLS/XLSX) ou TXT**: prévia antes de importar, detecção das colunas (nome, WhatsApp, e-mail), WhatsApp normalizado, números repetidos ignorados, busca em qualquer coluna e selo de quem já é cliente — base para os disparos. |
 | **Fornecedores** | Empresas (cervejarias, distribuidoras, serviços) e **vendedores** que atendem a loja, com as **empresas que cada um representa** (uma ou várias). |
 | **Contas a pagar** | Contas **fixas** (geradas automaticamente todo mês) e **variáveis** (avulsas, com parcelamento), navegação **mês a mês**, situação (em dia / vence logo / vencida / paga). |
 | **Produtos** | Catálogo de cervejas com estilo, volume, teor, preço, imagem (Supabase Storage), SKU e IDs da Shopify. |
@@ -540,6 +541,14 @@ O painel da Visão geral mostra as vendas do **Mercado Livre, Shopee e Loja Virt
 - Se a renovação falhar por mais de 1 dia, a conexão expira: o painel avisa e basta **Reconectar** (o histórico importado é mantido).
 - Limite da API: 60 requisições/min no plano Evoluir (por conta, compartilhado entre aplicativos). Uma sincronização normal usa poucas requisições; a importação inicial, ~1 por 100 pedidos.
 - Código: `src/features/olist/` (OAuth, cliente da API, sincronização) e `src/features/vendas/` (painel).
+
+### 11.6 Banco de Leads (importação de listas)
+
+- **Onde:** menu **Banco de Leads** → pastas (ex.: "Central da Cerveja") → listas (ex.: "Grupo VIP").
+- **Formatos:** CSV (separador `,` `;` tab ou `|`, UTF-8 ou Windows-1252), Excel `.xlsx`/`.xls`/`.ods` (escolha da aba) e TXT (delimitado ou um contato por linha, ex.: `João - +55 11 98765-4321`). Até 20 MB.
+- **Como funciona:** o arquivo é lido **no navegador** (`src/features/leads/planilha.ts`), que mostra a prévia, detecta cabeçalho e tipo de cada coluna e sugere as colunas de nome/WhatsApp/e-mail (dá para trocar e renomear colunas). O envio vai em lotes de 1.000 para a função `importar_leads()`; reenviar um lote não duplica nada (linha e WhatsApp são únicos na lista).
+- **Dados:** todas as colunas originais ficam em `leads.dados`; `nome`, `whatsapp` (normalizado, só dígitos com DDI) e `email` viram colunas. `vw_leads.ja_cliente` indica quem já está em Clientes (mesmo WhatsApp). Uma pasta só pode ser excluída vazia; excluir uma lista apaga os leads dela.
+- **LGPD:** são dados pessoais — acesso só para a equipe (RLS). Antes dos disparos, mantenha a opção de descadastro e use as listas só para a finalidade informada aos contatos.
 
 ---
 
