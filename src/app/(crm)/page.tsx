@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ChevronRight, Plus } from 'lucide-react'
+import { Suspense } from 'react'
 
 import { Avatar } from '@/components/ui/avatar'
 import { Ponto } from '@/components/ui/badge'
@@ -23,6 +24,8 @@ import {
   receitaSemanal,
 } from '@/features/painel/queries'
 import { CanalBadge, PagamentoBadge } from '@/features/pedidos/components/selos'
+import { EsqueletoVendasPorCanal, VendasPorCanal } from '@/features/vendas/components/vendas-por-canal'
+import { periodoValido } from '@/features/vendas/periodos'
 import { exigirEquipe } from '@/lib/auth'
 import { hojeISO, somarMeses } from '@/lib/datas'
 import {
@@ -37,6 +40,7 @@ import {
   primeiroNome,
 } from '@/lib/format'
 import type { Tom } from '@/lib/rotulos'
+import { param } from '@/lib/utils'
 
 export const metadata: Metadata = { title: 'Visão geral' }
 
@@ -49,8 +53,11 @@ function variacao(atual: number, anterior: number) {
   }
 }
 
-export default async function PaginaVisaoGeral() {
+export default async function PaginaVisaoGeral({ searchParams }: PageProps<'/'>) {
   const { perfil } = await exigirEquipe()
+  const busca = await searchParams
+  const periodo = periodoValido(param(busca.periodo))
+  const comExemplo = param(busca.exemplo) === '1'
   const [{ mes, atual, anterior }, semanas, pendencias, encerrando, atividades, pedidos, vencidas, receberAtrasado] =
     await Promise.all([
       metricasComparadas(),
@@ -111,6 +118,10 @@ export default async function PaginaVisaoGeral() {
           </>
         }
       />
+
+      <Suspense key={`${periodo}-${comExemplo}`} fallback={<EsqueletoVendasPorCanal />}>
+        <VendasPorCanal periodo={periodo} comExemplo={comExemplo} />
+      </Suspense>
 
       <div className="mb-5 grid grid-cols-2 gap-2.5 lg:mb-6 lg:gap-3 xl:grid-cols-4">
         <Kpi
