@@ -180,6 +180,12 @@ export async function chatsRecentes(limite = 50) {
   return r?.chats ?? []
 }
 
+/** URL temporária da foto de perfil (preview reduzido). Vazia = sem foto ou privada. */
+export async function fotoDoChat(chatid: string) {
+  const r = await chamar<{ url?: string }>('/chat/avatar', { corpo: { number: chatid, preview: true }, timeoutMs: 8_000 })
+  return r?.url?.trim() || null
+}
+
 /** Marca a conversa como lida no WhatsApp (os "risquinhos azuis" para o cliente). */
 export function marcarChatLido(chatid: string) {
   return chamar<unknown>('/chat/read', { corpo: { number: chatid, read: true }, timeoutMs: 8_000 })

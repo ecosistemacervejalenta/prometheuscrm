@@ -7,7 +7,6 @@ import { useState, useTransition, type ReactNode } from 'react'
 import { ActionForm, SubmitButton } from '@/components/form/action-form'
 import { Field, Input, Select, Textarea } from '@/components/form/fields'
 import { ActionButton } from '@/components/ui/action-button'
-import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CopyButton } from '@/components/ui/copy-button'
@@ -19,6 +18,7 @@ import type { StatusAtendimento } from '@/types'
 
 import { alterarStatusAtendimento, salvarComoLead, salvarContato, sincronizarConversaAgora, transferirAtendimento } from '../actions'
 import type { Conversa, MembroEquipe } from '../queries'
+import { FotoContato } from './foto-contato'
 
 function Secao({ titulo, children, className }: { titulo: string; children: ReactNode; className?: string }) {
   return (
@@ -60,7 +60,7 @@ export function PainelContato({
   return (
     <div className="pb-6">
       <div className="flex flex-col items-center px-4 pt-5 pb-4 text-center">
-        <Avatar nome={nome} tamanho="lg" />
+        <FotoContato nome={nome} foto={atendimento.contato_foto} tamanho="lg" />
         <p className="mt-3 text-[16px] font-semibold break-words">{nome}</p>
         {contato.whatsapp ? (
           <div className="mt-1 flex items-center gap-2">

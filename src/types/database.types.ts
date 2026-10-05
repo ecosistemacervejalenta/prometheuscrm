@@ -1358,6 +1358,9 @@ export type Database = {
       }
       whatsapp_contatos: {
         Row: {
+          foto_conferida_em: string | null
+          foto_expira_em: string | null
+          foto_url: string | null
           anotacoes: string | null
           atualizado_em: string
           chatid: string
@@ -1369,6 +1372,9 @@ export type Database = {
           whatsapp: string | null
         }
         Insert: {
+          foto_conferida_em?: string | null
+          foto_expira_em?: string | null
+          foto_url?: string | null
           anotacoes?: string | null
           atualizado_em?: string
           chatid: string
@@ -1380,6 +1386,9 @@ export type Database = {
           whatsapp?: string | null
         }
         Update: {
+          foto_conferida_em?: string | null
+          foto_expira_em?: string | null
+          foto_url?: string | null
           anotacoes?: string | null
           atualizado_em?: string
           chatid?: string
@@ -1515,6 +1524,7 @@ export type Database = {
           chatid: string | null
           cliente_id: string | null
           cliente_nome: string | null
+          contato_foto: string | null
           contato_id: string | null
           contato_nome: string | null
           criado_em: string | null

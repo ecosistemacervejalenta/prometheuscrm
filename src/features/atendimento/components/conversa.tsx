@@ -23,7 +23,6 @@ import {
 import Link from 'next/link'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, type DragEvent } from 'react'
 
-import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useAvisos } from '@/components/ui/toaster'
@@ -42,6 +41,7 @@ import {
 } from '../actions'
 import type { Conversa as DadosConversa, EventoConversa, MembroEquipe, MensagemConversa } from '../queries'
 import { Compositor, useAnexos } from './compositor'
+import { FotoContato } from './foto-contato'
 import { PainelContato } from './painel-contato'
 import { TextoWhatsapp } from './texto-whatsapp'
 
@@ -394,7 +394,7 @@ export function Conversa({
             <ChevronLeft className="size-5" />
           </Link>
           <button type="button" onClick={() => setPainel(true)} className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-1 text-left 2xl:pointer-events-none">
-            <Avatar nome={nome} />
+            <FotoContato nome={nome} foto={atendimento.contato_foto} />
             <span className="min-w-0">
               <span className="block truncate text-[15px] font-semibold">{nome}</span>
               <span className="flex items-center gap-1.5 truncate text-[12px] text-suave">

@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, Json } from '@/types'
 
 import { mensagemParaCrm, TIPOS_COM_MIDIA, type ResultadoRegistro } from './normalizacao'
-import { chatsRecentes, mensagensDoChat, urlDaMidia } from './uazapi'
+import { chatsRecentes, fotoDoChat, mensagensDoChat, urlDaMidia } from './uazapi'
 
 /**
  * Persistência do WhatsApp no CRM. Recebe o cliente Supabase de quem chama:
@@ -113,6 +113,60 @@ export async function sincronizarConversa(db: Db, chatid: string, { limite = 50,
   return novas
 }
 
+const DIA = 86_400_000
+
+/** Validade do link da foto: parâmetro "oe" (hexadecimal, segundos) da URL do WhatsApp. */
+function validadeDaFoto(url: string) {
+  try {
+    const oe = new URL(url).searchParams.get('oe')
+    const segundos = oe ? parseInt(oe, 16) : NaN
+    return Number.isFinite(segundos) ? new Date(segundos * 1000) : new Date(Date.now() + 3 * DIA)
+  } catch {
+    return new Date(Date.now() + 3 * DIA)
+  }
+}
+
+/**
+ * A foto precisa ser (re)buscada? Nunca consultada, link vencendo em menos de 1 dia,
+ * ou sem foto da última vez há mais de 3 dias (o contato pode ter colocado uma).
+ */
+export function fotoPrecisaAtualizar(c: { foto_url: string | null; foto_expira_em: string | null; foto_conferida_em: string | null }) {
+  if (!c.foto_conferida_em) return true
+  if (c.foto_url) return !c.foto_expira_em || new Date(c.foto_expira_em).getTime() - Date.now() < DIA
+  return Date.now() - new Date(c.foto_conferida_em).getTime() > 3 * DIA
+}
+
+/** Busca a foto de perfil na uazapi e guarda o link e a validade. Falhas não atrapalham o atendimento. */
+export async function atualizarFoto(db: Db, contato: { id: string; chatid: string }) {
+  try {
+    const url = await fotoDoChat(contato.chatid)
+    await db
+      .from('whatsapp_contatos')
+      .update({
+        foto_url: url,
+        foto_expira_em: url ? validadeDaFoto(url).toISOString() : null,
+        foto_conferida_em: new Date().toISOString(),
+      })
+      .eq('id', contato.id)
+    return url
+  } catch (e) {
+    console.error('[whatsapp] foto não atualizada', contato.id, e instanceof Error ? e.message : e)
+    return null
+  }
+}
+
+/** Renova as fotos vencendo de quem tem atendimento aberto (cron). */
+async function renovarFotos(db: Db, limite = 25) {
+  const { data } = await db
+    .from('whatsapp_contatos')
+    .select('id, chatid, foto_url, foto_expira_em, foto_conferida_em, atendimentos!inner(status)')
+    .neq('atendimentos.status', 'resolvido')
+    .limit(200)
+  const vencendo = (data ?? []).filter(fotoPrecisaAtualizar).slice(0, limite)
+  for (const c of vencendo) await atualizarFoto(db, c)
+  return vencendo.length
+}
+
 /**
  * Reconciliação (cron): confere as conversas com atividade recente na uazapi e
  * sincroniza as que têm mensagem mais nova do que a última registrada no CRM.
@@ -142,5 +196,6 @@ export async function reconciliarConversas(db: Db, { horas = 6, limite = 40 } = 
       mensagens += novas
     }
   }
-  return { conferidas: chats.length, conversas, mensagens }
+  const fotos = await renovarFotos(db)
+  return { conferidas: chats.length, conversas, mensagens, fotos }
 }

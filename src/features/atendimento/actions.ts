@@ -18,7 +18,7 @@ import {
   esquemaStatus,
   type DadosMidia,
 } from './schema'
-import { BUCKET_MIDIAS, guardarMidia, sincronizarConversa } from './sincronizacao'
+import { atualizarFoto, BUCKET_MIDIAS, fotoPrecisaAtualizar, guardarMidia, sincronizarConversa } from './sincronizacao'
 import {
   configurarWebhook,
   enviarMidia,
@@ -247,11 +247,19 @@ export async function salvarComoLead(contatoId: string, pastaId: string | null):
 /** Traz da uazapi mensagens que não chegaram pelo webhook (até 7 dias). */
 export async function sincronizarConversaAgora(contatoId: string, { silencioso = false } = {}): Promise<EstadoAcao> {
   const { supabase } = await exigirEquipe()
-  const { data: contato } = await supabase.from('whatsapp_contatos').select('chatid').eq('id', contatoId).maybeSingle()
+  const { data: contato } = await supabase
+    .from('whatsapp_contatos')
+    .select('id, chatid, foto_url, foto_expira_em, foto_conferida_em')
+    .eq('id', contatoId)
+    .maybeSingle()
   if (!contato) return falha('Contato não encontrado.')
   try {
-    const novas = await sincronizarConversa(supabase, contato.chatid, { limite: silencioso ? 30 : 100, baixarMidias: 10 })
-    if (novas > 0) atualizarTelas()
+    const [novas, foto] = await Promise.all([
+      sincronizarConversa(supabase, contato.chatid, { limite: silencioso ? 30 : 100, baixarMidias: 10 }),
+      // Botão "Sincronizar" sempre confere a foto; ao abrir a conversa, só se o link estiver vencendo.
+      !silencioso || fotoPrecisaAtualizar(contato) ? atualizarFoto(supabase, contato).then((url) => url !== contato.foto_url) : false,
+    ])
+    if (novas > 0 || foto) atualizarTelas()
     if (silencioso) return sucesso()
     return sucesso(novas > 0 ? `${novas} mensagem(ns) recuperada(s) do WhatsApp.` : 'A conversa já estava completa.')
   } catch (e) {

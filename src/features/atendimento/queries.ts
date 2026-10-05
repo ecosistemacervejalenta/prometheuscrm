@@ -32,7 +32,7 @@ export async function listarAtendimentos({ aba, busca }: { aba: AbaAtendimento; 
   let consulta = supabase
     .from('vw_atendimentos')
     .select(
-      'id, numero, status, nao_lidas, ultima_mensagem_em, ultima_mensagem_previa, ultima_mensagem_direcao, contato_nome, whatsapp, responsavel_id, responsavel_nome, criado_em, resolvido_em',
+      'id, numero, status, nao_lidas, ultima_mensagem_em, ultima_mensagem_previa, ultima_mensagem_direcao, contato_nome, contato_foto, whatsapp, responsavel_id, responsavel_nome, criado_em, resolvido_em',
     )
     .limit(aba === 'resolvidos' ? 50 : 150)
 

@@ -2,7 +2,6 @@ import { Inbox } from 'lucide-react'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
-import { Avatar } from '@/components/ui/avatar'
 import { Ponto } from '@/components/ui/badge'
 import { FilterBar, SearchField } from '@/components/ui/filter-bar'
 import { diasDesde } from '@/lib/datas'
@@ -11,6 +10,7 @@ import { STATUS_ATENDIMENTO } from '@/lib/rotulos'
 import { cn } from '@/lib/utils'
 
 import type { AbaAtendimento, ItemCaixaEntrada } from '../queries'
+import { FotoContato } from './foto-contato'
 
 const ROTULOS_ABAS: Record<AbaAtendimento, string> = {
   fila: 'Fila',
@@ -131,7 +131,7 @@ export function ListaConversas({
                     ativo ? 'bg-volt-50' : 'hover:bg-papel',
                   )}
                 >
-                  <Avatar nome={nome} />
+                  <FotoContato nome={nome} foto={item.contato_foto} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline justify-between gap-2">
                       <p className={cn('truncate text-[14px]', naoLidas ? 'font-bold' : 'font-semibold')}>{nome}</p>
