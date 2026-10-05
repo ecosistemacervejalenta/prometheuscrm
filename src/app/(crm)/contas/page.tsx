@@ -4,11 +4,12 @@ import { Plus, Repeat, Tags } from 'lucide-react'
 import { ButtonLink } from '@/components/ui/button'
 import { Kpi } from '@/components/ui/kpi'
 import { PageHeader } from '@/components/ui/page-header'
+import { DividasPorFornecedor } from '@/features/contas/components/dividas-por-fornecedor'
 import { TabelaContas } from '@/features/contas/components/tabela-contas'
-import { contasAtrasadasAntesDe, contasDoMes, resumirContas } from '@/features/contas/queries'
+import { contasAtrasadasAntesDe, contasDoMes, dividasPorFornecedor, resumirContas } from '@/features/contas/queries'
 import { NavegadorMes } from '@/features/financeiro/components/navegador-mes'
 import { mesAtual, mesValido } from '@/lib/datas'
-import { formatarMoeda } from '@/lib/format'
+import { formatarMes, formatarMoeda } from '@/lib/format'
 import { param } from '@/lib/utils'
 
 export const metadata: Metadata = { title: 'Contas a pagar' }
@@ -17,6 +18,8 @@ export default async function PaginaContas({ searchParams }: PageProps<'/contas'
   const mes = mesValido(param((await searchParams).mes))
   const ehMesAtual = mes === mesAtual()
   const [contas, atrasadas] = await Promise.all([contasDoMes(mes), ehMesAtual ? contasAtrasadasAntesDe(mes) : []])
+  // Depois de contasDoMes: as contas fixas do mês já foram geradas e entram na soma.
+  const dividas = await dividasPorFornecedor(mes)
   const resumo = resumirContas(contas)
   const fixas = contas.filter((c) => c.tipo === 'fixa')
   const variaveis = contas.filter((c) => c.tipo === 'variavel')
@@ -57,6 +60,7 @@ export default async function PaginaContas({ searchParams }: PageProps<'/contas'
       </div>
 
       <div className="space-y-6">
+        <DividasPorFornecedor total={dividas.total} mes={dividas.mes} nomeDoMes={formatarMes(mes).split(' ')[0]} />
         {atrasadas.length > 0 && (
           <TabelaContas
             titulo="Atrasadas de meses anteriores"

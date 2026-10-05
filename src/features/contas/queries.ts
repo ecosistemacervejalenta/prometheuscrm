@@ -103,3 +103,53 @@ export async function contasDoFornecedor(fornecedorId: string, hoje: string) {
     total: data.length,
   }
 }
+
+export type DividaFornecedor = {
+  /** id do fornecedor, ou "sem" para contas sem fornecedor. */
+  id: string
+  nome: string
+  valor: number
+  contas: number
+  vencido: number
+  proximoVencimento: string | null
+}
+
+const PAGINA_DIVIDAS = 1000
+
+/**
+ * Quanto falta pagar a cada fornecedor (contas pendentes), do maior para o menor:
+ * `total` = tudo em aberto (vencidas + parcelas futuras já lançadas); `mes` = só o mês.
+ * Chame depois de `contasDoMes(mes)`, que gera as contas fixas do mês.
+ */
+export async function dividasPorFornecedor(mes: string) {
+  const { supabase } = await exigirEquipe()
+  const linhas: Array<{ fornecedor_id: string | null; fornecedor_nome: string | null; valor: number | null; vencimento: string | null; competencia: string | null; situacao: string | null }> = []
+  for (let de = 0; ; de += PAGINA_DIVIDAS) {
+    const { data, error } = await supabase
+      .from('vw_contas_pagar')
+      .select('fornecedor_id, fornecedor_nome, valor, vencimento, competencia, situacao')
+      .eq('status', 'pendente')
+      .order('id')
+      .range(de, de + PAGINA_DIVIDAS - 1)
+    if (error) throw error
+    linhas.push(...data)
+    if (data.length < PAGINA_DIVIDAS) break
+  }
+
+  const agrupar = (lista: typeof linhas): DividaFornecedor[] => {
+    const porFornecedor = new Map<string, DividaFornecedor>()
+    for (const c of lista) {
+      const id = c.fornecedor_id ?? 'sem'
+      const item = porFornecedor.get(id) ?? { id, nome: c.fornecedor_nome ?? 'Sem fornecedor', valor: 0, contas: 0, vencido: 0, proximoVencimento: null }
+      const valor = Number(c.valor ?? 0)
+      item.valor = Math.round((item.valor + valor) * 100) / 100
+      item.contas++
+      if (c.situacao === 'vencida') item.vencido = Math.round((item.vencido + valor) * 100) / 100
+      else if (c.vencimento && (!item.proximoVencimento || c.vencimento < item.proximoVencimento)) item.proximoVencimento = c.vencimento
+      porFornecedor.set(id, item)
+    }
+    return [...porFornecedor.values()].sort((a, b) => b.valor - a.valor || a.nome.localeCompare(b.nome, 'pt-BR'))
+  }
+
+  return { total: agrupar(linhas), mes: agrupar(linhas.filter((c) => c.competencia === primeiroDia(mes))) }
+}

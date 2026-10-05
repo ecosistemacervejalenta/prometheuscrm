@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { formatarMoeda, formatarMoedaCompacta, formatarNumero } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-export type FatiaPizza = { id: string; nome: string; cor: string; valor: number; pedidos: number }
+export type FatiaPizza = { id: string; nome: string; cor: string; valor: number; quantidade: number }
 
 const porcentagem = (p: number) => `${(p * 100).toLocaleString('pt-BR', { maximumFractionDigits: p > 0 && p < 0.1 ? 1 : 0 })}%`
 
@@ -25,11 +25,30 @@ function arco(inicio: number, fim: number): string {
 }
 
 /**
- * Gráfico de pizza (rosca) da participação de cada canal no faturamento do período.
- * Total no centro, legenda com % e valores (o tooltip só complementa).
+ * Gráfico de pizza (rosca): participação de cada fatia no total.
+ * Total no centro e legenda com % e valores (o tooltip só complementa).
+ * `ativa`/`aoAtivar` permitem destacar a fatia a partir de outra lista (ex.: um ranking ao lado).
  */
-export function GraficoPizza({ fatias }: { fatias: FatiaPizza[] }) {
-  const [ativa, setAtiva] = useState<string | null>(null)
+export function GraficoPizza({
+  fatias,
+  rotuloQuantidade = 'pedidos',
+  rotuloGrafico = 'Participação de cada canal no faturamento',
+  mostrarLegenda = true,
+  ativa: ativaExterna,
+  aoAtivar,
+}: {
+  fatias: FatiaPizza[]
+  /** Texto da quantidade no centro: "357 pedidos", "12 contas"... */
+  rotuloQuantidade?: string
+  rotuloGrafico?: string
+  /** Sem legenda quando outra lista ao lado já faz esse papel. */
+  mostrarLegenda?: boolean
+  ativa?: string | null
+  aoAtivar?: (id: string | null) => void
+}) {
+  const [ativaInterna, setAtivaInterna] = useState<string | null>(null)
+  const ativa = ativaExterna !== undefined ? ativaExterna : ativaInterna
+  const setAtiva = (id: string | null) => (aoAtivar ? aoAtivar(id) : setAtivaInterna(id))
   const total = fatias.reduce((s, f) => s + f.valor, 0)
   const visiveis = fatias.filter((f) => f.valor > 0)
   const destaque = visiveis.find((f) => f.id === ativa)
@@ -45,7 +64,7 @@ export function GraficoPizza({ fatias }: { fatias: FatiaPizza[] }) {
   return (
     <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-8">
       <div className="relative shrink-0" style={{ width: TAMANHO, height: TAMANHO }}>
-        <svg viewBox={`0 0 ${TAMANHO} ${TAMANHO}`} width={TAMANHO} height={TAMANHO} role="group" aria-label="Participação de cada canal no faturamento">
+        <svg viewBox={`0 0 ${TAMANHO} ${TAMANHO}`} width={TAMANHO} height={TAMANHO} role="group" aria-label={rotuloGrafico}>
           {total <= 0 ? (
             <circle cx={TAMANHO / 2} cy={TAMANHO / 2} r={RAIO - ESPESSURA / 2} fill="none" stroke="var(--color-linha)" strokeWidth={ESPESSURA} />
           ) : segmentos.length === 1 ? (
@@ -97,30 +116,34 @@ export function GraficoPizza({ fatias }: { fatias: FatiaPizza[] }) {
               <p className="tipo-numero text-[22px] leading-7" style={{ fontVariantNumeric: 'proportional-nums' }}>
                 {formatarMoedaCompacta(total)}
               </p>
-              <p className="text-[12px] text-suave">{formatarNumero(fatias.reduce((s, f) => s + f.pedidos, 0))} pedidos</p>
+              <p className="text-[12px] text-suave">
+                {formatarNumero(fatias.reduce((s, f) => s + f.quantidade, 0))} {rotuloQuantidade}
+              </p>
             </>
           )}
         </div>
       </div>
 
-      <ul className="grid w-full min-w-0 gap-2.5">
-        {fatias.map((f) => {
-          const fracao = total > 0 ? f.valor / total : 0
-          return (
-            <li
-              key={f.id}
-              onPointerEnter={() => f.valor > 0 && setAtiva(f.id)}
-              onPointerLeave={() => setAtiva(null)}
-              className={cn('flex items-center gap-3 rounded-lg transition-opacity', ativa && ativa !== f.id && 'opacity-50')}
-            >
-              <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: f.cor }} aria-hidden />
-              <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">{f.nome}</span>
-              <span className="tipo-dado shrink-0 text-[12px] text-suave">{formatarMoeda(f.valor)}</span>
-              <span className="tipo-dado w-12 shrink-0 text-right text-[13px] text-ink">{porcentagem(fracao)}</span>
-            </li>
-          )
-        })}
-      </ul>
+      {mostrarLegenda && (
+        <ul className="grid w-full min-w-0 gap-2.5">
+          {fatias.map((f) => {
+            const fracao = total > 0 ? f.valor / total : 0
+            return (
+              <li
+                key={f.id}
+                onPointerEnter={() => f.valor > 0 && setAtiva(f.id)}
+                onPointerLeave={() => setAtiva(null)}
+                className={cn('flex items-center gap-3 rounded-lg transition-opacity', ativa && ativa !== f.id && 'opacity-50')}
+              >
+                <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: f.cor }} aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">{f.nome}</span>
+                <span className="tipo-dado shrink-0 text-[12px] text-suave">{formatarMoeda(f.valor)}</span>
+                <span className="tipo-dado w-12 shrink-0 text-right text-[13px] text-ink">{porcentagem(fracao)}</span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
     </div>
   )
 }

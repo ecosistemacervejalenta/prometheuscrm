@@ -4,6 +4,7 @@ import { CircleAlert, Info, Minus, RefreshCw, TrendingDown, TrendingUp } from 'l
 import { ActionButton } from '@/components/ui/action-button'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { GraficoPizza } from '@/components/graficos/grafico-pizza'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { sincronizarOlistAgora } from '@/features/olist/actions'
 import { garantirDadosRecentesDoOlist } from '@/features/olist/disparo'
@@ -14,7 +15,6 @@ import { CANAIS } from '../canais'
 import type { ChavePeriodo } from '../periodos'
 import { vendasPorCanal, type DadosVendasPorCanal, type ResumoCanal } from '../queries'
 import { GraficoEvolucao } from './grafico-evolucao'
-import { GraficoPizza } from './grafico-pizza'
 import { MarcaCanal } from './marca-canal'
 import { SeletorPeriodo } from './seletor-periodo'
 
@@ -237,7 +237,7 @@ export function PainelVendasPorCanal({ dados, periodo }: { dados: DadosVendasPor
                 nome: c.nome,
                 cor: c.cor,
                 valor: c.atual?.valor ?? 0,
-                pedidos: c.atual?.pedidos ?? 0,
+                quantidade: c.atual?.pedidos ?? 0,
               }))}
             />
           ) : (
