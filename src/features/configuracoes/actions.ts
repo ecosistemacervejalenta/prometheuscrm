@@ -19,6 +19,7 @@ const esquemaConfiguracoes = z.object({
   whatsapp_loja: whatsappOpcional,
   chave_pix: textoOpcional,
   nome_recebedor_pix: textoOpcional,
+  whatsapp_comprovante: whatsappOpcional,
   mensagem_pre_venda: texto('A mensagem não pode ficar vazia.'),
   mensagem_cobranca: texto('A mensagem não pode ficar vazia.'),
 })

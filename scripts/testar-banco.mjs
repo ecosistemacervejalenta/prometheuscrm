@@ -121,6 +121,41 @@ await expectError('produto fora da pré-venda', `select registrar_pedido_pre_ven
   JSON.stringify([{ produto_id: (await q(`select id from produtos where sku='HH-LAGER-350'`))[0].id, quantidade: 1 }]),
 ])
 
+// Frete do link: CEP na lista VIP → frete fixo; fora da lista → a cotar
+expectEq('frete VIP padrão é R$ 15 e comprovantes vão para o 11 93709-9371',
+  (await q(`select frete_vip_valor::float valor, whatsapp_comprovante from configuracoes`))[0], { valor: 15, whatsapp_comprovante: '5511937099371' })
+expectEq('importa CEPs avulsos e faixas', (await q(`select substituir_ceps_frete_vip($1::jsonb, 'ceps-vip.xlsx') r`, [
+  JSON.stringify([['01310100', '01310100'], ['04000000', '04999999'], ['05424000']]),
+]))[0].r, { faixas: 1, ceps_avulsos: 2, ceps_cobertos: 1000002 })
+expectEq('CEP avulso (com máscara) está na lista', (await q(`select cep_tem_frete_vip('01310-100') r`))[0].r, true)
+expectEq('CEP dentro da faixa está na lista', (await q(`select cep_tem_frete_vip('04567890') r`))[0].r, true)
+expectEq('CEP fora da lista', (await q(`select cep_tem_frete_vip('01310-101') r`))[0].r, false)
+expectEq('CEP incompleto nunca está na lista', (await q(`select cep_tem_frete_vip('0131') r`))[0].r, false)
+expectEq('nome do arquivo importado', (await q(`select frete_vip_arquivo from configuracoes`))[0].frete_vip_arquivo, 'ceps-vip.xlsx')
+
+const enderecoLink = { logradouro: 'Rua Augusta', numero: '500', complemento: 'Apto 12', bairro: 'Consolação', cidade: 'São Paulo', uf: 'SP' }
+const pedidoVip = (await q(`select * from registrar_pedido_pre_venda('drop-outubro', $1::jsonb, $2::jsonb, true)`, [
+  JSON.stringify({ whatsapp: '(11) 95555-0001', nome: 'Ana Souza', cep: '04567-890', ...enderecoLink }),
+  JSON.stringify([{ produto_id: itens[2].produto_id, quantidade: 1 }]),
+]))[0]
+expectEq('link com CEP VIP: frete fixo de R$ 15', { frete: pedidoVip.frete, taxa: Number(pedidoVip.taxa_entrega), total: Number(pedidoVip.total) },
+  { frete: 'vip', taxa: 15, total: Number(pedidoVip.subtotal) + 15 })
+
+const pedidoCotar = (await q(`select * from registrar_pedido_pre_venda('drop-outubro', $1::jsonb, $2::jsonb, true)`, [
+  JSON.stringify({ whatsapp: '(11) 95555-0002', nome: 'Bruno Lima', cep: '13010-000', ...enderecoLink, cidade: 'Campinas' }),
+  JSON.stringify([{ produto_id: itens[2].produto_id, quantidade: 1 }]),
+]))[0]
+expectEq('link com CEP fora da lista: frete a cotar (R$ 0)', { frete: pedidoCotar.frete, taxa: Number(pedidoCotar.taxa_entrega) }, { frete: 'a_cotar', taxa: 0 })
+expectEq('linha do tempo avisa o frete a cotar', (await q(`select descricao from atividades where pedido_id = $1 and tipo = 'frete_a_cotar'`, [pedidoCotar.id]))[0]?.descricao,
+  `Pedido #${pedidoCotar.numero}: frete a cotar (CEP 13010-000 fora da lista VIP)`)
+const cotado = (await q(`select * from cotar_frete_pedido($1, 22.5)`, [pedidoCotar.id]))[0]
+expectEq('equipe cota o frete', { frete: cotado.frete, taxa: Number(cotado.taxa_entrega), total: Number(cotado.total) },
+  { frete: 'cotado', taxa: 22.5, total: Number(cotado.subtotal) + 22.5 })
+await expectError('frete negativo', `select cotar_frete_pedido($1, -1)`, [pedidoCotar.id])
+await expectError('CEP com formato inválido na lista', `select substituir_ceps_frete_vip('[["0131010","0131010"]]'::jsonb)`)
+await expectError('faixa invertida', `select substituir_ceps_frete_vip('[["05000000","04000000"]]'::jsonb)`)
+expectEq('lista continua intacta após importação recusada', (await q(`select resumo_ceps_frete_vip() r`))[0].r.ceps_cobertos, 1000002)
+
 show('saldo dos itens', await q(`select nome, preco, quantidade_disponivel, vendido, restante from vw_pre_venda_itens order by ordem`))
 show('resumo grupo vip', await q(`select descricao, estilo, quantidade, total, pedidos from resumo_produtos_vendidos(p_canal => 'grupo_vip')`))
 show('vw_pre_vendas', await q(`select titulo, status_efetivo, pedidos, total_vendido, total_recebido, unidades from vw_pre_vendas`))
@@ -383,6 +418,9 @@ await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub'
 show('autenticado (membro) vê clientes', (await q(`select count(*) from clientes`))[0])
 show('autenticado cria pedido manual', (await q(`select numero, total, criado_por is not null as tem_autor from criar_pedido((select id from clientes where nome='Bruno Ferreira'), $1::jsonb, null, 'loja')`, [JSON.stringify([{ produto_id: itens[0].produto_id, quantidade: 1 }])]))[0])
 await expectError('autenticado não chama função do link público', `select identificar_cliente_pre_venda('11987654321')`)
+expectEq('membro importa a lista de CEPs VIP', (await um(`select substituir_ceps_frete_vip('[["01310100","01310100"],["04000000","04999999"],["05424000","05424000"]]'::jsonb, 'ceps.csv') r`)).r.ceps_cobertos, 1000002)
+expectEq('membro testa um CEP', (await um(`select cep_tem_frete_vip('04100-000') r`)).r, true)
+expectEq('membro cota frete', (await um(`select frete from cotar_frete_pedido($1, 30)`, [pedidoCotar.id])).frete, 'cotado')
 const recMembro = await um(`insert into contas_receber (descricao, categoria, competencia, vencimento, valor)
   values ('Lançada pela equipe', 'Categoria da equipe', hoje_brasilia(), hoje_brasilia() + 5, 99.9) returning id`).catch((e) => ({ erro: e.message }))
 expectEq('membro lança conta a receber com categoria nova', recMembro.erro ?? Boolean(recMembro.id), true)
@@ -426,6 +464,9 @@ await expectError('inativo não cria pasta de leads', `insert into leads_pastas 
 expectEq('inativo não vê vendas do CRM por dia', (await q(`select * from vendas_crm_por_dia('grupo_vip', '2026-01-01', '2026-12-31')`)).length, 0)
 expectEq('inativo não vê o status do Olist', (await um(`select status_integracao_olist() s`)).s, null)
 await expectError('inativo não lança conta a receber', `insert into contas_receber (descricao, competencia, vencimento, valor) values ('x', current_date, current_date, 1)`)
+await expectError('inativo não troca a lista de CEPs VIP', `select substituir_ceps_frete_vip('[["01000000","01000000"]]'::jsonb)`)
+expectEq('inativo não enxerga a lista de CEPs VIP', (await um(`select cep_tem_frete_vip('01310100') r`)).r, false)
+await expectError('inativo não cota frete', `select cotar_frete_pedido($1, 1)`, [pedidoCotar.id])
 await db.exec(`reset role; update perfis set ativo = true where id = '${uid2}'; set role authenticated; select set_config('request.jwt.claim.sub', '${uid2}', false);`)
 await q(`update perfis set nome = 'João Silva' where id = $1`, [uid2])
 await expectError('equipe tenta virar admin', `update perfis set papel = 'admin' where id = $1`, [uid2])

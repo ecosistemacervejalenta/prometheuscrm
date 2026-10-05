@@ -17,6 +17,10 @@ const PADRAO: Configuracoes = {
   whatsapp_assinatura: true,
   whatsapp_leads_automatico: true,
   whatsapp_pasta_leads_id: null,
+  whatsapp_comprovante: null,
+  frete_vip_valor: 15,
+  frete_vip_arquivo: null,
+  frete_vip_importado_em: null,
 }
 
 /** Configurações da loja (linha única). */

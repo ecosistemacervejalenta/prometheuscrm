@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { localParaISO } from '@/lib/datas'
-import { dataOpcional, dinheiroOpcional, texto, textoOpcional } from '@/lib/validacao'
+import { dataOpcional, texto, textoOpcional } from '@/lib/validacao'
 
 const inteiroOuNulo = z.preprocess(
   (v) => (v === '' || v === null || v === undefined ? null : Number(v)),
@@ -31,7 +31,6 @@ export const esquemaPreVenda = z.object({
   status: z.enum(['rascunho', 'ativa', 'encerrada']),
   encerra_em: z.preprocess((v) => localParaISO(typeof v === 'string' ? v : null), z.string().nullable()),
   previsao_entrega: dataOpcional,
-  taxa_entrega: dinheiroOpcional,
   itens: z.preprocess(
     (v) => {
       try {

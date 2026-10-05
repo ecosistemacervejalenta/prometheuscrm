@@ -10,11 +10,12 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { ListaMobile } from '@/components/ui/lista-mobile'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
-import { linkDeCobranca } from '@/features/pedidos/cobranca'
+import { linkDeCobranca, linkDeFrete } from '@/features/pedidos/cobranca'
 import { BotaoCobrar, ControlePagamento, SeletorStatus } from '@/features/pedidos/components/controles'
-import { CanalBadge, PagamentoBadge } from '@/features/pedidos/components/selos'
+import { BotaoEnviarFrete, CotarFrete } from '@/features/pedidos/components/frete'
+import { CanalBadge, FreteBadge, PagamentoBadge } from '@/features/pedidos/components/selos'
 import { atividadesDoPedido, obterPedido } from '@/features/pedidos/queries'
-import { formatarDataHora, formatarEndereco, formatarMoeda, formatarWhatsapp, numeroPedido, primeiroNome, type Endereco } from '@/lib/format'
+import { formatarCep, formatarDataHora, formatarEndereco, formatarMoeda, formatarWhatsapp, numeroPedido, primeiroNome, type Endereco } from '@/lib/format'
 import { linkWhatsapp } from '@/lib/whatsapp'
 
 export async function generateMetadata({ params }: PageProps<'/pedidos/[id]'>): Promise<Metadata> {
@@ -38,6 +39,16 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
     itens: pedido.pedido_itens,
   })
   const emAberto = pedido.status !== 'cancelado' && ['pendente', 'cobrado'].includes(pedido.status_pagamento)
+  const linkFrete =
+    pedido.frete === 'cotado'
+      ? linkDeFrete(config, {
+          numero: pedido.numero,
+          total: pedido.total,
+          taxa_entrega: pedido.taxa_entrega,
+          cliente,
+          pre_venda_titulo: pedido.pre_vendas?.titulo,
+        })
+      : null
 
   return (
     <>
@@ -49,6 +60,7 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
           <div className="mt-2 flex flex-wrap gap-1.5">
             <CanalBadge canal={pedido.canal} />
             <PagamentoBadge status={pedido.status_pagamento} />
+            <FreteBadge frete={pedido.frete} />
             {pedido.pre_vendas && (
               <Link href={`/pre-vendas/${pedido.pre_vendas.id}`} className="text-[13px] font-medium text-suave underline-offset-2 hover:underline">
                 {pedido.pre_vendas.titulo}
@@ -103,7 +115,10 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
             </Table>
             <dl className="space-y-1.5 border-t border-linha px-4 py-4 text-sm lg:px-5">
               <div className="flex justify-between"><dt className="text-suave">Subtotal</dt><dd className="tipo-dado">{formatarMoeda(pedido.subtotal)}</dd></div>
-              <div className="flex justify-between"><dt className="text-suave">Entrega</dt><dd className="tipo-dado">{formatarMoeda(pedido.taxa_entrega)}</dd></div>
+              <div className="flex justify-between">
+                <dt className="text-suave">Frete</dt>
+                <dd className="tipo-dado">{pedido.frete === 'a_cotar' ? 'a cotar' : formatarMoeda(pedido.taxa_entrega)}</dd>
+              </div>
               {Number(pedido.desconto) > 0 && (
                 <div className="flex justify-between"><dt className="text-suave">Desconto</dt><dd className="tipo-dado">− {formatarMoeda(pedido.desconto)}</dd></div>
               )}
@@ -113,6 +128,23 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
               </div>
             </dl>
           </Card>
+
+          {pedido.frete && pedido.frete !== 'vip' && pedido.status !== 'cancelado' && (
+            <Card className="print:hidden">
+              <CardHeader
+                titulo="Frete"
+                descricao={
+                  pedido.frete === 'a_cotar'
+                    ? `CEP ${formatarCep(endereco?.cep) || 'não informado'} fora da lista VIP. Informe o valor e envie ao cliente pelo WhatsApp.`
+                    : 'Frete cotado. Envie (ou reenvie) o valor ao cliente pelo WhatsApp.'
+                }
+                acoes={<BotaoEnviarFrete href={linkFrete} />}
+              />
+              <CardContent>
+                <CotarFrete pedidoId={pedido.id} valor={Number(pedido.taxa_entrega)} className="max-w-sm" />
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="print:hidden">
             <CardHeader

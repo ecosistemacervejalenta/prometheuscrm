@@ -56,7 +56,7 @@ export async function opcoesPreVendas(canal?: 'grupo_vip') {
   const { supabase } = await exigirEquipe()
   let consulta = supabase
     .from('vw_pre_vendas')
-    .select('id, titulo, status_efetivo, canal, criado_em')
+    .select('id, titulo, slug, descricao, encerra_em, previsao_entrega, status_efetivo, canal, criado_em')
     .order('criado_em', { ascending: false })
   if (canal) consulta = consulta.eq('canal', canal)
   const { data } = await consulta

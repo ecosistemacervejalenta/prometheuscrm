@@ -2,7 +2,7 @@ import 'server-only'
 
 import { exigirEquipe } from '@/lib/auth'
 import { termoBusca } from '@/lib/utils'
-import type { CanalVenda, StatusPagamento, StatusPedido } from '@/types'
+import type { CanalVenda, SituacaoFrete, StatusPagamento, StatusPedido } from '@/types'
 
 export const PEDIDOS_POR_PAGINA = 30
 
@@ -78,12 +78,13 @@ export async function pedidosComItens(filtros: {
   inicio?: string
   fim?: string
   pagamento?: FiltroPagamento
+  frete?: SituacaoFrete
 }) {
   const { supabase } = await exigirEquipe()
   let consulta = supabase
     .from('pedidos')
     .select(
-      'id, numero, criado_em, status, status_pagamento, total, subtotal, taxa_entrega, desconto, cobrancas_enviadas, ultima_cobranca_em, endereco_entrega, observacoes, clientes(id, nome, whatsapp), pre_vendas(titulo), pedido_itens(produto_id, descricao, quantidade, total)',
+      'id, numero, criado_em, status, status_pagamento, total, subtotal, taxa_entrega, desconto, frete, cobrancas_enviadas, ultima_cobranca_em, endereco_entrega, observacoes, clientes(id, nome, whatsapp), pre_vendas(titulo), pedido_itens(produto_id, descricao, quantidade, total)',
     )
     .neq('status', 'cancelado')
     .order('criado_em', { ascending: true })
@@ -92,6 +93,7 @@ export async function pedidosComItens(filtros: {
   if (filtros.preVendaId) consulta = consulta.eq('pre_venda_id', filtros.preVendaId)
   if (filtros.inicio) consulta = consulta.gte('criado_em', filtros.inicio)
   if (filtros.fim) consulta = consulta.lt('criado_em', filtros.fim)
+  if (filtros.frete) consulta = consulta.eq('frete', filtros.frete)
   const statusPagamento = statusDoFiltro(filtros.pagamento)
   if (statusPagamento) consulta = consulta.in('status_pagamento', statusPagamento)
 

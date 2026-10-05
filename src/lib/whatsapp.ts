@@ -100,3 +100,24 @@ export function mensagemCobranca(
     pix: config.chave_pix ?? '',
   })
 }
+
+/** Frete cotado de um pedido do link (CEP fora da lista VIP), com os dados do PIX. */
+export function mensagemFrete(
+  config: Pick<ConfigMensagens, 'chave_pix' | 'nome_recebedor_pix'>,
+  pedido: { numero: number; total: number; taxa_entrega: number; cliente_nome: string; pre_venda_titulo?: string | null },
+): string {
+  const titulo = pedido.pre_venda_titulo ? ` (${pedido.pre_venda_titulo})` : ''
+  return preencherModelo(
+    [
+      `Olá, ${pedido.cliente_nome.split(' ')[0]}! Tudo bem? 🍺`,
+      '',
+      `Cotamos o frete do seu pedido *${numeroPedido(pedido.numero)}*${titulo}: *${formatarMoeda(pedido.taxa_entrega)}*.`,
+      `Total do pedido com frete: *${formatarMoeda(pedido.total)}*.`,
+      '',
+      '{pagamento}',
+      '',
+      'Se você já pagou as cervejas, é só pagar o frete e mandar o comprovante por aqui. Obrigado! 🙌',
+    ].join('\n'),
+    { pagamento: textoPagamento(config) },
+  )
+}

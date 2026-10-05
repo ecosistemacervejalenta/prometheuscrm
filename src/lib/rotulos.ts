@@ -5,6 +5,7 @@ import type {
   StatusPedido,
   StatusAtendimento,
   StatusPreVenda,
+  SituacaoFrete,
 } from '@/types'
 
 /** Textos e tons de cor de cada valor de enum, usados em badges e filtros. */
@@ -42,6 +43,12 @@ export const STATUS_PEDIDO: Record<StatusPedido, { rotulo: string; tom: Tom }> =
   separado: { rotulo: 'Separado', tom: 'app' },
   entregue: { rotulo: 'Entregue', tom: 'sucesso' },
   cancelado: { rotulo: 'Cancelado', tom: 'perigo' },
+}
+
+export const SITUACAO_FRETE: Record<SituacaoFrete, { rotulo: string; tom: Tom }> = {
+  vip: { rotulo: 'Frete VIP', tom: 'vip' },
+  a_cotar: { rotulo: 'Frete a cotar', tom: 'alerta' },
+  cotado: { rotulo: 'Frete cotado', tom: 'sucesso' },
 }
 
 export const STATUS_PRE_VENDA: Record<StatusPreVenda, { rotulo: string; tom: Tom }> = {

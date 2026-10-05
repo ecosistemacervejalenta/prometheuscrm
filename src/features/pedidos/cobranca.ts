@@ -1,4 +1,4 @@
-import { linkWhatsapp, mensagemCobranca } from '@/lib/whatsapp'
+import { linkWhatsapp, mensagemCobranca, mensagemFrete } from '@/lib/whatsapp'
 import type { Configuracoes } from '@/types'
 
 /** Link do WhatsApp com a mensagem de cobrança já preenchida. */
@@ -21,6 +21,28 @@ export function linkDeCobranca(
     cliente_nome: pedido.cliente.nome,
     pre_venda_titulo: pedido.pre_venda_titulo,
     itens: pedido.itens,
+  })
+  return linkWhatsapp(pedido.cliente.whatsapp, texto)
+}
+
+/** Link do WhatsApp com o frete cotado e os dados do PIX. */
+export function linkDeFrete(
+  config: Configuracoes,
+  pedido: {
+    numero: number
+    total: number
+    taxa_entrega: number
+    cliente: { nome: string; whatsapp: string | null } | null
+    pre_venda_titulo?: string | null
+  },
+): string | null {
+  if (!pedido.cliente?.whatsapp) return null
+  const texto = mensagemFrete(config, {
+    numero: pedido.numero,
+    total: pedido.total,
+    taxa_entrega: pedido.taxa_entrega,
+    cliente_nome: pedido.cliente.nome,
+    pre_venda_titulo: pedido.pre_venda_titulo,
   })
   return linkWhatsapp(pedido.cliente.whatsapp, texto)
 }

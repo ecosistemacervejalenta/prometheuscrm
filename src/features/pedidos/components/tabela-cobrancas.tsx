@@ -1,16 +1,47 @@
 import Link from 'next/link'
 
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
-import { formatarDataCurta, formatarMoeda, formatarRelativo, formatarWhatsapp, numeroPedido } from '@/lib/format'
+import { formatarCep, formatarDataCurta, formatarMoeda, formatarRelativo, formatarWhatsapp, numeroPedido, type Endereco } from '@/lib/format'
 import type { Configuracoes } from '@/types'
 
-import { linkDeCobranca } from '../cobranca'
+import { linkDeCobranca, linkDeFrete } from '../cobranca'
 import type { PedidoComItens } from '../queries'
 import { BotaoCobrar, BotaoPago } from './controles'
-import { PagamentoBadge } from './selos'
+import { BotaoEnviarFrete, CotarFrete } from './frete'
+import { FreteBadge, PagamentoBadge } from './selos'
+
+const cepDo = (p: PedidoComItens) => formatarCep((p.endereco_entrega as Endereco | null)?.cep)
+
+/** Frete "a cotar": campo para lançar o valor. Frete cotado: atalho para enviar ao cliente. */
+function AcoesFrete({ pedido, config }: { pedido: PedidoComItens; config: Configuracoes }) {
+  if (pedido.frete === 'a_cotar') {
+    return (
+      <div className="rounded-xl bg-alerta-50 p-2.5 print:hidden">
+        <p className="mb-2 text-[12px] font-semibold text-alerta">Frete a cotar{cepDo(pedido) ? ` · CEP ${cepDo(pedido)}` : ''}</p>
+        <CotarFrete pedidoId={pedido.id} valor={Number(pedido.taxa_entrega)} />
+      </div>
+    )
+  }
+  if (pedido.frete === 'cotado') {
+    const href = linkDeFrete(config, {
+      numero: pedido.numero,
+      total: pedido.total,
+      taxa_entrega: pedido.taxa_entrega,
+      cliente: pedido.clientes,
+      pre_venda_titulo: pedido.pre_vendas?.titulo,
+    })
+    return (
+      <div className="flex flex-wrap items-center gap-1.5 print:hidden">
+        <span className="tipo-dado text-[12px] text-suave">Frete {formatarMoeda(pedido.taxa_entrega)}</span>
+        <BotaoEnviarFrete href={href} />
+      </div>
+    )
+  }
+  return null
+}
 
 /**
- * Pedidos com itens + ações de cobrança (WhatsApp) e pagamento.
+ * Pedidos com itens + ações de cobrança (WhatsApp), frete e pagamento.
  * Usada no Grupo VIP e no detalhe da pré-venda. Na impressão vira um romaneio.
  */
 export function TabelaCobrancas({ pedidos, config }: { pedidos: PedidoComItens[]; config: Configuracoes }) {
@@ -41,7 +72,10 @@ export function TabelaCobrancas({ pedidos, config }: { pedidos: PedidoComItens[]
               </div>
               <div className="shrink-0 text-right">
                 <p className="tipo-dado text-[15px] font-semibold">{formatarMoeda(p.total)}</p>
-                <div className="mt-1"><PagamentoBadge status={p.status_pagamento} /></div>
+                <div className="mt-1 flex flex-wrap justify-end gap-1">
+                  <FreteBadge frete={p.frete} />
+                  <PagamentoBadge status={p.status_pagamento} />
+                </div>
               </div>
             </Link>
             <ul className="mt-2.5 space-y-0.5 rounded-xl bg-papel px-3 py-2 text-[13px]">
@@ -55,6 +89,11 @@ export function TabelaCobrancas({ pedidos, config }: { pedidos: PedidoComItens[]
               <p className="tipo-dado mt-2 text-[11px] text-suave">
                 {p.cobrancas_enviadas} cobrança(s) · última {formatarRelativo(p.ultima_cobranca_em)}
               </p>
+            )}
+            {p.frete && p.frete !== 'vip' && (
+              <div className="mt-3">
+                <AcoesFrete pedido={p} config={config} />
+              </div>
             )}
             {emAberto && (
               <div className="mt-3 grid grid-cols-2 gap-2">
@@ -100,7 +139,14 @@ export function TabelaCobrancas({ pedidos, config }: { pedidos: PedidoComItens[]
                   ))}
                 </ul>
               </TD>
-              <TD className="tipo-dado text-right whitespace-nowrap">{formatarMoeda(p.total)}</TD>
+              <TD className="text-right whitespace-nowrap">
+                <p className="tipo-dado">{formatarMoeda(p.total)}</p>
+                {p.frete && (
+                  <div className="mt-1">
+                    <FreteBadge frete={p.frete} />
+                  </div>
+                )}
+              </TD>
               <TD>
                 <PagamentoBadge status={p.status_pagamento} />
                 {p.cobrancas_enviadas > 0 && (
@@ -113,12 +159,15 @@ export function TabelaCobrancas({ pedidos, config }: { pedidos: PedidoComItens[]
                 )}
               </TD>
               <TD className="print:hidden">
-                {emAberto && (
-                  <div className="flex justify-end gap-1.5">
-                    <BotaoCobrar pedidoId={p.id} href={href} />
-                    <BotaoPago pedidoId={p.id} />
-                  </div>
-                )}
+                <div className="flex flex-col items-end gap-2">
+                  {emAberto && (
+                    <div className="flex justify-end gap-1.5">
+                      <BotaoCobrar pedidoId={p.id} href={href} />
+                      <BotaoPago pedidoId={p.id} />
+                    </div>
+                  )}
+                  {p.frete && p.frete !== 'vip' && <AcoesFrete pedido={p} config={config} />}
+                </div>
               </TD>
               <TD className="hidden text-center print:table-cell">
                 <span className="inline-block size-4 border border-ink" />

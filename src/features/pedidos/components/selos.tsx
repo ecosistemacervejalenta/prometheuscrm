@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge'
-import { CANAIS, STATUS_PAGAMENTO, STATUS_PEDIDO, STATUS_PRE_VENDA } from '@/lib/rotulos'
-import type { CanalVenda, StatusPagamento, StatusPedido, StatusPreVenda } from '@/types'
+import { CANAIS, SITUACAO_FRETE, STATUS_PAGAMENTO, STATUS_PEDIDO, STATUS_PRE_VENDA } from '@/lib/rotulos'
+import type { CanalVenda, SituacaoFrete, StatusPagamento, StatusPedido, StatusPreVenda } from '@/types'
 
 export function CanalBadge({ canal }: { canal: CanalVenda | null }) {
   if (!canal) return null
@@ -32,4 +32,10 @@ export function StatusPreVendaBadge({ status }: { status: StatusPreVenda | null 
       {rotulo}
     </Badge>
   )
+}
+
+export function FreteBadge({ frete }: { frete: SituacaoFrete | null }) {
+  if (!frete) return null
+  const { rotulo, tom } = SITUACAO_FRETE[frete]
+  return <Badge tom={tom}>{rotulo}</Badge>
 }

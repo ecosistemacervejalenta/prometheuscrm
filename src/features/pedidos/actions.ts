@@ -93,3 +93,14 @@ export async function definirStatusPedido(id: string, status: StatusPedido): Pro
   atualizarTelas(id)
   return sucesso(`Pedido marcado como ${STATUS_PEDIDO[status].rotulo.toLowerCase()}.`)
 }
+
+/** Valor do frete de um pedido do link com CEP fora da lista VIP (ou correção de frete). */
+export async function cotarFrete(id: string, valor: string): Promise<EstadoAcao> {
+  const { supabase } = await exigirEquipe()
+  const dados = dinheiroOpcional.safeParse(valor)
+  if (!dados.success || !valor.trim()) return falha('Informe o valor do frete.')
+  const { error } = await supabase.rpc('cotar_frete_pedido', { p_pedido_id: id, p_valor: dados.data })
+  if (error) return falha(traduzirErro(error))
+  atualizarTelas(id)
+  return sucesso('Frete salvo. Agora envie o valor ao cliente pelo WhatsApp.')
+}

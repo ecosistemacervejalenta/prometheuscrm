@@ -2,6 +2,7 @@
 
 import { ActionForm, SubmitButton, useFormulario } from '@/components/form/action-form'
 import { Checkbox, Field, FormActions, FormSection, Input, Select, Textarea } from '@/components/form/fields'
+import { Alert } from '@/components/ui/alert'
 import { Card } from '@/components/ui/card'
 import { formatarWhatsapp } from '@/lib/format'
 import { PLACEHOLDERS } from '@/lib/whatsapp'
@@ -36,12 +37,29 @@ export function FormularioLoja({ config }: { config: Configuracoes }) {
           </Field>
         </FormSection>
 
-        <FormSection titulo="Pagamento (PIX)" descricao="Vai automaticamente na mensagem de cobrança.">
+        <FormSection titulo="Pagamento (PIX)" descricao="Aparece no fim do link da pré-venda e vai na mensagem de cobrança.">
+          {!config.chave_pix && (
+            <Alert tom="alerta" className="sm:col-span-6">
+              Sem chave PIX, o link da pré-venda não consegue mostrar os dados de pagamento ao cliente.
+            </Alert>
+          )}
           <Field label="Chave PIX" name="chave_pix" className="sm:col-span-3">
             <Input name="chave_pix" defaultValue={config.chave_pix ?? ''} placeholder="CNPJ, e-mail, telefone ou chave aleatória" />
           </Field>
           <Field label="Favorecido" name="nome_recebedor_pix" className="sm:col-span-3">
             <Input name="nome_recebedor_pix" defaultValue={config.nome_recebedor_pix ?? ''} />
+          </Field>
+          <Field
+            label="WhatsApp para comprovantes"
+            name="whatsapp_comprovante"
+            className="sm:col-span-3"
+            dica="O cliente envia o comprovante do PIX para este número."
+          >
+            <Input
+              name="whatsapp_comprovante"
+              type="tel"
+              defaultValue={config.whatsapp_comprovante ? formatarWhatsapp(config.whatsapp_comprovante) : ''}
+            />
           </Field>
         </FormSection>
 

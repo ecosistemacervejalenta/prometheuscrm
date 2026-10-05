@@ -242,6 +242,24 @@ export type Database = {
         }
         Relationships: []
       }
+      ceps_frete_vip: {
+        Row: {
+          cep_fim: string
+          cep_inicio: string
+          id: number
+        }
+        Insert: {
+          cep_fim: string
+          cep_inicio: string
+          id?: never
+        }
+        Update: {
+          cep_fim?: string
+          cep_inicio?: string
+          id?: never
+        }
+        Relationships: []
+      }
       clientes: {
         Row: {
           app_usuario_id: string | null
@@ -321,12 +339,16 @@ export type Database = {
         Row: {
           atualizado_em: string
           chave_pix: string | null
+          frete_vip_arquivo: string | null
+          frete_vip_importado_em: string | null
+          frete_vip_valor: number
           id: number
           mensagem_cobranca: string
           mensagem_pre_venda: string
           nome_loja: string
           nome_recebedor_pix: string | null
           whatsapp_assinatura: boolean
+          whatsapp_comprovante: string | null
           whatsapp_leads_automatico: boolean
           whatsapp_loja: string | null
           whatsapp_pasta_leads_id: string | null
@@ -334,12 +356,16 @@ export type Database = {
         Insert: {
           atualizado_em?: string
           chave_pix?: string | null
+          frete_vip_arquivo?: string | null
+          frete_vip_importado_em?: string | null
+          frete_vip_valor?: number
           id?: number
           mensagem_cobranca?: string
           mensagem_pre_venda?: string
           nome_loja?: string
           nome_recebedor_pix?: string | null
           whatsapp_assinatura?: boolean
+          whatsapp_comprovante?: string | null
           whatsapp_leads_automatico?: boolean
           whatsapp_loja?: string | null
           whatsapp_pasta_leads_id?: string | null
@@ -347,12 +373,16 @@ export type Database = {
         Update: {
           atualizado_em?: string
           chave_pix?: string | null
+          frete_vip_arquivo?: string | null
+          frete_vip_importado_em?: string | null
+          frete_vip_valor?: number
           id?: number
           mensagem_cobranca?: string
           mensagem_pre_venda?: string
           nome_loja?: string
           nome_recebedor_pix?: string | null
           whatsapp_assinatura?: boolean
+          whatsapp_comprovante?: string | null
           whatsapp_leads_automatico?: boolean
           whatsapp_loja?: string | null
           whatsapp_pasta_leads_id?: string | null
@@ -944,6 +974,7 @@ export type Database = {
           desconto: number
           endereco_entrega: Json | null
           forma_pagamento: string | null
+          frete: Database["public"]["Enums"]["situacao_frete"] | null
           id: string
           numero: number
           observacoes: string | null
@@ -968,6 +999,7 @@ export type Database = {
           desconto?: number
           endereco_entrega?: Json | null
           forma_pagamento?: string | null
+          frete?: Database["public"]["Enums"]["situacao_frete"] | null
           id?: string
           numero?: never
           observacoes?: string | null
@@ -992,6 +1024,7 @@ export type Database = {
           desconto?: number
           endereco_entrega?: Json | null
           forma_pagamento?: string | null
+          frete?: Database["public"]["Enums"]["situacao_frete"] | null
           id?: string
           numero?: never
           observacoes?: string | null
@@ -1358,13 +1391,13 @@ export type Database = {
       }
       whatsapp_contatos: {
         Row: {
-          foto_conferida_em: string | null
-          foto_expira_em: string | null
-          foto_url: string | null
           anotacoes: string | null
           atualizado_em: string
           chatid: string
           criado_em: string
+          foto_conferida_em: string | null
+          foto_expira_em: string | null
+          foto_url: string | null
           id: string
           lead_id: string | null
           nome: string | null
@@ -1372,13 +1405,13 @@ export type Database = {
           whatsapp: string | null
         }
         Insert: {
-          foto_conferida_em?: string | null
-          foto_expira_em?: string | null
-          foto_url?: string | null
           anotacoes?: string | null
           atualizado_em?: string
           chatid: string
           criado_em?: string
+          foto_conferida_em?: string | null
+          foto_expira_em?: string | null
+          foto_url?: string | null
           id?: string
           lead_id?: string | null
           nome?: string | null
@@ -1386,13 +1419,13 @@ export type Database = {
           whatsapp?: string | null
         }
         Update: {
-          foto_conferida_em?: string | null
-          foto_expira_em?: string | null
-          foto_url?: string | null
           anotacoes?: string | null
           atualizado_em?: string
           chatid?: string
           criado_em?: string
+          foto_conferida_em?: string | null
+          foto_expira_em?: string | null
+          foto_url?: string | null
           id?: string
           lead_id?: string | null
           nome?: string | null
@@ -1939,9 +1972,44 @@ export type Database = {
         }
         Returns: number
       }
+      cep_tem_frete_vip: { Args: { p_cep: string }; Returns: boolean }
       concluir_importacao_leads: {
         Args: { p_lista_id: string }
         Returns: undefined
+      }
+      cotar_frete_pedido: {
+        Args: { p_pedido_id: string; p_valor: number }
+        Returns: {
+          atualizado_em: string
+          canal: Database["public"]["Enums"]["canal_venda"]
+          cliente_id: string
+          cobrancas_enviadas: number
+          criado_em: string
+          criado_por: string | null
+          desconto: number
+          endereco_entrega: Json | null
+          forma_pagamento: string | null
+          frete: Database["public"]["Enums"]["situacao_frete"] | null
+          id: string
+          numero: number
+          observacoes: string | null
+          origem: Database["public"]["Enums"]["origem_pedido"]
+          pago_em: string | null
+          pre_venda_id: string | null
+          shopify_order_id: string | null
+          status: Database["public"]["Enums"]["status_pedido"]
+          status_pagamento: Database["public"]["Enums"]["status_pagamento"]
+          subtotal: number
+          taxa_entrega: number
+          total: number
+          ultima_cobranca_em: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pedidos"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       criar_pedido: {
         Args: {
@@ -1965,6 +2033,7 @@ export type Database = {
           desconto: number
           endereco_entrega: Json | null
           forma_pagamento: string | null
+          frete: Database["public"]["Enums"]["situacao_frete"] | null
           id: string
           numero: number
           observacoes: string | null
@@ -2057,6 +2126,7 @@ export type Database = {
           desconto: number
           endereco_entrega: Json | null
           forma_pagamento: string | null
+          frete: Database["public"]["Enums"]["situacao_frete"] | null
           id: string
           numero: number
           observacoes: string | null
@@ -2106,6 +2176,7 @@ export type Database = {
           desconto: number
           endereco_entrega: Json | null
           forma_pagamento: string | null
+          frete: Database["public"]["Enums"]["situacao_frete"] | null
           id: string
           numero: number
           observacoes: string | null
@@ -2131,6 +2202,7 @@ export type Database = {
         Args: { p_id: string; p_nome: string }
         Returns: undefined
       }
+      resumo_ceps_frete_vip: { Args: never; Returns: Json }
       resumo_produtos_vendidos: {
         Args: {
           p_canal?: Database["public"]["Enums"]["canal_venda"]
@@ -2190,6 +2262,10 @@ export type Database = {
       }
       somente_digitos: { Args: { p_texto: string }; Returns: string }
       status_integracao_olist: { Args: never; Returns: Json }
+      substituir_ceps_frete_vip: {
+        Args: { p_arquivo?: string; p_faixas: Json }
+        Returns: Json
+      }
       transferir_atendimento: {
         Args: { p_id: string; p_para: string }
         Returns: undefined
@@ -2232,6 +2308,7 @@ export type Database = {
       origem_cliente: "manual" | "pre_venda" | "shopify" | "app" | "importacao"
       origem_pedido: "link" | "manual" | "shopify" | "app" | "api"
       papel_usuario: "admin" | "equipe"
+      situacao_frete: "vip" | "a_cotar" | "cotado"
       status_atendimento:
         | "fila"
         | "em_atendimento"
@@ -2389,6 +2466,7 @@ export const Constants = {
       origem_cliente: ["manual", "pre_venda", "shopify", "app", "importacao"],
       origem_pedido: ["link", "manual", "shopify", "app", "api"],
       papel_usuario: ["admin", "equipe"],
+      situacao_frete: ["vip", "a_cotar", "cotado"],
       status_atendimento: [
         "fila",
         "em_atendimento",

@@ -1,9 +1,10 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 
 import { ActionForm, SubmitButton, type AcaoFormulario } from '@/components/form/action-form'
-import { Field, FormActions, FormSection, Input, MoneyInput, Select, Textarea } from '@/components/form/fields'
+import { Field, FormActions, FormSection, Input, Select, Textarea } from '@/components/form/fields'
 import { ButtonLink } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { FotoProduto } from '@/features/produtos/components/foto-produto'
@@ -126,9 +127,13 @@ export function FormularioPreVenda({
           <Field label="Previsão de entrega" name="previsao_entrega" className="sm:col-span-2">
             <Input name="previsao_entrega" type="date" defaultValue={preVenda?.previsao_entrega ?? ''} />
           </Field>
-          <Field label="Taxa de entrega" name="taxa_entrega" className="sm:col-span-2" dica="Somada a cada pedido.">
-            <MoneyInput name="taxa_entrega" defaultValue={valorParaInput(preVenda?.taxa_entrega ?? 0)} />
-          </Field>
+          <div className="rounded-xl bg-papel p-3 text-[13px] text-suave sm:col-span-2">
+            <p className="font-semibold text-ink">Frete do link</p>
+            Valor fixo para os CEPs da lista VIP; os demais ficam “a cotar”.{' '}
+            <Link href="/configuracoes/frete" className="font-semibold text-volt-700 hover:text-ink">
+              Configurar
+            </Link>
+          </div>
         </FormSection>
 
         <FormSection
