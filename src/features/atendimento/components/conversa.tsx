@@ -437,7 +437,7 @@ export function Conversa({
             </Button>
           </div>
         </header>
-        <EtiquetasDoAtendimento key={id} atendimentoId={id} aplicadas={atendimento.etiquetas} todas={etiquetas} />
+        <EtiquetasDoAtendimento atendimentoId={id} aplicadas={atendimento.etiquetas} todas={etiquetas} />
 
         {/* Linha do tempo */}
         <div
