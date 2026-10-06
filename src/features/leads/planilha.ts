@@ -152,8 +152,13 @@ export function lerPlanilhaExcel(xlsx: ModuloXlsx, dados: ArrayBuffer, aba?: str
       )
       .filter((l) => l.some((v) => v !== ''))
   const abas = pasta.SheetNames
-  const escolhida = aba && abas.includes(aba) ? aba : (abas.find((nome) => linhasDa(nome).length > 0) ?? abas[0])
-  return { abas, aba: escolhida ?? null, linhas: escolhida ? linhasDa(escolhida) : [] }
+  if (aba && abas.includes(aba)) return { abas, aba, linhas: linhasDa(aba) }
+  // Cada aba é convertida uma vez só (em planilhas grandes, converter de novo dobra o tempo e a memória).
+  for (const nome of abas) {
+    const linhas = linhasDa(nome)
+    if (linhas.length > 0) return { abas, aba: nome, linhas }
+  }
+  return { abas, aba: abas[0] ?? null, linhas: [] }
 }
 
 /** A 1ª linha é cabeçalho se tem texto e nenhum telefone, e-mail ou número. */
@@ -175,7 +180,8 @@ const dicaDoCabecalho = (rotulo: string): TipoColuna | null => {
 
 /** Colunas da lista (rótulo + tipo detectado pelos valores). Colunas totalmente vazias são descartadas. */
 export function analisarColunas(cabecalho: string[] | null, dados: string[][]): ColunaPlanilha[] {
-  const largura = Math.min(MAX_COLUNAS, Math.max(cabecalho?.length ?? 0, ...dados.map((l) => l.length)))
+  // Laço em vez de Math.max(...linhas): com centenas de milhares de linhas o spread estoura a pilha.
+  const largura = Math.min(MAX_COLUNAS, dados.reduce((maior, l) => Math.max(maior, l.length), cabecalho?.length ?? 0))
   const colunas: Array<ColunaPlanilha & { fracaoNome: number }> = []
   for (let i = 0; i < largura; i++) {
     const valores = dados.map((l) => l[i] ?? '').filter(Boolean).slice(0, 1000)

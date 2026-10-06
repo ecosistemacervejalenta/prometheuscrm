@@ -25,12 +25,19 @@ import {
   prepararLeads,
   primeiraLinhaEhCabecalho,
   sugerirMapeamento,
+  type LeadImportacao,
   type Mapeamento,
 } from '../planilha'
 import { ICONE_TIPO } from './icones'
 
-const LOTE = 1000
-const TAMANHO_MAXIMO = 20 * 1024 * 1024
+const MB = 1024 * 1024
+// Limites pensados na memória do navegador (o arquivo é lido inteiro antes de enviar):
+// ~750 mil linhas de CSV ou ~600 mil de Excel ficam perto de 2 GB, com folga para a aba.
+const TAMANHO_MAXIMO_TEXTO = 100 * MB
+const TAMANHO_MAXIMO_EXCEL = 60 * MB
+// Até 2.000 leads por envio, sem passar de ~1,2 milhão de caracteres (limite da Vercel: 4,5 MB por requisição).
+const LOTE = 2000
+const LOTE_CARACTERES = 1_200_000
 const NOVA_PASTA = '__nova__'
 const ORIGENS = ['WhatsApp', 'Instagram', 'Site', 'Evento', 'Indicação', 'Outro']
 const EXCEL = ['xlsx', 'xls', 'xlsm', 'ods']
@@ -39,6 +46,18 @@ const TEXTO = ['csv', 'txt', 'tsv']
 
 type Arquivo = { nome: string; tamanho: number; linhas: string[][]; abas: string[]; aba: string | null; buffer: ArrayBuffer | null }
 type Envio = { listaId: string | null; enviados: number; erro: string | null; executando: boolean }
+
+/** Onde termina o lote que começa em `inicio` (linhas com muitas colunas formam lotes menores). */
+function fimDoLote(leads: LeadImportacao[], inicio: number) {
+  let fim = inicio
+  let caracteres = 0
+  while (fim < leads.length && fim - inicio < LOTE) {
+    caracteres += JSON.stringify(leads[fim]).length
+    if (caracteres > LOTE_CARACTERES && fim > inicio) break
+    fim++
+  }
+  return fim
+}
 
 function baixarModelo() {
   const conteudo = '﻿Nome;WhatsApp;E-mail;Cidade\r\nJoão Silva;(11) 98765-4321;joao@email.com;São Paulo\r\n'
@@ -103,9 +122,12 @@ export function ImportadorLeads({ pastas, pastaInicial }: { pastas: Array<{ id: 
   async function aoEscolher(file: File | undefined) {
     if (!file) return
     setErroLeitura(null)
-    if (file.size > TAMANHO_MAXIMO) return setErroLeitura('Arquivo maior que 20 MB. Divida a lista em partes.')
     const extensao = file.name.split('.').pop()?.toLowerCase() ?? ''
     if (![...EXCEL, ...TEXTO].includes(extensao)) return setErroLeitura('Formato não suportado. Envie CSV, XLS, XLSX ou TXT.')
+    if (EXCEL.includes(extensao) && file.size > TAMANHO_MAXIMO_EXCEL) {
+      return setErroLeitura('Planilha do Excel maior que 60 MB. No Excel, use Arquivo › Salvar como › CSV e importe o CSV (até 100 MB), ou divida a lista em partes.')
+    }
+    if (file.size > TAMANHO_MAXIMO_TEXTO) return setErroLeitura('Arquivo maior que 100 MB. Divida a lista em partes.')
     setLendo(true)
     try {
       const buffer = await file.arrayBuffer()
@@ -162,10 +184,12 @@ export function ImportadorLeads({ pastas, pastaInicial }: { pastas: Array<{ id: 
         if (!inicio.ok) return parar(inicio.mensagem, null, 0)
         listaId = inicio.listaId
       }
-      for (; i < leads.length; i += LOTE) {
-        const lote = await importarLote(listaId, leads.slice(i, i + LOTE))
+      while (i < leads.length) {
+        const fim = fimDoLote(leads, i)
+        const lote = await importarLote(listaId, leads.slice(i, fim))
         if (!lote.ok) return parar(lote.mensagem, listaId, i)
-        setEnvio({ listaId, enviados: Math.min(i + LOTE, leads.length), erro: null, executando: true })
+        i = fim
+        setEnvio({ listaId, enviados: i, erro: null, executando: true })
       }
       const fim = await concluirImportacao(listaId)
       if (!fim.ok) return parar(fim.mensagem, listaId, leads.length)
@@ -190,7 +214,7 @@ export function ImportadorLeads({ pastas, pastaInicial }: { pastas: Array<{ id: 
 
   return (
     <div className="space-y-5 lg:space-y-6">
-      <Passo numero={1} titulo="Arquivo" descricao="CSV, Excel (XLS/XLSX) ou TXT — até 20 MB. Lido no seu navegador antes de enviar.">
+      <Passo numero={1} titulo="Arquivo" descricao="CSV ou TXT até 100 MB, Excel (XLS/XLSX) até 60 MB. Lido no seu navegador antes de enviar.">
         {!arquivo ? (
           <>
             <label
@@ -407,7 +431,7 @@ export function ImportadorLeads({ pastas, pastaInicial }: { pastas: Array<{ id: 
           {(envio.executando || envio.enviados > 0) && (
             <div className="mt-4">
               <div className="mb-1.5 flex justify-between text-[13px] text-suave">
-                <span>Enviando leads…</span>
+                <span>Enviando leads… mantenha esta aba aberta até terminar.</span>
                 <span className="tipo-dado">
                   {formatarNumero(envio.enviados)} / {formatarNumero(preparo.leads.length)}
                 </span>

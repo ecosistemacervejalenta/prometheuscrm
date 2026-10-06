@@ -36,11 +36,11 @@ export const esquemaNovaLista = z
   })
   .refine((d) => d.pasta_id || d.nova_pasta, { path: ['pasta_id'], message: 'Escolha uma pasta ou crie uma nova.' })
 
-/** Um lote de leads (até 1.000 por envio). */
+/** Um lote de leads (até 2.000 por envio). */
 export const esquemaLote = z
   .array(
     z.object({
-      linha: z.number().int().min(1).max(1_000_000),
+      linha: z.number().int().min(1).max(10_000_000),
       nome: z.string().max(500).nullable(),
       whatsapp: z.string().max(20).nullable(),
       email: z.string().max(320).nullable(),
@@ -48,7 +48,7 @@ export const esquemaLote = z
     }),
   )
   .min(1)
-  .max(1000)
+  .max(2000)
 
 export const esquemaEdicaoLista = z.object({
   nome: texto('Dê um nome para a lista.').max(120, 'Use no máximo 120 caracteres.'),

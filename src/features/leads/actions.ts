@@ -62,7 +62,7 @@ export async function iniciarImportacao(entrada: unknown): Promise<ResultadoImpo
   return { ok: true, listaId: data.id }
 }
 
-/** 2º passo: envia um lote (até 1.000). Reenviar o mesmo lote não duplica nada. */
+/** 2º passo: envia um lote (até 2.000). Reenviar o mesmo lote não duplica nada. */
 export async function importarLote(listaId: string, entrada: unknown): Promise<ResultadoImportacao> {
   const { supabase } = await exigirEquipe()
   const lote = esquemaLote.safeParse(entrada)
