@@ -145,6 +145,56 @@ export type Database = {
           },
         ]
       }
+      atendimentos_etiquetas: {
+        Row: {
+          atendimento_id: string
+          criado_em: string
+          criado_por: string | null
+          etiqueta_id: string
+        }
+        Insert: {
+          atendimento_id: string
+          criado_em?: string
+          criado_por?: string | null
+          etiqueta_id: string
+        }
+        Update: {
+          atendimento_id?: string
+          criado_em?: string
+          criado_por?: string | null
+          etiqueta_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "atendimentos_etiquetas_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimentos_etiquetas_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "vw_atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimentos_etiquetas_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimentos_etiquetas_etiqueta_id_fkey"
+            columns: ["etiqueta_id"]
+            isOneToOne: false
+            referencedRelation: "etiquetas_atendimento"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       atividades: {
         Row: {
           autor_id: string | null
@@ -579,6 +629,38 @@ export type Database = {
           vencimento?: string
         }
         Relationships: []
+      }
+      etiquetas_atendimento: {
+        Row: {
+          cor: string
+          criado_em: string
+          criado_por: string | null
+          id: string
+          nome: string
+        }
+        Insert: {
+          cor?: string
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          nome: string
+        }
+        Update: {
+          cor?: string
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          nome?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "etiquetas_atendimento_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       eventos_integracao: {
         Row: {
@@ -1567,6 +1649,7 @@ export type Database = {
           contato_id: string | null
           contato_nome: string | null
           criado_em: string | null
+          etiquetas: Json | null
           id: string | null
           lead_id: string | null
           nao_lidas: number | null
@@ -2098,6 +2181,14 @@ export type Database = {
         Returns: number
       }
       importar_pedido_shopify: { Args: { p_pedido: Json }; Returns: string }
+      marcar_etiqueta_atendimento: {
+        Args: {
+          p_atendimento_id: string
+          p_etiqueta_id: string
+          p_marcar: boolean
+        }
+        Returns: undefined
+      }
       metricas_painel: {
         Args: { p_fim: string; p_inicio: string }
         Returns: Json

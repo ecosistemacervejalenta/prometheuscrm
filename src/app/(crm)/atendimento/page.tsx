@@ -13,6 +13,7 @@ import {
   contagensAtendimento,
   listarAtendimentos,
   listarEquipe,
+  listarEtiquetas,
   obterConversa,
   type AbaAtendimento,
 } from '@/features/atendimento/queries'
@@ -30,12 +31,13 @@ export default async function PaginaAtendimento({ searchParams }: PageProps<'/at
   const termo = param(busca.q)
   const id = param(busca.id)
 
-  const [itens, contagens, conversa, equipe, config] = await Promise.all([
+  const [itens, contagens, conversa, equipe, config, etiquetas] = await Promise.all([
     listarAtendimentos({ aba, busca: termo }),
     contagensAtendimento(),
     id ? obterConversa(id) : null,
     listarEquipe(),
     configAtendimento(),
+    id ? listarEtiquetas() : [],
   ])
   if (id && !conversa) notFound()
 
@@ -70,6 +72,7 @@ export default async function PaginaAtendimento({ searchParams }: PageProps<'/at
             key={conversa.atendimento.id}
             conversa={conversa}
             equipe={equipe}
+            etiquetas={etiquetas}
             meuId={perfil.id}
             pastas={config.pastas}
             pastaPadraoId={config.pastaLeadsId}

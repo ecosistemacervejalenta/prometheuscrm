@@ -52,6 +52,9 @@ const RESTRICOES: Record<string, string> = {
   pre_vendas_slug_formato: 'Link inválido: use letras minúsculas, números e hífens.',
   atendimentos_aberto_por_contato: 'Este contato já tem outro atendimento aberto. Continue por ele.',
   atendimento_eventos_texto_check: 'A nota deve ter de 1 a 4.000 caracteres.',
+  etiquetas_atendimento_nome_key: 'Já existe uma etiqueta com este nome.',
+  etiquetas_atendimento_nome_check: 'O nome da etiqueta deve ter de 1 a 40 caracteres.',
+  etiquetas_atendimento_cor_check: 'Escolha uma das cores da lista.',
 }
 
 /** Traduz erros do Supabase/Postgres em mensagens claras em português. */

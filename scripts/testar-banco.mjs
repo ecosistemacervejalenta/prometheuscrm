@@ -653,15 +653,42 @@ await db.exec(`reset role;`)
   expectEq('prévia da última mensagem (voz)', (await atend(volta.atendimento_id)).ultima_mensagem_previa, '🎤 Áudio')
   expectEq('"assumido" fica antes da mensagem na linha do tempo', Boolean((await um(`select
     (select criado_em from atendimento_eventos where atendimento_id = $1 and tipo = 'assumido') <= (select min(enviada_em) from whatsapp_mensagens where atendimento_id = $1 and direcao = 'saida') ok`, [volta.atendimento_id])).ok), true)
+
+  // Etiquetas
+  expectEq('etiquetas iniciais', (await q(`select nome, cor from etiquetas_atendimento order by nome`)).map((e) => `${e.nome}:${e.cor}`),
+    ['Aguardando entrega:amarelo', 'Produto quebrado:vermelho', 'Verificando com a transportadora:azul'])
+  const troca = await um(`insert into etiquetas_atendimento (nome, cor) values ('  Troca   de produto ', 'roxo') returning id, nome, criado_por`)
+  expectEq('etiqueta nova: nome normalizado e autor', { nome: troca.nome, autor: troca.criado_por === uid }, { nome: 'Troca de produto', autor: true })
+  await expectError('etiqueta com nome repetido (outra grafia)', `insert into etiquetas_atendimento (nome) values ('PRODUTO QUEBRADO')`)
+  await expectError('etiqueta com cor fora da paleta', `insert into etiquetas_atendimento (nome, cor) values ('Outra', 'dourado')`)
+  const quebrado = (await um(`select id from etiquetas_atendimento where nome = 'Produto quebrado'`)).id
+  await q(`select marcar_etiqueta_atendimento($1, $2, true)`, [volta.atendimento_id, quebrado])
+  await q(`select marcar_etiqueta_atendimento($1, $2, true)`, [volta.atendimento_id, quebrado])
+  await q(`select marcar_etiqueta_atendimento($1, $2, true)`, [volta.atendimento_id, troca.id])
+  const etiquetasDe = async (id) => (await um(`select etiquetas from vw_atendimentos where id = $1`, [id])).etiquetas.map((e) => `${e.nome}:${e.cor}`)
+  expectEq('caixa de entrada mostra as etiquetas na ordem em que entraram', await etiquetasDe(volta.atendimento_id), ['Produto quebrado:vermelho', 'Troca de produto:roxo'])
+  expectEq('atendimento sem etiqueta vem com lista vazia', await etiquetasDe(lid.atendimento_id), [])
+  expectEq('busca encontra o atendimento pela etiqueta', (await q(`select id from vw_atendimentos where busca like '%quebrado%'`)).map((a) => a.id === volta.atendimento_id), [true])
+  await q(`select marcar_etiqueta_atendimento($1, $2, false)`, [volta.atendimento_id, troca.id])
+  await q(`select marcar_etiqueta_atendimento($1, $2, false)`, [volta.atendimento_id, troca.id])
+  expectEq('linha do tempo registra quem colocou e tirou (sem repetir)', (await q(`select tipo, texto, autor_id = $2 eu from atendimento_eventos
+    where atendimento_id = $1 and tipo like 'etiqueta%' order by criado_em`, [volta.atendimento_id, uid])).map((e) => `${e.tipo}:${e.texto}:${e.eu}`),
+    ['etiqueta_adicionada:Produto quebrado:true', 'etiqueta_adicionada:Troca de produto:true', 'etiqueta_removida:Troca de produto:true'])
+  await q(`delete from etiquetas_atendimento where id = $1`, [quebrado])
+  expectEq('excluir a etiqueta tira ela de todos os atendimentos', await etiquetasDe(volta.atendimento_id), [])
+  await expectError('etiqueta excluída não pode ser colocada', `select marcar_etiqueta_atendimento($1, $2, true)`, [volta.atendimento_id, quebrado])
   await db.exec(`reset role;`)
 
   const intruso = (await q(`insert into auth.users (email) values ('intruso@prometheus.beer') returning id`))[0].id
   await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${intruso}', false);`)
   expectEq('inativo não vê atendimentos nem mensagens', await um(`select (select count(*)::int from vw_atendimentos) a, (select count(*)::int from whatsapp_mensagens) m`), { a: 0, m: 0 })
   await expectError('inativo não envia mensagem', `select preparar_envio_whatsapp($1, 'oi')`, [volta.atendimento_id])
+  expectEq('inativo não vê etiquetas', (await um(`select count(*)::int n from etiquetas_atendimento`)).n, 0)
+  await expectError('inativo não coloca etiqueta', `select marcar_etiqueta_atendimento($1, $2, true)`, [volta.atendimento_id, troca.id])
   await db.exec(`reset role; set role anon; select set_config('request.jwt.claim.sub', '', false);`)
   await expectError('anon não registra mensagem', `select registrar_mensagem_whatsapp('{}'::jsonb)`)
   await expectError('anon não lê atendimentos', `select * from vw_atendimentos`)
+  await expectError('anon não lê etiquetas', `select * from etiquetas_atendimento`)
   await db.exec(`reset role;`)
 }
 

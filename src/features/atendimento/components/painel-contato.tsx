@@ -18,6 +18,7 @@ import type { StatusAtendimento } from '@/types'
 
 import { alterarStatusAtendimento, salvarComoLead, salvarContato, sincronizarConversaAgora, transferirAtendimento } from '../actions'
 import type { Conversa, MembroEquipe } from '../queries'
+import { EtiquetaChip } from './etiqueta'
 import { FotoContato } from './foto-contato'
 
 function Secao({ titulo, children, className }: { titulo: string; children: ReactNode; className?: string }) {
@@ -221,11 +222,20 @@ export function PainelContato({
       <Secao titulo="Histórico de atendimentos">
         <ul className="space-y-1.5">
           {[...atendimentos].reverse().map((a) => (
-            <li key={a.id} className={cn('flex items-center gap-2 text-[13px]', a.id === id && 'font-semibold')}>
-              <span className="tipo-dado text-sutil">#{a.numero}</span>
-              <span className="text-suave">{formatarData(a.criado_em)}</span>
-              <span className="min-w-0 flex-1 truncate text-right text-[12px] text-suave">{a.responsavel_id ? nomes.get(a.responsavel_id) : ''}</span>
-              <Badge tom={STATUS_ATENDIMENTO[a.status].tom}>{STATUS_ATENDIMENTO[a.status].rotulo}</Badge>
+            <li key={a.id} className="text-[13px]">
+              <div className={cn('flex items-center gap-2', a.id === id && 'font-semibold')}>
+                <span className="tipo-dado text-sutil">#{a.numero}</span>
+                <span className="text-suave">{formatarData(a.criado_em)}</span>
+                <span className="min-w-0 flex-1 truncate text-right text-[12px] text-suave">{a.responsavel_id ? nomes.get(a.responsavel_id) : ''}</span>
+                <Badge tom={STATUS_ATENDIMENTO[a.status].tom}>{STATUS_ATENDIMENTO[a.status].rotulo}</Badge>
+              </div>
+              {a.etiquetas.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {a.etiquetas.map((e) => (
+                    <EtiquetaChip key={e.id} etiqueta={e} />
+                  ))}
+                </div>
+              )}
             </li>
           ))}
         </ul>

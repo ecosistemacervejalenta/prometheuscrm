@@ -12,10 +12,12 @@ import { statusDaUazapi } from './normalizacao'
 import {
   esquemaConfigAtendimento,
   esquemaContato,
+  esquemaEtiqueta,
   esquemaMensagem,
   esquemaMidia,
   esquemaNota,
   esquemaStatus,
+  type CorEtiqueta,
   type DadosMidia,
 } from './schema'
 import { atualizarFoto, BUCKET_MIDIAS, fotoPrecisaAtualizar, guardarMidia, sincronizarConversa } from './sincronizacao'
@@ -209,6 +211,70 @@ export async function alterarStatusAtendimento(id: string, status: string): Prom
     resolvido: 'Atendimento resolvido.',
   }
   return sucesso(textos[dados.data])
+}
+
+// Etiquetas -------------------------------------------------------------------------
+
+function atualizarTelasEtiquetas() {
+  atualizarTelas()
+  revalidatePath('/configuracoes/etiquetas')
+}
+
+/** Coloca ou tira uma etiqueta do atendimento (fica registrado na linha do tempo). */
+export async function marcarEtiqueta(atendimentoId: string, etiquetaId: string, marcar: boolean): Promise<EstadoAcao> {
+  const { supabase } = await exigirEquipe()
+  const { error } = await supabase.rpc('marcar_etiqueta_atendimento', {
+    p_atendimento_id: atendimentoId,
+    p_etiqueta_id: etiquetaId,
+    p_marcar: marcar,
+  })
+  if (error) return falha(traduzirErro(error))
+  atualizarTelasEtiquetas()
+  return sucesso()
+}
+
+/** Cria a etiqueta pela própria conversa e já coloca no atendimento. */
+export async function criarEtiquetaNoAtendimento(atendimentoId: string, nome: string, cor: CorEtiqueta): Promise<EstadoAcao> {
+  const { supabase } = await exigirEquipe()
+  const dados = esquemaEtiqueta.safeParse({ nome, cor })
+  if (!dados.success) return falha(dados.error.issues[0]?.message ?? 'Etiqueta inválida.')
+
+  const { data, error } = await supabase.from('etiquetas_atendimento').insert(dados.data).select('id').single()
+  if (error) return falha(traduzirErro(error))
+  const marcada = await supabase.rpc('marcar_etiqueta_atendimento', { p_atendimento_id: atendimentoId, p_etiqueta_id: data.id, p_marcar: true })
+  atualizarTelasEtiquetas()
+  if (marcada.error) return falha(`Etiqueta criada, mas não foi colocada no atendimento: ${traduzirErro(marcada.error)}`)
+  return sucesso(`Etiqueta “${dados.data.nome}” criada.`)
+}
+
+export async function cadastrarEtiqueta(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
+  const { supabase } = await exigirEquipe()
+  const dados = esquemaEtiqueta.safeParse(formParaObjeto(formData))
+  if (!dados.success) return errosDeValidacao(dados.error)
+  const { error } = await supabase.from('etiquetas_atendimento').insert(dados.data)
+  if (error) return falha(traduzirErro(error))
+  atualizarTelasEtiquetas()
+  return sucesso(`Etiqueta “${dados.data.nome}” cadastrada.`)
+}
+
+/** Renomeia ou troca a cor: muda em todos os atendimentos que usam a etiqueta. */
+export async function editarEtiqueta(id: string, _: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
+  const { supabase } = await exigirEquipe()
+  const dados = esquemaEtiqueta.safeParse(formParaObjeto(formData))
+  if (!dados.success) return errosDeValidacao(dados.error)
+  const { error } = await supabase.from('etiquetas_atendimento').update(dados.data).eq('id', id)
+  if (error) return falha(traduzirErro(error))
+  atualizarTelasEtiquetas()
+  return sucesso('Etiqueta atualizada.')
+}
+
+/** Exclui a etiqueta e tira ela de todos os atendimentos. */
+export async function excluirEtiqueta(id: string): Promise<EstadoAcao> {
+  const { supabase } = await exigirEquipe()
+  const { error } = await supabase.from('etiquetas_atendimento').delete().eq('id', id)
+  if (error) return falha(traduzirErro(error))
+  atualizarTelasEtiquetas()
+  return sucesso('Etiqueta excluída.')
 }
 
 /** Zera as não lidas ao abrir a conversa e avisa o WhatsApp (o cliente vê como lida). */

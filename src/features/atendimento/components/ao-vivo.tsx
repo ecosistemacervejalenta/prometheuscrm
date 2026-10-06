@@ -7,8 +7,8 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 /**
- * Mantém a caixa de entrada ao vivo: qualquer mudança em atendimentos, mensagens
- * ou eventos (Supabase Realtime, com RLS) recarrega os dados do servidor.
+ * Mantém a caixa de entrada ao vivo: qualquer mudança em atendimentos, mensagens,
+ * eventos ou etiquetas (Supabase Realtime, com RLS) recarrega os dados do servidor.
  * Como garantia, recarrega a cada 45 s com a aba visível.
  * Mensagem recebida → bip curto e, com a aba em segundo plano, notificação do navegador.
  */
@@ -65,6 +65,8 @@ export function AtualizacaoAoVivo({ pendentes }: { pendentes: number }) {
       .channel('atendimento-whatsapp')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'atendimentos' }, atualizar)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'atendimento_eventos' }, atualizar)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'atendimentos_etiquetas' }, atualizar)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'etiquetas_atendimento' }, atualizar)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_mensagens' }, (mudanca) => {
         atualizar()
         const nova = mudanca.eventType === 'INSERT' ? (mudanca.new as { direcao?: string; tipo?: string; texto?: string | null }) : null

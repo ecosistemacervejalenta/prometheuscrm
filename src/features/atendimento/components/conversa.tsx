@@ -40,7 +40,9 @@ import {
   sincronizarConversaAgora,
 } from '../actions'
 import type { Conversa as DadosConversa, EventoConversa, MembroEquipe, MensagemConversa } from '../queries'
+import type { Etiqueta } from '../schema'
 import { Compositor, useAnexos } from './compositor'
+import { EtiquetasDoAtendimento } from './etiquetas-conversa'
 import { FotoContato } from './foto-contato'
 import { PainelContato } from './painel-contato'
 import { TextoWhatsapp } from './texto-whatsapp'
@@ -281,11 +283,15 @@ function Evento({ e, nomes, numeros }: { e: EventoConversa; nomes: Map<string, s
         ? `${autor ?? 'Alguém'} transferiu para ${para}`
         : e.tipo === 'resolvido'
           ? `${autor ?? 'Alguém'} resolveu o atendimento #${numeros.get(e.atendimento_id) ?? ''}`
-          : autor
-            ? e.status === 'fila'
-              ? `${autor} devolveu para a fila`
-              : `${autor} marcou como ${rotuloStatus}`
-            : `${e.texto ?? 'Status alterado'} · ${rotuloStatus}`
+          : e.tipo === 'etiqueta_adicionada'
+            ? `${autor ?? 'Alguém'} colocou a etiqueta “${e.texto ?? ''}”`
+            : e.tipo === 'etiqueta_removida'
+              ? `${autor ?? 'Alguém'} tirou a etiqueta “${e.texto ?? ''}”`
+              : autor
+                ? e.status === 'fila'
+                  ? `${autor} devolveu para a fila`
+                  : `${autor} marcou como ${rotuloStatus}`
+                : `${e.texto ?? 'Status alterado'} · ${rotuloStatus}`
 
   return (
     <div className="flex justify-center">
@@ -301,6 +307,7 @@ function Evento({ e, nomes, numeros }: { e: EventoConversa; nomes: Map<string, s
 export function Conversa({
   conversa,
   equipe,
+  etiquetas,
   meuId,
   pastas,
   pastaPadraoId,
@@ -308,6 +315,7 @@ export function Conversa({
 }: {
   conversa: DadosConversa
   equipe: MembroEquipe[]
+  etiquetas: Etiqueta[]
   meuId: string
   pastas: Array<{ id: string; nome: string }>
   pastaPadraoId: string | null
@@ -429,6 +437,7 @@ export function Conversa({
             </Button>
           </div>
         </header>
+        <EtiquetasDoAtendimento key={id} atendimentoId={id} aplicadas={atendimento.etiquetas} todas={etiquetas} />
 
         {/* Linha do tempo */}
         <div

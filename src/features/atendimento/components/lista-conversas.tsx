@@ -10,6 +10,7 @@ import { STATUS_ATENDIMENTO } from '@/lib/rotulos'
 import { cn } from '@/lib/utils'
 
 import type { AbaAtendimento, ItemCaixaEntrada } from '../queries'
+import { EtiquetaChip } from './etiqueta'
 import { FotoContato } from './foto-contato'
 
 const ROTULOS_ABAS: Record<AbaAtendimento, string> = {
@@ -102,7 +103,7 @@ export function ListaConversas({
         </nav>
         <FilterBar caminho="/atendimento">
           <input type="hidden" name="aba" value={aba} />
-          <SearchField valor={busca} placeholder="Buscar nome ou número" className="min-w-0" />
+          <SearchField valor={busca} placeholder="Buscar nome, número ou etiqueta" className="min-w-0" />
         </FilterBar>
       </div>
 
@@ -150,6 +151,13 @@ export function ListaConversas({
                         </span>
                       )}
                     </div>
+                    {item.etiquetas.length > 0 && (
+                      <div className="mt-1 flex min-w-0 flex-wrap gap-1">
+                        {item.etiquetas.map((e) => (
+                          <EtiquetaChip key={e.id} etiqueta={e} />
+                        ))}
+                      </div>
+                    )}
                     <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-sutil">
                       {status && <Ponto tom={status.tom} />}
                       <span className="truncate">

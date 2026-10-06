@@ -50,6 +50,17 @@
   --color-perigo: #e5484d;
   --color-perigo-50: #fdeced;
 
+  /* Etiquetas do atendimento (a equipe escolhe a cor). Fundo cheio com texto
+     branco — exceto amarelo, com texto ink —, legível em tamanho pequeno. */
+  --color-etiqueta-vermelho: #d93036;
+  --color-etiqueta-laranja: #c2570c;
+  --color-etiqueta-amarelo: #e8b53e;
+  --color-etiqueta-verde: #15803d;
+  --color-etiqueta-azul: #2f5fc4;
+  --color-etiqueta-roxo: #5b48d6;
+  --color-etiqueta-rosa: #c0267a;
+  --color-etiqueta-cinza: #4b5563;
+
   --radius-cartao: 18px;
   --shadow-cartao: 0 1px 2px rgb(10 14 20 / 0.04);
   --shadow-flutuante: 0 12px 32px -12px rgb(10 14 20 / 0.25);

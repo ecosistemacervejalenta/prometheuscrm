@@ -3,8 +3,9 @@ import 'server-only'
 import { exigirEquipe } from '@/lib/auth'
 import { termoBusca } from '@/lib/utils'
 import { urlDoSite } from '@/lib/url'
-import type { StatusAtendimento } from '@/types'
+import type { Json, StatusAtendimento } from '@/types'
 
+import { CORES_ETIQUETA, type CorEtiqueta, type Etiqueta } from './schema'
 import { BUCKET_MIDIAS } from './sincronizacao'
 import {
   errosDoWebhook,
@@ -21,7 +22,17 @@ export const ABAS_ATENDIMENTO: AbaAtendimento[] = ['fila', 'meus', 'abertos', 'r
 
 const ABERTOS: StatusAtendimento[] = ['fila', 'em_atendimento', 'aguardando_cliente']
 
-/** Busca por nome ou número: "(31) 98700" procura pelos dígitos. */
+/** Etiquetas vindas do banco (jsonb da visão ou relação embutida), com a cor conferida. */
+function lerEtiquetas(valor: Json | Array<{ id: string; nome: string; cor: string } | null> | null): Etiqueta[] {
+  if (!Array.isArray(valor)) return []
+  return valor.flatMap((e) => {
+    if (!e || typeof e !== 'object' || Array.isArray(e) || typeof e.id !== 'string' || typeof e.nome !== 'string') return []
+    const cor = CORES_ETIQUETA.includes(e.cor as CorEtiqueta) ? (e.cor as CorEtiqueta) : 'cinza'
+    return [{ id: e.id, nome: e.nome, cor }]
+  })
+}
+
+/** Busca por nome, número ou etiqueta: "(31) 98700" procura pelos dígitos. */
 function filtroBusca(busca: string) {
   const digitos = busca.replace(/\D/g, '')
   return digitos.length >= 4 && !/[a-zà-ú]/i.test(busca) ? digitos : termoBusca(busca).toLowerCase()
@@ -32,7 +43,7 @@ export async function listarAtendimentos({ aba, busca }: { aba: AbaAtendimento; 
   let consulta = supabase
     .from('vw_atendimentos')
     .select(
-      'id, numero, status, nao_lidas, ultima_mensagem_em, ultima_mensagem_previa, ultima_mensagem_direcao, contato_nome, contato_foto, whatsapp, responsavel_id, responsavel_nome, criado_em, resolvido_em',
+      'id, numero, status, nao_lidas, ultima_mensagem_em, ultima_mensagem_previa, ultima_mensagem_direcao, contato_nome, contato_foto, whatsapp, responsavel_id, responsavel_nome, criado_em, resolvido_em, etiquetas',
     )
     .limit(aba === 'resolvidos' ? 50 : 150)
 
@@ -49,7 +60,7 @@ export async function listarAtendimentos({ aba, busca }: { aba: AbaAtendimento; 
 
   const { data, error } = await consulta
   if (error) throw error
-  return data
+  return data.map((a) => ({ ...a, etiquetas: lerEtiquetas(a.etiquetas) }))
 }
 
 export type ItemCaixaEntrada = Awaited<ReturnType<typeof listarAtendimentos>>[number]
@@ -97,7 +108,7 @@ export async function obterConversa(id: string) {
       .limit(400),
     supabase
       .from('atendimentos')
-      .select('id, numero, status, responsavel_id, criado_em, resolvido_em')
+      .select('id, numero, status, responsavel_id, criado_em, resolvido_em, atendimentos_etiquetas(etiquetas_atendimento(id, nome, cor))')
       .eq('contato_id', contatoId)
       .order('criado_em'),
   ])
@@ -146,7 +157,7 @@ export async function obterConversa(id: string) {
 
   const listaLead = lead?.data?.leads_listas
   return {
-    atendimento,
+    atendimento: { ...atendimento, etiquetas: lerEtiquetas(atendimento.etiquetas) },
     contato: contato.data,
     mensagens: mensagens.data.reverse().map((m) => ({
       ...m,
@@ -154,7 +165,10 @@ export async function obterConversa(id: string) {
       // Download que não terminou em 2 min (histórico importado ou falha silenciosa): oferece "Baixar".
       midia_travada: m.midia_status === 'pendente' && Date.now() - new Date(m.criado_em).getTime() > 120_000,
     })),
-    atendimentos: atendimentos.data,
+    atendimentos: atendimentos.data.map(({ atendimentos_etiquetas, ...a }) => ({
+      ...a,
+      etiquetas: lerEtiquetas(atendimentos_etiquetas.map((v) => v.etiquetas_atendimento)),
+    })),
     eventos: eventos.data,
     cliente: cliente?.data ?? null,
     pedidos: pedidos?.data ?? [],
@@ -167,6 +181,37 @@ export async function obterConversa(id: string) {
 export type Conversa = NonNullable<Awaited<ReturnType<typeof obterConversa>>>
 export type MensagemConversa = Conversa['mensagens'][number]
 export type EventoConversa = Conversa['eventos'][number]
+
+/** Etiquetas disponíveis para colocar nos atendimentos (ordem alfabética). */
+export async function listarEtiquetas() {
+  const { supabase } = await exigirEquipe()
+  const { data, error } = await supabase.from('etiquetas_atendimento').select('id, nome, cor').order('nome')
+  if (error) throw error
+  return lerEtiquetas(data)
+}
+
+/** Etiquetas com quantos atendimentos abertos estão com ela e em quantos já foi usada. */
+export async function listarEtiquetasComUso() {
+  const { supabase } = await exigirEquipe()
+  const [etiquetas, abertos] = await Promise.all([
+    supabase.from('etiquetas_atendimento').select('id, nome, cor, atendimentos_etiquetas(count)').order('nome'),
+    supabase.from('atendimentos_etiquetas').select('etiqueta_id, atendimentos!inner(status)').neq('atendimentos.status', 'resolvido'),
+  ])
+  if (etiquetas.error) throw etiquetas.error
+  if (abertos.error) throw abertos.error
+
+  const emAberto = new Map<string, number>()
+  for (const u of abertos.data) emAberto.set(u.etiqueta_id, (emAberto.get(u.etiqueta_id) ?? 0) + 1)
+  const total = new Map(etiquetas.data.map((e) => [e.id, e.atendimentos_etiquetas[0]?.count ?? 0]))
+
+  return lerEtiquetas(etiquetas.data.map(({ id, nome, cor }) => ({ id, nome, cor }))).map((e) => ({
+    ...e,
+    abertos: emAberto.get(e.id) ?? 0,
+    total: total.get(e.id) ?? 0,
+  }))
+}
+
+export type EtiquetaComUso = Awaited<ReturnType<typeof listarEtiquetasComUso>>[number]
 
 export async function configAtendimento() {
   const { supabase } = await exigirEquipe()

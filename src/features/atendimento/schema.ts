@@ -36,6 +36,22 @@ export const esquemaContato = z.object({
 
 export const esquemaStatus = z.enum(['fila', 'em_atendimento', 'aguardando_cliente', 'resolvido'])
 
+/** Paleta das etiquetas (mesma lista do check no banco e dos tokens etiqueta-* do globals.css). */
+export const CORES_ETIQUETA = ['vermelho', 'laranja', 'amarelo', 'verde', 'azul', 'roxo', 'rosa', 'cinza'] as const
+
+export type CorEtiqueta = (typeof CORES_ETIQUETA)[number]
+
+export type Etiqueta = { id: string; nome: string; cor: CorEtiqueta }
+
+export const esquemaEtiqueta = z.object({
+  nome: z
+    .string({ error: 'Dê um nome à etiqueta.' })
+    .trim()
+    .transform((v) => v.replace(/\s+/g, ' '))
+    .pipe(z.string().min(1, 'Dê um nome à etiqueta.').max(40, 'Use no máximo 40 caracteres.')),
+  cor: z.enum(CORES_ETIQUETA, { error: 'Escolha uma cor.' }),
+})
+
 export const esquemaConfigAtendimento = z.object({
   whatsapp_assinatura: checkbox,
   whatsapp_leads_automatico: checkbox,
