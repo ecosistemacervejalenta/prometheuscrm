@@ -843,6 +843,7 @@ export type Database = {
           busca: string | null
           criado_em: string
           dados: Json
+          ddd: string | null
           email: string | null
           id: string
           linha: number
@@ -854,6 +855,7 @@ export type Database = {
           busca?: string | null
           criado_em?: string
           dados?: Json
+          ddd?: string | null
           email?: string | null
           id?: string
           linha: number
@@ -865,6 +867,7 @@ export type Database = {
           busca?: string | null
           criado_em?: string
           dados?: Json
+          ddd?: string | null
           email?: string | null
           id?: string
           linha?: number
@@ -1826,6 +1829,7 @@ export type Database = {
           busca: string | null
           criado_em: string | null
           dados: Json | null
+          ddd: string | null
           email: string | null
           id: string | null
           ja_cliente: boolean | null
@@ -1838,6 +1842,7 @@ export type Database = {
           busca?: string | null
           criado_em?: string | null
           dados?: Json | null
+          ddd?: string | null
           email?: string | null
           id?: string | null
           ja_cliente?: never
@@ -1850,6 +1855,7 @@ export type Database = {
           busca?: string | null
           criado_em?: string | null
           dados?: Json | null
+          ddd?: string | null
           email?: string | null
           id?: string | null
           ja_cliente?: never
@@ -2146,6 +2152,14 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      ddd_do_whatsapp: { Args: { p_whatsapp: string }; Returns: string }
+      ddds_dos_leads: {
+        Args: { p_lista_id?: string; p_pasta_id?: string }
+        Returns: {
+          ddd: string
+          numeros: number
+        }[]
+      }
       definir_empresas_do_vendedor: {
         Args: {
           p_fornecedor_ids?: string[]
@@ -2169,6 +2183,16 @@ export type Database = {
       excluir_pre_venda: {
         Args: { p_com_pedidos?: boolean; p_pre_venda_id: string }
         Returns: number
+      }
+      exportar_numeros_leads: {
+        Args: {
+          p_apos?: string
+          p_ddd?: string
+          p_limite?: number
+          p_lista_id?: string
+          p_pasta_id?: string
+        }
+        Returns: Json
       }
       gerar_contas_fixas: { Args: { p_competencia: string }; Returns: number }
       hoje_brasilia: { Args: never; Returns: string }

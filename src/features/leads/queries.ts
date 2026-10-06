@@ -3,6 +3,7 @@ import 'server-only'
 import { exigirEquipe } from '@/lib/auth'
 import { termoBusca } from '@/lib/utils'
 
+import type { ContagemDdd } from './ddd'
 import type { ColunaPlanilha } from './planilha'
 
 export const LEADS_POR_PAGINA = 50
@@ -46,7 +47,21 @@ export async function obterLista(id: string) {
   return { ...data, colunas: (data.colunas ?? []) as ColunaPlanilha[], jaClientes: jaClientes ?? 0 }
 }
 
-export async function listarLeads(listaId: string, { busca, filtro, pagina = 1 }: { busca?: string; filtro?: FiltroLeads; pagina?: number }) {
+/** Quantos números (sem repetir) há de cada DDD na pasta ou na lista; ddd nulo = sem DDD do Brasil. */
+export async function contarDdds(escopo: { pastaId: string } | { listaId: string }): Promise<ContagemDdd[]> {
+  const { supabase } = await exigirEquipe()
+  const { data, error } = await supabase.rpc(
+    'ddds_dos_leads',
+    'pastaId' in escopo ? { p_pasta_id: escopo.pastaId } : { p_lista_id: escopo.listaId },
+  )
+  if (error) throw error
+  return data
+}
+
+export async function listarLeads(
+  listaId: string,
+  { busca, filtro, ddd, pagina = 1 }: { busca?: string; filtro?: FiltroLeads; ddd?: string; pagina?: number },
+) {
   const { supabase } = await exigirEquipe()
   const inicio = (pagina - 1) * LEADS_POR_PAGINA
   let consulta = supabase
@@ -60,6 +75,7 @@ export async function listarLeads(listaId: string, { busca, filtro, pagina = 1 }
   if (filtro === 'sem_whatsapp') consulta = consulta.is('whatsapp', null)
   if (filtro === 'clientes') consulta = consulta.eq('ja_cliente', true)
   if (filtro === 'nao_clientes') consulta = consulta.not('whatsapp', 'is', null).eq('ja_cliente', false)
+  if (ddd) consulta = consulta.eq('ddd', ddd)
   if (busca) consulta = consulta.ilike('busca', `%${termoBusca(busca).toLowerCase()}%`)
 
   const { data, count, error } = await consulta

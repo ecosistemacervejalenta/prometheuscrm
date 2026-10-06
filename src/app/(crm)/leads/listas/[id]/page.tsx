@@ -12,8 +12,10 @@ import { Kpi } from '@/components/ui/kpi'
 import { PageHeader } from '@/components/ui/page-header'
 import { Pagination } from '@/components/ui/pagination'
 import { finalizarListaIncompleta } from '@/features/leads/actions'
+import { ResumoDdd } from '@/features/leads/components/resumo-ddd'
 import { TabelaLeads } from '@/features/leads/components/tabela-leads'
-import { LEADS_POR_PAGINA, listarLeads, obterLista, type FiltroLeads } from '@/features/leads/queries'
+import { dddValido, opcoesDdd, resumirDdds } from '@/features/leads/ddd'
+import { contarDdds, LEADS_POR_PAGINA, listarLeads, obterLista, type FiltroLeads } from '@/features/leads/queries'
 import { formatarDataCurta, formatarNumero } from '@/lib/format'
 import { param } from '@/lib/utils'
 
@@ -32,11 +34,13 @@ export default async function PaginaListaLeads({ params, searchParams }: PagePro
   const q = param(busca.q)
   const filtroBruto = param(busca.filtro)
   const filtro = FILTROS.some((f) => f.valor === filtroBruto) ? (filtroBruto as FiltroLeads) : undefined
+  const ddd = dddValido(param(busca.ddd))
   const pagina = Math.max(1, Number(param(busca.pagina) ?? 1) || 1)
 
   const lista = await obterLista(id)
   if (!lista) notFound()
-  const { leads, total } = await listarLeads(id, { busca: q, filtro, pagina })
+  const [{ leads, total }, contagem] = await Promise.all([listarLeads(id, { busca: q, filtro, ddd, pagina }), contarDdds({ listaId: id })])
+  const filtrando = Boolean(q || filtro || ddd)
   const pasta = lista.leads_pastas
 
   return (
@@ -80,13 +84,17 @@ export default async function PaginaListaLeads({ params, searchParams }: PagePro
           <FilterBar caminho={`/leads/listas/${id}`}>
             <SearchField valor={q} placeholder="Buscar em qualquer coluna (nome, número, cidade...)" />
             <FilterSelect name="filtro" valor={filtro} rotulo="Todos os leads" opcoes={FILTROS} />
+            <FilterSelect name="ddd" valor={ddd} rotulo="Todos os DDDs" opcoes={opcoesDdd(resumirDdds(contagem).porDdd)} />
           </FilterBar>
+        </div>
+        <div className="border-b border-linha">
+          <ResumoDdd contagem={contagem} ddd={ddd} onde="lista" nome={lista.nome} listaId={id} />
         </div>
         {leads.length === 0 ? (
           <EmptyState
             icone={Users}
-            titulo={q || filtro ? 'Nenhum lead encontrado' : 'Lista vazia'}
-            descricao={q || filtro ? 'Tente outra busca ou filtro.' : 'Esta lista não tem leads.'}
+            titulo={filtrando ? 'Nenhum lead encontrado' : 'Lista vazia'}
+            descricao={filtrando ? 'Tente outra busca ou filtro.' : 'Esta lista não tem leads.'}
           />
         ) : (
           <TabelaLeads
@@ -96,10 +104,10 @@ export default async function PaginaListaLeads({ params, searchParams }: PagePro
           />
         )}
         <div className="border-t border-linha px-4 py-3 lg:px-5">
-          <Pagination pagina={pagina} porPagina={LEADS_POR_PAGINA} total={total} caminho={`/leads/listas/${id}`} parametros={{ q, filtro }} />
+          <Pagination pagina={pagina} porPagina={LEADS_POR_PAGINA} total={total} caminho={`/leads/listas/${id}`} parametros={{ q, filtro, ddd }} />
           {total > 0 && (
             <p className="text-[12px] text-suave">
-              {formatarNumero(total)} lead(s){q || filtro ? ' encontrados' : ''}
+              {formatarNumero(total)} lead(s){filtrando ? ' encontrados' : ''}
             </p>
           )}
         </div>

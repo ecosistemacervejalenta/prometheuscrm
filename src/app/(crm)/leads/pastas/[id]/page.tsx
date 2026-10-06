@@ -5,19 +5,24 @@ import { FileSpreadsheet, Pencil, Upload } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { ButtonLink } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Card, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
+import { FilterBar, FilterSelect } from '@/components/ui/filter-bar'
 import { ItemMobile, ListaMobile } from '@/components/ui/lista-mobile'
 import { PageHeader } from '@/components/ui/page-header'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
-import { obterPasta } from '@/features/leads/queries'
+import { ResumoDdd } from '@/features/leads/components/resumo-ddd'
+import { dddValido, opcoesDdd, resumirDdds } from '@/features/leads/ddd'
+import { contarDdds, obterPasta } from '@/features/leads/queries'
 import { formatarDataCurta, formatarNumero } from '@/lib/format'
+import { param } from '@/lib/utils'
 
 export const metadata: Metadata = { title: 'Pasta de leads' }
 
-export default async function PaginaPasta({ params }: PageProps<'/leads/pastas/[id]'>) {
+export default async function PaginaPasta({ params, searchParams }: PageProps<'/leads/pastas/[id]'>) {
   const { id } = await params
-  const pasta = await obterPasta(id)
+  const ddd = dddValido(param((await searchParams).ddd))
+  const [pasta, contagem] = await Promise.all([obterPasta(id), contarDdds({ pastaId: id })])
   if (!pasta) notFound()
   const listas = pasta.listasDaPasta
 
@@ -39,6 +44,22 @@ export default async function PaginaPasta({ params }: PageProps<'/leads/pastas/[
           </>
         }
       />
+      {listas.length > 0 && (
+        <Card className="mb-5 lg:mb-6">
+          <CardHeader
+            titulo="Números por DDD"
+            descricao="Escolha um DDD para ver quantos números a pasta tem dele e baixar só esses."
+            acoes={
+              <FilterBar caminho={`/leads/pastas/${id}`}>
+                <FilterSelect name="ddd" valor={ddd} rotulo="Todos os DDDs" opcoes={opcoesDdd(resumirDdds(contagem).porDdd)} />
+              </FilterBar>
+            }
+          />
+          <div className="border-t border-linha">
+            <ResumoDdd contagem={contagem} ddd={ddd} onde="pasta" nome={pasta.nome ?? 'pasta'} pastaId={id} />
+          </div>
+        </Card>
+      )}
       <Card>
         {listas.length === 0 ? (
           <EmptyState

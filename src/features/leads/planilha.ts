@@ -170,13 +170,19 @@ export function primeiraLinhaEhCabecalho(linhas: string[][]): boolean {
 }
 
 const sem = (texto: string) => texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-const dicaDoCabecalho = (rotulo: string): TipoColuna | null => {
+// Palavra no início do rótulo ou depois de separador: "DSC_NOME_CLIENTE" tem "nome", "NUM_ANOMES" não.
+const temPalavra = (rotulo: string, palavras: string) => new RegExp(`(^|[^a-z])(${palavras})`).test(rotulo)
+const dicaDoCabecalho = (rotulo: string): TipoColuna | 'documento' | null => {
   const r = sem(rotulo)
+  // CPF (11 dígitos), CNPJ, CEP e códigos parecem telefone, mas não são.
+  if (temPalavra(r, 'cpf|cnpj|documento|doc[^a-z]|rg[^a-z]|rg$|cep|contrato|protocolo|codigo|cod[^a-z]|id[^a-z]|id$')) return 'documento'
   if (/(whats|celular|telefone|fone|phone|numero|contato tel)/.test(r)) return 'telefone'
   if (/mail/.test(r)) return 'email'
-  if (/(nome|name|contato|cliente|usuario|participante)/.test(r)) return 'nome'
+  if (temPalavra(r, 'nome|name|contato|cliente|usuario|participante')) return 'nome'
   return null
 }
+// Entre várias colunas de telefone, a de celular/WhatsApp é a melhor para os disparos.
+const pareceCelular = (rotulo: string) => /(whats|zap|cel|movel|mobile)/.test(sem(rotulo))
 
 /** Colunas da lista (rótulo + tipo detectado pelos valores). Colunas totalmente vazias são descartadas. */
 export function analisarColunas(cabecalho: string[] | null, dados: string[][]): ColunaPlanilha[] {
@@ -193,7 +199,15 @@ export function analisarColunas(cabecalho: string[] | null, dados: string[][]): 
     const fracaoEmail = fracao(pareceEmail)
     const fracaoNome = fracao(pareceNome)
     const tipo: TipoColuna =
-      fracaoTelefone >= 0.6 ? 'telefone' : fracaoEmail >= 0.6 ? 'email' : dica === 'nome' && fracaoTelefone < 0.3 ? 'nome' : 'texto'
+      dica === 'documento'
+        ? 'texto'
+        : fracaoTelefone >= 0.6
+          ? 'telefone'
+          : fracaoEmail >= 0.6
+            ? 'email'
+            : dica === 'nome' && fracaoTelefone < 0.3
+              ? 'nome'
+              : 'texto'
     colunas.push({ chave: `c${i}`, rotulo, tipo, fracaoNome })
   }
   // Sem cabeçalho "nome": a 1ª coluna de texto com cara de nome vira a coluna de nome.
@@ -206,7 +220,8 @@ export function analisarColunas(cabecalho: string[] | null, dados: string[][]): 
 
 export function sugerirMapeamento(colunas: ColunaPlanilha[]): Mapeamento {
   const primeira = (tipo: TipoColuna) => colunas.find((c) => c.tipo === tipo)?.chave ?? null
-  return { nome: primeira('nome'), whatsapp: primeira('telefone'), email: primeira('email') }
+  const celular = colunas.find((c) => c.tipo === 'telefone' && pareceCelular(c.rotulo))?.chave
+  return { nome: primeira('nome'), whatsapp: celular ?? primeira('telefone'), email: primeira('email') }
 }
 
 const indiceDa = (chave: string) => Number(chave.slice(1))

@@ -7,7 +7,15 @@ import { errosDeValidacao, falha, sucesso, traduzirErro, type EstadoAcao } from 
 import { exigirEquipe } from '@/lib/auth'
 import { formParaObjeto } from '@/lib/validacao'
 
-import { esquemaEdicaoLista, esquemaLote, esquemaNovaLista, esquemaPasta } from './schema'
+import {
+  esquemaEdicaoLista,
+  esquemaExportacao,
+  esquemaLote,
+  esquemaNovaLista,
+  esquemaPasta,
+  NUMEROS_POR_PAGINA,
+  type LinhaExportacao,
+} from './schema'
 
 export type ResultadoImportacao = { ok: true; listaId: string; inseridos?: number } | { ok: false; mensagem: string }
 
@@ -80,6 +88,29 @@ export async function concluirImportacao(listaId: string): Promise<ResultadoImpo
   if (error) return { ok: false, mensagem: traduzirErro(error) }
   atualizarTelas()
   return { ok: true, listaId }
+}
+
+/**
+ * Uma página dos números a exportar (sem repetir, em ordem de número). O navegador
+ * pede página por página, passando em `apos` o último número recebido, e monta o arquivo.
+ */
+export async function buscarNumerosParaExportar(
+  entrada: unknown,
+): Promise<{ ok: true; linhas: LinhaExportacao[] } | { ok: false; mensagem: string }> {
+  const { supabase } = await exigirEquipe()
+  const filtro = esquemaExportacao.safeParse(entrada)
+  if (!filtro.success) return { ok: false, mensagem: 'Filtro inválido. Recarregue a página e tente de novo.' }
+
+  const { pasta_id, lista_id, ddd, apos } = filtro.data
+  const { data, error } = await supabase.rpc('exportar_numeros_leads', {
+    p_pasta_id: pasta_id ?? undefined,
+    p_lista_id: lista_id ?? undefined,
+    p_ddd: ddd ?? undefined,
+    p_apos: apos ?? undefined,
+    p_limite: NUMEROS_POR_PAGINA,
+  })
+  if (error) return { ok: false, mensagem: traduzirErro(error) }
+  return { ok: true, linhas: data as LinhaExportacao[] }
 }
 
 export async function salvarLista(id: string, _: EstadoAcao, formData: FormData): Promise<EstadoAcao> {

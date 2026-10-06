@@ -50,6 +50,21 @@ export const esquemaLote = z
   .min(1)
   .max(2000)
 
+/** Números por página na exportação (o banco devolve no máximo 5.000 por vez). */
+export const NUMEROS_POR_PAGINA = 5000
+/** Uma linha exportada: [whatsapp, nome, e-mail, DDD, lista]. */
+export type LinhaExportacao = [whatsapp: string, nome: string | null, email: string | null, ddd: string | null, lista: string]
+
+/** Uma página da exportação de números de uma pasta ou lista (DDD opcional). */
+export const esquemaExportacao = z
+  .object({
+    pasta_id: z.uuid().nullable(),
+    lista_id: z.uuid().nullable(),
+    ddd: z.string().regex(/^\d{2}$/).nullable(),
+    apos: z.string().regex(/^\d{1,20}$/).nullable(),
+  })
+  .refine((d) => d.pasta_id || d.lista_id)
+
 export const esquemaEdicaoLista = z.object({
   nome: texto('Dê um nome para a lista.').max(120, 'Use no máximo 120 caracteres.'),
   origem: textoCurto(60),
