@@ -1,10 +1,14 @@
 import { PageHeader } from '@/components/ui/page-header'
 import { TabsLinks } from '@/components/ui/tabs'
 
-export function CabecalhoConfiguracoes({ ativa }: { ativa: 'loja' | 'frete' | 'etiquetas' | 'integracoes' | 'equipe' }) {
+export function CabecalhoConfiguracoes({
+  ativa,
+}: {
+  ativa: 'loja' | 'frete' | 'etiquetas' | 'integracoes' | 'whatsapp-oficial' | 'equipe'
+}) {
   return (
     <>
-      <PageHeader titulo="Configurações" contexto="Loja, mensagens, frete, etiquetas, integrações e equipe" />
+      <PageHeader titulo="Configurações" contexto="Loja, mensagens, frete, etiquetas, integrações, WhatsApp oficial e equipe" />
       <TabsLinks
         ativa={ativa}
         abas={[
@@ -12,6 +16,7 @@ export function CabecalhoConfiguracoes({ ativa }: { ativa: 'loja' | 'frete' | 'e
           { chave: 'frete', href: '/configuracoes/frete', rotulo: 'Frete VIP' },
           { chave: 'etiquetas', href: '/configuracoes/etiquetas', rotulo: 'Etiquetas' },
           { chave: 'integracoes', href: '/configuracoes/integracoes', rotulo: 'Integrações' },
+          { chave: 'whatsapp-oficial', href: '/configuracoes/whatsapp-oficial', rotulo: 'WhatsApp oficial' },
           { chave: 'equipe', href: '/configuracoes/equipe', rotulo: 'Equipe' },
         ]}
       />
