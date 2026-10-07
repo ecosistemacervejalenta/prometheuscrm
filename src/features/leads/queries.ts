@@ -39,10 +39,12 @@ export async function obterLista(id: string) {
   const { supabase } = await exigirEquipe()
   const { data } = await supabase.from('leads_listas').select('*, leads_pastas(id, nome)').eq('id', id).maybeSingle()
   if (!data) return null
+  // Com o "whatsapp não nulo" a contagem sai só do índice (lista_id, whatsapp), sem ler a tabela.
   const { count: jaClientes } = await supabase
     .from('vw_leads')
     .select('id', { count: 'exact', head: true })
     .eq('lista_id', id)
+    .not('whatsapp', 'is', null)
     .eq('ja_cliente', true)
   return { ...data, colunas: (data.colunas ?? []) as ColunaPlanilha[], jaClientes: jaClientes ?? 0 }
 }
@@ -73,7 +75,7 @@ export async function listarLeads(
 
   if (filtro === 'com_whatsapp') consulta = consulta.not('whatsapp', 'is', null)
   if (filtro === 'sem_whatsapp') consulta = consulta.is('whatsapp', null)
-  if (filtro === 'clientes') consulta = consulta.eq('ja_cliente', true)
+  if (filtro === 'clientes') consulta = consulta.not('whatsapp', 'is', null).eq('ja_cliente', true)
   if (filtro === 'nao_clientes') consulta = consulta.not('whatsapp', 'is', null).eq('ja_cliente', false)
   if (ddd) consulta = consulta.eq('ddd', ddd)
   if (busca) consulta = consulta.ilike('busca', `%${termoBusca(busca).toLowerCase()}%`)
