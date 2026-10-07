@@ -42,10 +42,16 @@ function primeiroNome(nome: string | null | undefined) {
   return n ? n.charAt(0).toUpperCase() + n.slice(1) : ''
 }
 
-/** "*Ana:* " quando a assinatura está ligada (Configurações › Integrações). */
-async function assinatura(supabase: Supabase, nomePerfil: string | null) {
-  const { data: config } = await supabase.from('configuracoes').select('whatsapp_assinatura').eq('id', 1).maybeSingle()
-  const nome = primeiroNome(nomePerfil)
+/**
+ * "*Ana:* " quando a assinatura está ligada (Configurações › Integrações).
+ * O nome é o do responsável pelo atendimento; sem responsável, quem envia (e passa a ser o responsável).
+ */
+async function assinatura(supabase: Supabase, atendimentoId: string, nomeRemetente: string | null) {
+  const [{ data: config }, { data: atendimento }] = await Promise.all([
+    supabase.from('configuracoes').select('whatsapp_assinatura').eq('id', 1).maybeSingle(),
+    supabase.from('atendimentos').select('perfis(nome)').eq('id', atendimentoId).maybeSingle(),
+  ])
+  const nome = primeiroNome(atendimento?.perfis?.nome ?? nomeRemetente)
   return config?.whatsapp_assinatura !== false && nome ? `*${nome}:* ` : ''
 }
 
@@ -120,7 +126,7 @@ export async function enviarMensagem(atendimentoId: string, texto: string): Prom
   const dados = esquemaMensagem.safeParse(texto)
   if (!dados.success) return falha(dados.error.issues[0]?.message ?? 'Mensagem inválida.')
 
-  const final = `${await assinatura(supabase, perfil.nome)}${dados.data}`
+  const final = `${await assinatura(supabase, atendimentoId, perfil.nome)}${dados.data}`
   const { data, error } = await supabase.rpc('preparar_envio_whatsapp', { p_atendimento_id: atendimentoId, p_texto: final })
   if (error) return falha(traduzirErro(error))
   const { mensagem_id: id, chatid } = data as { mensagem_id: string; chatid: string }
@@ -138,7 +144,7 @@ export async function enviarArquivo(atendimentoId: string, entrada: DadosMidia):
   if (!dados.success) return falha(dados.error.issues[0]?.message ?? 'Arquivo inválido.')
   const { caminho, tipo, mime, segundos, gravado, legenda } = dados.data
 
-  const texto = legenda && tipo !== 'audio' ? `${await assinatura(supabase, perfil.nome)}${legenda}` : null
+  const texto = legenda && tipo !== 'audio' ? `${await assinatura(supabase, atendimentoId, perfil.nome)}${legenda}` : null
   // Mensagem de voz fica sem nome; documentos sempre com nome (o cliente vê ao baixar).
   const nome = gravado ? null : dados.data.nome || (tipo === 'documento' ? caminho.split('/').pop()! : null)
   const midia = { tipo, path: caminho, mime, nome, segundos }

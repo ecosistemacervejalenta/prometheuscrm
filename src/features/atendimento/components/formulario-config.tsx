@@ -16,8 +16,8 @@ export function FormularioConfigAtendimento({ config }: { config: ConfigAtendime
       <Checkbox
         name="whatsapp_assinatura"
         defaultChecked={config.assinatura}
-        label="Assinar as mensagens com o nome do atendente"
-        descricao="O cliente recebe “*Ana:* Temos sim!” — o nome vem do perfil em Configurações › Equipe."
+        label="Assinar as mensagens com o nome do responsável pelo atendimento"
+        descricao="O cliente recebe “*Ana:* Temos sim!” — o nome é o do responsável escolhido na conversa (perfil em Configurações › Equipe)."
       />
       <Checkbox
         name="whatsapp_leads_automatico"
