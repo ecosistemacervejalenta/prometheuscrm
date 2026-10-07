@@ -311,6 +311,7 @@ export function Conversa({
   meuId,
   pastas,
   pastaPadraoId,
+  nomesAssinatura,
   voltarHref,
 }: {
   conversa: DadosConversa
@@ -319,6 +320,8 @@ export function Conversa({
   meuId: string
   pastas: Array<{ id: string; nome: string }>
   pastaPadraoId: string | null
+  /** Lista "Assinar como" (nulo = assinatura desligada). */
+  nomesAssinatura: string[] | null
   voltarHref: string
 }) {
   const { atendimento, contato, mensagens, eventos, atendimentos } = conversa
@@ -480,7 +483,20 @@ export function Conversa({
 
         {/* Rodapé */}
         {aberto ? (
-          <Compositor key={id} atendimentoId={id} contatoId={contato.id} naFila={!atendimento.responsavel_id} anexos={anexos} />
+          <Compositor
+            key={id}
+            atendimentoId={id}
+            contatoId={contato.id}
+            naFila={!atendimento.responsavel_id}
+            anexos={anexos}
+            assinatura={
+              nomesAssinatura && {
+                nomes: nomesAssinatura,
+                escolhido: atendimento.assinatura_nome,
+                responsavel: responsavel ?? nomes.get(meuId) ?? null,
+              }
+            }
+          />
         ) : (
           <div className="flex flex-wrap items-center justify-center gap-2 border-t border-linha bg-superficie px-3 py-3 text-[13px] text-suave">
             <span>Atendimento resolvido{atendimento.resolvido_em ? ` em ${formatarData(atendimento.resolvido_em)}` : ''}.</span>

@@ -15,6 +15,7 @@ import {
   esquemaEtiqueta,
   esquemaMensagem,
   esquemaMidia,
+  esquemaNomeAssinatura,
   esquemaNota,
   esquemaStatus,
   type CorEtiqueta,
@@ -37,21 +38,17 @@ function atualizarTelas() {
   revalidatePath('/atendimento')
 }
 
-function primeiroNome(nome: string | null | undefined) {
-  const n = nome?.trim().split(/\s+/)[0] ?? ''
-  return n ? n.charAt(0).toUpperCase() + n.slice(1) : ''
-}
-
 /**
- * "*Ana:* " quando a assinatura está ligada (Configurações › Integrações).
- * O nome é o do responsável pelo atendimento; sem responsável, quem envia (e passa a ser o responsável).
+ * "*Ana Souza:* " quando a assinatura está ligada (Configurações › Integrações).
+ * O nome é o escolhido em "Assinar como" na conversa; senão o do responsável;
+ * sem responsável, o de quem envia (que passa a ser o responsável).
  */
 async function assinatura(supabase: Supabase, atendimentoId: string, nomeRemetente: string | null) {
   const [{ data: config }, { data: atendimento }] = await Promise.all([
     supabase.from('configuracoes').select('whatsapp_assinatura').eq('id', 1).maybeSingle(),
-    supabase.from('atendimentos').select('perfis(nome)').eq('id', atendimentoId).maybeSingle(),
+    supabase.from('atendimentos').select('assinatura_nome, perfis(nome)').eq('id', atendimentoId).maybeSingle(),
   ])
-  const nome = primeiroNome(atendimento?.perfis?.nome ?? nomeRemetente)
+  const nome = (atendimento?.assinatura_nome || atendimento?.perfis?.nome || nomeRemetente || '').trim()
   return config?.whatsapp_assinatura !== false && nome ? `*${nome}:* ` : ''
 }
 
@@ -120,7 +117,7 @@ async function registrarFalha(supabase: Supabase, mensagemId: string, e: unknown
   return erro
 }
 
-/** Envia texto pelo WhatsApp da loja, com o nome do atendente em negrito (se ligado). */
+/** Envia texto pelo WhatsApp da loja, com o nome de quem assina em negrito (se ligado). */
 export async function enviarMensagem(atendimentoId: string, texto: string): Promise<EstadoAcao & { registrada?: boolean }> {
   const { supabase, perfil } = await exigirEquipe()
   const dados = esquemaMensagem.safeParse(texto)
@@ -201,6 +198,29 @@ export async function transferirAtendimento(id: string, para: string): Promise<E
   if (error) return falha(traduzirErro(error))
   atualizarTelas()
   return sucesso('Atendimento transferido.')
+}
+
+/** "Assinar como": um nome da lista (Configurações › Integrações) ou nulo para assinar com o nome do responsável. */
+export async function definirAssinatura(atendimentoId: string, nome: string | null): Promise<EstadoAcao> {
+  const { supabase } = await exigirEquipe()
+  let escolhido: string | null = null
+  if (nome) {
+    const dados = esquemaNomeAssinatura.safeParse(nome)
+    if (!dados.success) return falha('Nome inválido.')
+    const { data: config } = await supabase.from('configuracoes').select('whatsapp_nomes_assinatura').eq('id', 1).maybeSingle()
+    escolhido = config?.whatsapp_nomes_assinatura.find((n) => n.toLowerCase() === dados.data.toLowerCase()) ?? null
+    if (!escolhido) return falha('Este nome não está na lista “Assinar como” (Configurações › Integrações).')
+  }
+  const { data, error } = await supabase
+    .from('atendimentos')
+    .update({ assinatura_nome: escolhido })
+    .eq('id', atendimentoId)
+    .neq('status', 'resolvido')
+    .select('id')
+  if (error) return falha(traduzirErro(error))
+  if (!data.length) return falha('Este atendimento já foi resolvido.')
+  atualizarTelas()
+  return sucesso()
 }
 
 export async function alterarStatusAtendimento(id: string, status: string): Promise<EstadoAcao> {

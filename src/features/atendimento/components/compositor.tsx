@@ -1,14 +1,15 @@
 'use client'
 
 import { FileText, Mic, Paperclip, SendHorizontal, Square, StickyNote, Trash2, Video, X } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useOptimistic, useRef, useState, useTransition } from 'react'
 
+import { Select } from '@/components/form/fields'
 import { Button } from '@/components/ui/button'
 import { useAvisos } from '@/components/ui/toaster'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
-import { adicionarNota, enviarArquivo, enviarMensagem } from '../actions'
+import { adicionarNota, definirAssinatura, enviarArquivo, enviarMensagem } from '../actions'
 
 /**
  * Campo de envio da conversa: texto, nota interna, anexos (clipe, colar print,
@@ -257,16 +258,25 @@ function PreviaAnexo({ a, aoRemover }: { a: Anexo; aoRemover: () => void }) {
 
 // Compositor -------------------------------------------------------------------------
 
+/**
+ * "Assinar como": nomes da lista, o escolhido no atendimento (nulo = responsável) e o nome do
+ * responsável — na fila, o de quem está logado (responder assume o atendimento).
+ */
+export type OpcoesAssinatura = { nomes: string[]; escolhido: string | null; responsavel: string | null }
+
 export function Compositor({
   atendimentoId,
   contatoId,
   naFila,
   anexos: controle,
+  assinatura,
 }: {
   atendimentoId: string
   contatoId: string
   naFila: boolean
   anexos: ControleAnexos
+  /** Nulo quando a assinatura está desligada em Configurações › Integrações. */
+  assinatura: OpcoesAssinatura | null
 }) {
   const [modo, setModo] = useState<'mensagem' | 'nota'>('mensagem')
   const [texto, setTexto] = useState('')
@@ -278,6 +288,22 @@ export function Compositor({
   const { anexos, adicionarArquivos, adicionarAnexo, remover, retirarTodos } = controle
   const voz = useGravador(adicionarAnexo)
   const nota = modo === 'nota'
+  const [trocandoAssinatura, iniciarTroca] = useTransition()
+  const [escolhido, setEscolhido] = useOptimistic(assinatura?.escolhido ?? null)
+
+  // O nome do responsável já é a opção padrão: não repete na lista.
+  const responsavel = assinatura?.responsavel ?? null
+  const mesmoNome = (a: string | null, b: string | null) => Boolean(a && b && a.toLowerCase() === b.toLowerCase())
+  const valorAssinatura = escolhido && !mesmoNome(escolhido, responsavel) ? escolhido : ''
+  const outrosNomes = (assinatura?.nomes ?? []).filter((n) => !mesmoNome(n, responsavel))
+  if (valorAssinatura && !outrosNomes.includes(valorAssinatura)) outrosNomes.unshift(valorAssinatura)
+
+  const trocarAssinatura = (valor: string) =>
+    iniciarTroca(async () => {
+      setEscolhido(valor || null)
+      const r = await definirAssinatura(atendimentoId, valor || null)
+      if (r.ok === false) avisar(r.mensagem ?? 'Não foi possível trocar o nome da assinatura.', 'erro')
+    })
 
   useLayoutEffect(() => {
     const el = campo.current
@@ -289,7 +315,7 @@ export function Compositor({
   }, [texto, voz.gravando])
 
   const enviar = async () => {
-    if (enviando) return
+    if (enviando || trocandoAssinatura) return
     const conteudo = texto.trim()
     if (nota) {
       if (!conteudo) return
@@ -356,7 +382,7 @@ export function Compositor({
 
   return (
     <div className={cn('min-w-0 border-t border-linha p-2.5 @md:p-3', nota ? 'bg-vip-50' : 'bg-superficie')}>
-      <div className="mb-2 flex min-w-0 items-center gap-1">
+      <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1 gap-y-1.5">
         {(['mensagem', 'nota'] as const).map((m) => (
           <button
             key={m}
@@ -373,16 +399,37 @@ export function Compositor({
             {m === 'nota' ? 'Nota interna' : 'Mensagem'}
           </button>
         ))}
-        <span className="ml-auto hidden min-w-0 truncate pl-2 text-[11px] text-sutil @xl:block">
-          {progresso ??
-            (nota
-              ? 'Só a equipe vê'
-              : anexos.length
-                ? 'O texto vira a legenda do arquivo'
-                : naFila
-                  ? 'Responder assume o atendimento'
-                  : 'Enter envia · cole prints com Ctrl+V')}
-        </span>
+        <div className="ml-auto flex min-w-0 items-center gap-3 pl-2">
+          <span className={cn('hidden min-w-0 truncate text-[11px] text-sutil', !nota && assinatura ? '@3xl:block' : '@xl:block')}>
+            {progresso ??
+              (nota
+                ? 'Só a equipe vê'
+                : anexos.length
+                  ? 'O texto vira a legenda do arquivo'
+                  : naFila
+                    ? 'Responder assume o atendimento'
+                    : 'Enter envia · cole prints com Ctrl+V')}
+          </span>
+          {!nota && assinatura && (
+            <label className="flex min-w-0 items-center gap-1.5" title="Nome que o cliente vê em negrito no início da mensagem">
+              <span className="shrink-0 text-[12px] font-semibold text-suave">Assinar como:</span>
+              <Select
+                value={valorAssinatura}
+                onChange={(e) => trocarAssinatura(e.target.value)}
+                disabled={enviando || voz.gravando}
+                aria-busy={trocandoAssinatura}
+                className="h-8 w-auto max-w-52 min-w-0 truncate rounded-lg bg-papel pr-8 pl-2.5 text-[13px] font-semibold"
+              >
+                <option value="">{responsavel ? `${responsavel} (${naFila ? 'você' : 'responsável'})` : 'Responsável'}</option>
+                {outrosNomes.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          )}
+        </div>
       </div>
 
       {!nota && anexos.length > 0 && (
@@ -479,7 +526,7 @@ export function Compositor({
               tamanho="icone"
               className="size-11 rounded-xl lg:size-11"
               onClick={() => void enviar()}
-              disabled={!podeEnviar}
+              disabled={!podeEnviar || trocandoAssinatura}
               carregando={enviando}
               aria-label={nota ? 'Salvar nota' : 'Enviar'}
               title={nota ? 'Salvar nota' : 'Enviar'}

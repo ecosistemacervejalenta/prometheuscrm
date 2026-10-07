@@ -3,7 +3,7 @@
 import { useState } from 'react'
 
 import { ActionForm, SubmitButton } from '@/components/form/action-form'
-import { Checkbox, Field, Select } from '@/components/form/fields'
+import { Checkbox, Field, Select, Textarea } from '@/components/form/fields'
 
 import { salvarConfigAtendimento } from '../actions'
 import type { ConfigAtendimento } from '../queries'
@@ -17,8 +17,21 @@ export function FormularioConfigAtendimento({ config }: { config: ConfigAtendime
         name="whatsapp_assinatura"
         defaultChecked={config.assinatura}
         label="Assinar as mensagens com o nome do responsável pelo atendimento"
-        descricao="O cliente recebe “*Ana:* Temos sim!” — o nome é o do responsável escolhido na conversa (perfil em Configurações › Equipe)."
+        descricao="O cliente recebe “*Ana Souza:* Temos sim!” — o nome do responsável (perfil em Configurações › Equipe) ou o escolhido em “Assinar como” na conversa."
       />
+      <Field
+        label="Nomes para “Assinar como”"
+        name="whatsapp_nomes_assinatura"
+        dica="Um nome por linha. Aparecem na conversa para responder com outro nome — útil quando mais de uma pessoa usa a mesma conta."
+        className="max-w-sm"
+      >
+        <Textarea
+          name="whatsapp_nomes_assinatura"
+          rows={5}
+          defaultValue={config.nomesAssinatura.join('\n')}
+          placeholder={'Ana Souza\nBruno Lima'}
+        />
+      </Field>
       <Checkbox
         name="whatsapp_leads_automatico"
         checked={automatico}

@@ -76,6 +76,7 @@ export default async function PaginaAtendimento({ searchParams }: PageProps<'/at
             meuId={perfil.id}
             pastas={config.pastas}
             pastaPadraoId={config.pastaLeadsId}
+            nomesAssinatura={config.assinatura ? config.nomesAssinatura : null}
             voltarHref={hrefConversa(aba, termo)}
           />
         ) : (

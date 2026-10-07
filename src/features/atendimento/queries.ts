@@ -108,7 +108,9 @@ export async function obterConversa(id: string) {
       .limit(400),
     supabase
       .from('atendimentos')
-      .select('id, numero, status, responsavel_id, criado_em, resolvido_em, atendimentos_etiquetas(etiquetas_atendimento(id, nome, cor))')
+      .select(
+        'id, numero, status, responsavel_id, assinatura_nome, criado_em, resolvido_em, atendimentos_etiquetas(etiquetas_atendimento(id, nome, cor))',
+      )
       .eq('contato_id', contatoId)
       .order('criado_em'),
   ])
@@ -157,7 +159,12 @@ export async function obterConversa(id: string) {
 
   const listaLead = lead?.data?.leads_listas
   return {
-    atendimento: { ...atendimento, etiquetas: lerEtiquetas(atendimento.etiquetas) },
+    atendimento: {
+      ...atendimento,
+      etiquetas: lerEtiquetas(atendimento.etiquetas),
+      // "Assinar como" (a view não traz: fica na própria tabela).
+      assinatura_nome: atendimentos.data.find((a) => a.id === atendimento.id)?.assinatura_nome ?? null,
+    },
     contato: contato.data,
     mensagens: mensagens.data.reverse().map((m) => ({
       ...m,
@@ -218,13 +225,14 @@ export async function configAtendimento() {
   const [config, pastas] = await Promise.all([
     supabase
       .from('configuracoes')
-      .select('whatsapp_assinatura, whatsapp_leads_automatico, whatsapp_pasta_leads_id')
+      .select('whatsapp_assinatura, whatsapp_nomes_assinatura, whatsapp_leads_automatico, whatsapp_pasta_leads_id')
       .eq('id', 1)
       .maybeSingle(),
     supabase.from('leads_pastas').select('id, nome').order('nome'),
   ])
   return {
     assinatura: config.data?.whatsapp_assinatura ?? true,
+    nomesAssinatura: config.data?.whatsapp_nomes_assinatura ?? [],
     leadsAutomatico: config.data?.whatsapp_leads_automatico ?? true,
     pastaLeadsId: config.data?.whatsapp_pasta_leads_id ?? null,
     pastas: pastas.data ?? [],

@@ -52,8 +52,30 @@ export const esquemaEtiqueta = z.object({
   cor: z.enum(CORES_ETIQUETA, { error: 'Escolha uma cor.' }),
 })
 
+/** Nome que aparece em negrito no início da mensagem (*Ana Souza:* ...). */
+export const esquemaNomeAssinatura = z
+  .string()
+  .trim()
+  .transform((v) => v.replace(/\s+/g, ' '))
+  .pipe(z.string().min(1, 'Informe o nome.').max(60, 'Use no máximo 60 caracteres por nome.'))
+
+/** Lista "Assinar como": um nome por linha, sem repetir. */
+const listaNomesAssinatura = z.preprocess(
+  (v) =>
+    String(v ?? '')
+      .split('\n')
+      .map((s) => s.trim().replace(/\s+/g, ' '))
+      .filter(Boolean),
+  z
+    .array(z.string())
+    .max(30, 'Cadastre no máximo 30 nomes.')
+    .refine((nomes) => nomes.every((n) => n.length <= 60), 'Use no máximo 60 caracteres por nome.')
+    .transform((nomes) => nomes.filter((n, i) => nomes.findIndex((m) => m.toLowerCase() === n.toLowerCase()) === i)),
+)
+
 export const esquemaConfigAtendimento = z.object({
   whatsapp_assinatura: checkbox,
+  whatsapp_nomes_assinatura: listaNomesAssinatura,
   whatsapp_leads_automatico: checkbox,
   whatsapp_pasta_leads_id: z.preprocess((v) => (v ? v : null), z.uuid('Escolha uma pasta.').nullable()),
 })
