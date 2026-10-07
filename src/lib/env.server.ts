@@ -19,10 +19,4 @@ export const envServidor = {
   /** WhatsApp da loja (uazapi): Server URL e token da instância (não o admin token). */
   uazapiUrl: process.env.UAZAPI_URL?.trim().replace(/\/+$/, '') || undefined,
   uazapiToken: process.env.UAZAPI_TOKEN?.trim() || undefined,
-  /** WhatsApp oficial (API Cloud da Meta), número exclusivo das Campanhas. */
-  metaWhatsappToken: process.env.META_WHATSAPP_TOKEN?.trim() || undefined,
-  metaPhoneNumberId: process.env.META_WHATSAPP_PHONE_NUMBER_ID?.trim() || undefined,
-  metaWabaId: process.env.META_WHATSAPP_WABA_ID?.trim() || undefined,
-  metaAppSecret: process.env.META_APP_SECRET?.trim() || undefined,
-  metaWebhookVerifyToken: process.env.META_WEBHOOK_VERIFY_TOKEN?.trim() || undefined,
 }

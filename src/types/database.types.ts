@@ -78,6 +78,7 @@ export type Database = {
       }
       atendimentos: {
         Row: {
+          assinatura_nome: string | null
           atualizado_em: string
           contato_id: string
           criado_em: string
@@ -95,6 +96,7 @@ export type Database = {
           ultima_mensagem_previa: string | null
         }
         Insert: {
+          assinatura_nome?: string | null
           atualizado_em?: string
           contato_id: string
           criado_em?: string
@@ -112,6 +114,7 @@ export type Database = {
           ultima_mensagem_previa?: string | null
         }
         Update: {
+          assinatura_nome?: string | null
           atualizado_em?: string
           contato_id?: string
           criado_em?: string
@@ -271,6 +274,195 @@ export type Database = {
           },
         ]
       }
+      campanha_envios: {
+        Row: {
+          campanha_id: string
+          entregue_em: string | null
+          enviada_em: string | null
+          erro: string | null
+          erro_codigo: number | null
+          id: number
+          lida_em: string | null
+          nome: string | null
+          proxima_tentativa_em: string | null
+          reservado_em: string | null
+          respondida_em: string | null
+          resposta: string | null
+          saiu_em: string | null
+          status: Database["public"]["Enums"]["status_envio_campanha"]
+          tentativas: number
+          wa_id: string | null
+          wamid: string | null
+          whatsapp: string
+        }
+        Insert: {
+          campanha_id: string
+          entregue_em?: string | null
+          enviada_em?: string | null
+          erro?: string | null
+          erro_codigo?: number | null
+          id?: never
+          lida_em?: string | null
+          nome?: string | null
+          proxima_tentativa_em?: string | null
+          reservado_em?: string | null
+          respondida_em?: string | null
+          resposta?: string | null
+          saiu_em?: string | null
+          status?: Database["public"]["Enums"]["status_envio_campanha"]
+          tentativas?: number
+          wa_id?: string | null
+          wamid?: string | null
+          whatsapp: string
+        }
+        Update: {
+          campanha_id?: string
+          entregue_em?: string | null
+          enviada_em?: string | null
+          erro?: string | null
+          erro_codigo?: number | null
+          id?: never
+          lida_em?: string | null
+          nome?: string | null
+          proxima_tentativa_em?: string | null
+          reservado_em?: string | null
+          respondida_em?: string | null
+          resposta?: string | null
+          saiu_em?: string | null
+          status?: Database["public"]["Enums"]["status_envio_campanha"]
+          tentativas?: number
+          wa_id?: string | null
+          wamid?: string | null
+          whatsapp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campanha_envios_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_envios_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "vw_campanhas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campanhas: {
+        Row: {
+          agendada_para: string | null
+          atualizado_em: string
+          botao_sair: boolean
+          botao_texto: string | null
+          botao_url: string | null
+          concluida_em: string | null
+          criado_em: string
+          criado_por: string | null
+          id: string
+          imagem_path: string | null
+          iniciada_em: string | null
+          lista_id: string | null
+          modelo_assinatura: string | null
+          modelo_categoria: string | null
+          modelo_id: string | null
+          modelo_motivo: string | null
+          modelo_nome: string | null
+          modelo_status: string | null
+          nome: string
+          nome_padrao: string
+          origem: string
+          origem_descricao: string | null
+          pausada_motivo: string | null
+          processando_desde: string | null
+          rodape: string | null
+          status: Database["public"]["Enums"]["status_campanha"]
+          texto: string
+          total: number
+          ultimo_erro: string | null
+        }
+        Insert: {
+          agendada_para?: string | null
+          atualizado_em?: string
+          botao_sair?: boolean
+          botao_texto?: string | null
+          botao_url?: string | null
+          concluida_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          imagem_path?: string | null
+          iniciada_em?: string | null
+          lista_id?: string | null
+          modelo_assinatura?: string | null
+          modelo_categoria?: string | null
+          modelo_id?: string | null
+          modelo_motivo?: string | null
+          modelo_nome?: string | null
+          modelo_status?: string | null
+          nome: string
+          nome_padrao?: string
+          origem: string
+          origem_descricao?: string | null
+          pausada_motivo?: string | null
+          processando_desde?: string | null
+          rodape?: string | null
+          status?: Database["public"]["Enums"]["status_campanha"]
+          texto: string
+          total?: number
+          ultimo_erro?: string | null
+        }
+        Update: {
+          agendada_para?: string | null
+          atualizado_em?: string
+          botao_sair?: boolean
+          botao_texto?: string | null
+          botao_url?: string | null
+          concluida_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          imagem_path?: string | null
+          iniciada_em?: string | null
+          lista_id?: string | null
+          modelo_assinatura?: string | null
+          modelo_categoria?: string | null
+          modelo_id?: string | null
+          modelo_motivo?: string | null
+          modelo_nome?: string | null
+          modelo_status?: string | null
+          nome?: string
+          nome_padrao?: string
+          origem?: string
+          origem_descricao?: string | null
+          pausada_motivo?: string | null
+          processando_desde?: string | null
+          rodape?: string | null
+          status?: Database["public"]["Enums"]["status_campanha"]
+          texto?: string
+          total?: number
+          ultimo_erro?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campanhas_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanhas_lista_id_fkey"
+            columns: ["lista_id"]
+            isOneToOne: false
+            referencedRelation: "leads_listas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categorias_financeiras: {
         Row: {
           criado_em: string
@@ -401,6 +593,7 @@ export type Database = {
           whatsapp_comprovante: string | null
           whatsapp_leads_automatico: boolean
           whatsapp_loja: string | null
+          whatsapp_nomes_assinatura: string[]
           whatsapp_pasta_leads_id: string | null
         }
         Insert: {
@@ -418,6 +611,7 @@ export type Database = {
           whatsapp_comprovante?: string | null
           whatsapp_leads_automatico?: boolean
           whatsapp_loja?: string | null
+          whatsapp_nomes_assinatura?: string[]
           whatsapp_pasta_leads_id?: string | null
         }
         Update: {
@@ -435,6 +629,7 @@ export type Database = {
           whatsapp_comprovante?: string | null
           whatsapp_leads_automatico?: boolean
           whatsapp_loja?: string | null
+          whatsapp_nomes_assinatura?: string[]
           whatsapp_pasta_leads_id?: string | null
         }
         Relationships: [
@@ -1540,6 +1735,27 @@ export type Database = {
           },
         ]
       }
+      whatsapp_descadastros: {
+        Row: {
+          campanha_id: string | null
+          criado_em: string
+          origem: string
+          whatsapp: string
+        }
+        Insert: {
+          campanha_id?: string | null
+          criado_em?: string
+          origem: string
+          whatsapp: string
+        }
+        Update: {
+          campanha_id?: string | null
+          criado_em?: string
+          origem?: string
+          whatsapp?: string
+        }
+        Relationships: []
+      }
       whatsapp_mensagens: {
         Row: {
           atendimento_id: string | null
@@ -1639,6 +1855,71 @@ export type Database = {
           },
         ]
       }
+      whatsapp_oficial: {
+        Row: {
+          app_id: string | null
+          atualizado_em: string
+          conectado_em: string | null
+          conectado_por: string | null
+          id: number
+          limite_tier: string | null
+          nome_verificado: string | null
+          numero: string | null
+          phone_number_id: string | null
+          qualidade: string | null
+          status_nome: string | null
+          token_verificacao: string
+          ultimo_erro: string | null
+          verificado_em: string | null
+          waba_id: string | null
+          webhook_recebido_em: string | null
+        }
+        Insert: {
+          app_id?: string | null
+          atualizado_em?: string
+          conectado_em?: string | null
+          conectado_por?: string | null
+          id?: number
+          limite_tier?: string | null
+          nome_verificado?: string | null
+          numero?: string | null
+          phone_number_id?: string | null
+          qualidade?: string | null
+          status_nome?: string | null
+          token_verificacao?: string
+          ultimo_erro?: string | null
+          verificado_em?: string | null
+          waba_id?: string | null
+          webhook_recebido_em?: string | null
+        }
+        Update: {
+          app_id?: string | null
+          atualizado_em?: string
+          conectado_em?: string | null
+          conectado_por?: string | null
+          id?: number
+          limite_tier?: string | null
+          nome_verificado?: string | null
+          numero?: string | null
+          phone_number_id?: string | null
+          qualidade?: string | null
+          status_nome?: string | null
+          token_verificacao?: string
+          ultimo_erro?: string | null
+          verificado_em?: string | null
+          waba_id?: string | null
+          webhook_recebido_em?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_oficial_conectado_por_fkey"
+            columns: ["conectado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       vw_atendimentos: {
@@ -1697,6 +1978,63 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "vw_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vw_campanhas: {
+        Row: {
+          agendada_para: string | null
+          atualizado_em: string | null
+          botao_sair: boolean | null
+          botao_texto: string | null
+          botao_url: string | null
+          concluida_em: string | null
+          criado_em: string | null
+          criado_por: string | null
+          entregues: number | null
+          enviadas: number | null
+          falhas: number | null
+          id: string | null
+          ignoradas: number | null
+          imagem_path: string | null
+          iniciada_em: string | null
+          lidas: number | null
+          lista_id: string | null
+          modelo_assinatura: string | null
+          modelo_categoria: string | null
+          modelo_id: string | null
+          modelo_motivo: string | null
+          modelo_nome: string | null
+          modelo_status: string | null
+          nome: string | null
+          nome_padrao: string | null
+          origem: string | null
+          origem_descricao: string | null
+          pausada_motivo: string | null
+          pendentes: number | null
+          processando_desde: string | null
+          respostas: number | null
+          rodape: string | null
+          sairam: number | null
+          status: Database["public"]["Enums"]["status_campanha"] | null
+          texto: string | null
+          total: number | null
+          ultimo_erro: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campanhas_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanhas_lista_id_fkey"
+            columns: ["lista_id"]
+            isOneToOne: false
+            referencedRelation: "leads_listas"
             referencedColumns: ["id"]
           },
         ]
@@ -2050,6 +2388,14 @@ export type Database = {
       }
     }
     Functions: {
+      adicionar_contatos_campanha: {
+        Args: { p_campanha_id: string; p_contatos: Json }
+        Returns: number
+      }
+      adicionar_lista_campanha: {
+        Args: { p_apos?: string; p_campanha_id: string; p_lista_id: string }
+        Returns: Json
+      }
       alterar_status_atendimento: {
         Args: {
           p_id: string
@@ -2062,6 +2408,16 @@ export type Database = {
         Returns: number
       }
       assumir_atendimento: { Args: { p_id: string }; Returns: undefined }
+      atualizar_status_envio_campanha: {
+        Args: {
+          p_erro?: string
+          p_erro_codigo?: number
+          p_quando: string
+          p_status: string
+          p_wamid: string
+        }
+        Returns: undefined
+      }
       atualizar_status_whatsapp: {
         Args: {
           p_messageids: string[]
@@ -2074,6 +2430,8 @@ export type Database = {
         Args: { p_lista_id: string }
         Returns: undefined
       }
+      confirmar_campanha: { Args: { p_campanha_id: string }; Returns: Json }
+      contatos_campanha_24h: { Args: never; Returns: number }
       cotar_frete_pedido: {
         Args: { p_pedido_id: string; p_valor: number }
         Returns: {
@@ -2107,6 +2465,17 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      credenciais_whatsapp_oficial: {
+        Args: never
+        Returns: {
+          app_id: string
+          app_secret: string
+          phone_number_id: string
+          token: string
+          token_verificacao: string
+          waba_id: string
+        }[]
       }
       criar_pedido: {
         Args: {
@@ -2169,6 +2538,7 @@ export type Database = {
         Returns: undefined
       }
       desconectar_olist: { Args: never; Returns: undefined }
+      desconectar_whatsapp_oficial: { Args: never; Returns: undefined }
       eh_admin: { Args: never; Returns: boolean }
       eh_membro_equipe: { Args: never; Returns: boolean }
       endereco_do_cliente: {
@@ -2195,6 +2565,10 @@ export type Database = {
         Returns: Json
       }
       gerar_contas_fixas: { Args: { p_competencia: string }; Returns: number }
+      guardar_segredo_whatsapp_oficial: {
+        Args: { p_descricao: string; p_nome: string; p_valor: string }
+        Returns: undefined
+      }
       hoje_brasilia: { Args: never; Returns: string }
       identificar_cliente_pre_venda: {
         Args: { p_whatsapp: string }
@@ -2326,9 +2700,28 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      registrar_resposta_campanha: {
+        Args: {
+          p_contexto?: string
+          p_quando: string
+          p_saiu: boolean
+          p_texto: string
+          p_wa_id: string
+        }
+        Returns: undefined
+      }
       renomear_categoria_financeira: {
         Args: { p_id: string; p_nome: string }
         Returns: undefined
+      }
+      reservar_envios_campanha: {
+        Args: { p_campanha_id: string; p_limite: number }
+        Returns: {
+          id: number
+          nome: string
+          tentativas: number
+          whatsapp: string
+        }[]
       }
       resumo_ceps_frete_vip: { Args: never; Returns: Json }
       resumo_produtos_vendidos: {
@@ -2384,12 +2777,23 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      salvar_whatsapp_oficial: {
+        Args: {
+          p_app_id: string
+          p_app_secret: string
+          p_phone_number_id: string
+          p_token: string
+          p_waba_id: string
+        }
+        Returns: undefined
+      }
       situacao_erp_conta_venda: {
         Args: { p_situacao: number }
         Returns: boolean
       }
       somente_digitos: { Args: { p_texto: string }; Returns: string }
       status_integracao_olist: { Args: never; Returns: Json }
+      status_whatsapp_oficial: { Args: never; Returns: Json }
       substituir_ceps_frete_vip: {
         Args: { p_arquivo?: string; p_faixas: Json }
         Returns: Json
@@ -2398,6 +2802,7 @@ export type Database = {
         Args: { p_id: string; p_para: string }
         Returns: undefined
       }
+      travar_campanha: { Args: { p_campanha_id: string }; Returns: boolean }
       vendas_crm_por_dia: {
         Args: {
           p_canal: Database["public"]["Enums"]["canal_venda"]
@@ -2442,7 +2847,25 @@ export type Database = {
         | "em_atendimento"
         | "aguardando_cliente"
         | "resolvido"
+      status_campanha:
+        | "preparando"
+        | "aguardando_aprovacao"
+        | "agendada"
+        | "enviando"
+        | "pausada"
+        | "concluida"
+        | "recusada"
+        | "cancelada"
+        | "falhou"
       status_conta: "pendente" | "paga" | "cancelada"
+      status_envio_campanha:
+        | "pendente"
+        | "enviando"
+        | "enviada"
+        | "entregue"
+        | "lida"
+        | "falhou"
+        | "ignorada"
       status_evento: "pendente" | "enviado" | "erro" | "ignorado"
       status_lista_leads: "importando" | "pronta"
       status_mensagem_whatsapp:
@@ -2601,7 +3024,27 @@ export const Constants = {
         "aguardando_cliente",
         "resolvido",
       ],
+      status_campanha: [
+        "preparando",
+        "aguardando_aprovacao",
+        "agendada",
+        "enviando",
+        "pausada",
+        "concluida",
+        "recusada",
+        "cancelada",
+        "falhou",
+      ],
       status_conta: ["pendente", "paga", "cancelada"],
+      status_envio_campanha: [
+        "pendente",
+        "enviando",
+        "enviada",
+        "entregue",
+        "lida",
+        "falhou",
+        "ignorada",
+      ],
       status_evento: ["pendente", "enviado", "erro", "ignorado"],
       status_lista_leads: ["importando", "pronta"],
       status_mensagem_whatsapp: [

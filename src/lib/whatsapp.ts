@@ -11,6 +11,17 @@ export function normalizarWhatsapp(numero: string | null | undefined): string | 
   return digitos.length === 10 || digitos.length === 11 ? `55${digitos}` : digitos
 }
 
+/**
+ * Número canônico de um ID do WhatsApp (já com DDI), mesma regra da função SQL
+ * `whatsapp_canonico`: celulares do Brasil identificados sem o 9º dígito ganham o 9.
+ *   "553187654321" → "5531987654321"
+ */
+export function whatsappCanonico(numero: string | null | undefined): string | null {
+  const d = (numero ?? '').replace(/\D/g, '')
+  if (!d) return null
+  return /^55[1-9][0-9][6-9][0-9]{7}$/.test(d) ? `${d.slice(0, 4)}9${d.slice(4)}` : d
+}
+
 export function whatsappValido(numero: string | null | undefined): boolean {
   const n = normalizarWhatsapp(numero)
   return Boolean(n && n.length >= 12 && n.length <= 15)

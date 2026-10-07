@@ -29,6 +29,13 @@ create table storage.buckets (id text primary key, name text, public boolean, fi
 create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);
 alter table storage.objects enable row level security;
 create publication supabase_realtime;
+create schema vault;
+create table vault.secrets (id uuid primary key default gen_random_uuid(), name text unique, description text, secret text not null);
+create view vault.decrypted_secrets as select id, name, description, secret, secret as decrypted_secret from vault.secrets;
+create function vault.create_secret(new_secret text, new_name text default null, new_description text default '', new_key_id uuid default null)
+  returns uuid language sql as $$ insert into vault.secrets (secret, name, description) values (new_secret, new_name, new_description) returning id $$;
+create function vault.update_secret(secret_id uuid, new_secret text default null, new_name text default null, new_description text default null, new_key_id uuid default null)
+  returns void language sql as $$ update vault.secrets set secret = coalesce(new_secret, secret) where id = secret_id $$;
 `
 await db.exec(stub)
 
@@ -689,6 +696,86 @@ await db.exec(`reset role;`)
   await expectError('anon não registra mensagem', `select registrar_mensagem_whatsapp('{}'::jsonb)`)
   await expectError('anon não lê atendimentos', `select * from vw_atendimentos`)
   await expectError('anon não lê etiquetas', `select * from etiquetas_atendimento`)
+  await db.exec(`reset role;`)
+}
+
+// Campanhas no WhatsApp oficial ---------------------------------------------------
+{
+  const comoAdmin = `reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${uid}', false);`
+  await db.exec(`reset role; update perfis set ativo = true, papel = 'admin', trocar_senha = false where id = '${uid}';`)
+  await db.exec(comoAdmin)
+  expectEq('sem conexão o WhatsApp oficial não está configurado', (await um(`select status_whatsapp_oficial() s`)).s.configurado, false)
+  await expectError('a primeira conexão exige o token', `select salvar_whatsapp_oficial('1', '2', '3', '', 'segredo')`)
+  await q(`select salvar_whatsapp_oficial('111', '222', '333', ' token-123 ', 'segredo')`)
+  const conexao = (await um(`select status_whatsapp_oficial() s`)).s
+  expectEq('conexão salva; o admin vê a senha do webhook', [conexao.configurado, conexao.tem_app_secret, conexao.token_verificacao?.length], [true, true, 64])
+  await expectError('a equipe não lê as credenciais', `select * from credenciais_whatsapp_oficial()`)
+  await expectError('a equipe não lê a tabela da conexão', `select * from whatsapp_oficial`)
+  await q(`select salvar_whatsapp_oficial('111', '222', '444', '', '')`)
+  await db.exec(`reset role; set role service_role;`)
+  expectEq('o servidor lê o token do Vault (vazio mantém o salvo)', await um(`select waba_id, token, app_secret from credenciais_whatsapp_oficial()`),
+    { waba_id: '444', token: 'token-123', app_secret: 'segredo' })
+  await db.exec(comoAdmin)
+
+  const campanha = await um(`insert into campanhas (nome, texto, origem) values ('Drop', 'Olá, {nome}! Chegou.', 'colar') returning id`)
+  expectEq('adiciona só números válidos, sem repetir', (await um(`select adicionar_contatos_campanha($1, $2::jsonb) n`, [campanha.id, JSON.stringify([
+    { whatsapp: '(31) 8765-4321', nome: ' Maria   Silva ' }, { whatsapp: '553187654321', nome: 'Repetida' },
+    { whatsapp: '123', nome: 'Inválido' }, { whatsapp: '11912345678', nome: null },
+  ])])).n, 2)
+  expectEq('número canônico (9º dígito) e nome limpo', await q(`select whatsapp, nome from campanha_envios where campanha_id = $1 order by whatsapp`, [campanha.id]),
+    [{ whatsapp: '5511912345678', nome: null }, { whatsapp: '5531987654321', nome: 'Maria Silva' }])
+  const daLista = await um(`insert into campanhas (nome, texto, origem, lista_id) values ('Da lista', 'Oi, {nome}!', 'leads', $1) returning id`, [lista.id])
+  const pagina = (await um(`select adicionar_lista_campanha($1, $2) r`, [daLista.id, lista.id])).r
+  expectEq('lista do Banco de Leads entra em páginas (números com WhatsApp)', pagina.inseridos, 2)
+  const seguinte = (await um(`select adicionar_lista_campanha($1, $2, $3) r`, [daLista.id, lista.id, pagina.ultimo])).r
+  expectEq('a página seguinte vem vazia', [seguinte.inseridos, seguinte.ultimo], [0, null])
+
+  await q(`insert into whatsapp_descadastros (whatsapp, origem) values ('5531987654321', 'botao')`)
+  expectEq('confirmar tira quem pediu para não receber', (await um(`select confirmar_campanha($1) r`, [campanha.id])).r, { total: 2, ignorados: 1 })
+  await expectError('não aceita contatos depois de confirmar', `select adicionar_contatos_campanha($1, '[{"whatsapp":"11955556666"}]'::jsonb)`, [campanha.id])
+  await expectError('não confirma duas vezes', `select confirmar_campanha($1)`, [campanha.id])
+  await expectError('a equipe não reserva envios', `select * from reservar_envios_campanha($1, 10)`, [campanha.id])
+
+  await db.exec(`reset role; set role service_role;`)
+  expectEq('uma rotina de envio por vez', [(await um(`select travar_campanha($1) t`, [campanha.id])).t, (await um(`select travar_campanha($1) t`, [campanha.id])).t], [true, false])
+  const lote = await q(`select * from reservar_envios_campanha($1, 10)`, [campanha.id])
+  expectEq('reserva só os pendentes', lote.map((l) => l.whatsapp), ['5511912345678'])
+  expectEq('o que foi reservado não sai de novo', (await q(`select * from reservar_envios_campanha($1, 10)`, [campanha.id])).length, 0)
+  await q(`update campanha_envios set status = 'enviada', wamid = 'wamid.A', enviada_em = now() where id = $1`, [lote[0].id])
+  expectEq('limite diário conta contatos das últimas 24 h', (await um(`select contatos_campanha_24h() n`)).n, 1)
+  await q(`select atualizar_status_envio_campanha('wamid.A', 'read', now())`)
+  await q(`select atualizar_status_envio_campanha('wamid.A', 'delivered', now())`)
+  expectEq('status nunca volta (lida continua lida)', await um(`select status, entregue_em is not null entregue from campanha_envios where wamid = 'wamid.A'`), { status: 'lida', entregue: true })
+  await q(`select registrar_resposta_campanha('5511912345678', 'Não quero receber', now(), true, 'wamid.A')`)
+  expectEq('botão "Não quero receber" registra a saída', await um(`select (select saiu_em is not null from campanha_envios where wamid = 'wamid.A') saiu,
+    (select origem from whatsapp_descadastros where whatsapp = '5511912345678') origem`), { saiu: true, origem: 'botao' })
+  await q(`select registrar_resposta_campanha('5521999998888', 'pare', now(), true)`)
+  expectEq('"pare" de quem não está em campanha também descadastra', (await um(`select origem from whatsapp_descadastros where whatsapp = '5521999998888'`)).origem, 'mensagem')
+  expectEq('vw_campanhas soma os números', await um(`select total, enviadas, entregues, lidas, respostas, ignoradas, sairam, pendentes from vw_campanhas where id = $1`, [campanha.id]),
+    { total: 2, enviadas: 1, entregues: 1, lidas: 1, respostas: 1, ignoradas: 1, sairam: 1, pendentes: 0 })
+
+  // Fila: descadastro depois da confirmação, espera entre tentativas e reserva interrompida.
+  await db.exec(comoAdmin)
+  const fila = await um(`insert into campanhas (nome, texto, origem) values ('Fila', 'Oi, {nome}!', 'colar') returning id`)
+  await q(`select adicionar_contatos_campanha($1, '[{"whatsapp":"11955550001"},{"whatsapp":"11955550002"},{"whatsapp":"11955550003"}]'::jsonb)`, [fila.id])
+  await q(`select confirmar_campanha($1)`, [fila.id])
+  await db.exec(`reset role; set role service_role;`)
+  await q(`insert into whatsapp_descadastros (whatsapp, origem) values ('5511955550001', 'mensagem')`)
+  await q(`update campanha_envios set proxima_tentativa_em = now() + interval '1 hour' where whatsapp = '5511955550002'`)
+  expectEq('reserva pula quem saiu depois da confirmação e quem está esperando nova tentativa',
+    (await q(`select * from reservar_envios_campanha($1, 10)`, [fila.id])).map((l) => l.whatsapp), ['5511955550003'])
+  expectEq('quem saiu depois da confirmação fica de fora', (await um(`select status from campanha_envios where whatsapp = '5511955550001'`)).status, 'ignorada')
+  await q(`update campanha_envios set proxima_tentativa_em = now() - interval '1 minute' where whatsapp = '5511955550002'`)
+  await q(`update campanha_envios set reservado_em = now() - interval '11 minutes' where whatsapp = '5511955550003'`)
+  expectEq('passada a espera, o contato volta à fila', (await q(`select * from reservar_envios_campanha($1, 10)`, [fila.id])).map((l) => l.whatsapp), ['5511955550002'])
+  expectEq('reserva interrompida não é reenviada (pode ter saído)', (await um(`select status from campanha_envios where whatsapp = '5511955550003'`)).status, 'falhou')
+
+  await db.exec(comoAdmin)
+  await q(`select desconectar_whatsapp_oficial()`)
+  expectEq('desconectar apaga o token', (await um(`select status_whatsapp_oficial() s`)).s.configurado, false)
+  await db.exec(`reset role; set role anon; select set_config('request.jwt.claim.sub', '', false);`)
+  await expectError('anon não lê campanhas', `select * from vw_campanhas`)
+  await expectError('anon não vê a conexão', `select status_whatsapp_oficial()`)
   await db.exec(`reset role;`)
 }
 

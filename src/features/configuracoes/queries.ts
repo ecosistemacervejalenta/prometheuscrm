@@ -15,6 +15,7 @@ const PADRAO: Configuracoes = {
   mensagem_cobranca: 'Olá, {nome}! Segue o pedido *#{pedido}*:\n{itens}\n\n*Total: {total}*\n\n{pagamento}',
   atualizado_em: new Date(0).toISOString(),
   whatsapp_assinatura: true,
+  whatsapp_nomes_assinatura: [],
   whatsapp_leads_automatico: true,
   whatsapp_pasta_leads_id: null,
   whatsapp_comprovante: null,

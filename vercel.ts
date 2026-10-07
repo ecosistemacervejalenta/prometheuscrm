@@ -24,5 +24,8 @@ export const config: VercelConfig = {
       path: `/api/cron/whatsapp?h=${hora}`,
       schedule: `30 ${hora} * * *`,
     })),
+    // Campanhas do WhatsApp oficial: confere análises da Meta, libera agendadas e envia a fila.
+    // A cada 5 min (plano Pro); cada rodada envia por até 4 min.
+    { path: '/api/cron/campanhas', schedule: '*/5 * * * *' },
   ],
 }

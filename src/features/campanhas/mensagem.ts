@@ -1,3 +1,5 @@
+import { envPublico } from '@/lib/env'
+
 /**
  * Mensagem de campanha do WhatsApp oficial (API Cloud da Meta).
  * Mensagens iniciadas pela loja só saem como "modelo" aprovado pela Meta; estas
@@ -64,8 +66,24 @@ function urlValida(url: string) {
   }
 }
 
+/**
+ * Valor do {nome}: primeiro nome numa linha só (a Meta recusa quebras e tabs) e,
+ * se a lista veio toda em maiúsculas ou minúsculas, com só a inicial maiúscula.
+ * Sem nome, vale o nome padrão da campanha.
+ */
+export function valorDoNome(nome: string | null, nomePadrao: string): string {
+  const primeiro = (nome ?? '').replace(/\s+/g, ' ').trim().split(' ')[0]?.slice(0, 40) ?? ''
+  if (!primeiro) return nomePadrao.replace(/\s+/g, ' ').trim() || 'cliente'
+  const uniforme = primeiro === primeiro.toUpperCase() || primeiro === primeiro.toLowerCase()
+  return uniforme ? primeiro.charAt(0).toUpperCase() + primeiro.slice(1).toLowerCase() : primeiro
+}
+
 /** Texto como o contato vai ver: {nome} vira o primeiro nome (ou o nome padrão). */
 export function textoParaContato(texto: string, nome: string | null, nomePadrao: string): string {
-  const primeiro = nome?.trim().split(/\s+/)[0]
-  return texto.replaceAll(VARIAVEL_NOME, primeiro || nomePadrao.trim() || 'cliente')
+  return texto.replaceAll(VARIAVEL_NOME, valorDoNome(nome, nomePadrao))
+}
+
+/** URL pública da foto da campanha (a Meta busca a imagem por ela). */
+export function urlImagemCampanha(caminho: string | null): string | null {
+  return caminho ? `${envPublico.supabaseUrl}/storage/v1/object/public/campanhas/${caminho}` : null
 }
