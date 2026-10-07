@@ -152,16 +152,28 @@ function erroDaCriacao(erro: unknown): string {
 }
 
 /**
+ * Situação do modelo a partir do que a Meta mandar (o webhook usa mais nomes que a consulta):
+ * reativado/desarquivado/sinalizado continua aprovado; arquivado, apagado, travado etc. param o envio.
+ */
+function situacaoDoModelo(evento: string): string {
+  if (['APPROVED', 'REINSTATED', 'UNARCHIVED', 'FLAGGED'].includes(evento)) return 'APPROVED'
+  if (['PENDING', 'IN_APPEAL'].includes(evento)) return 'PENDING'
+  if (evento === 'REJECTED' || evento === 'PAUSED') return evento
+  return 'DISABLED'
+}
+
+/**
  * Aplica o status do modelo (pela consulta ou pelo webhook) a todas as campanhas que o usam.
  * Devolve true se alguma campanha ficou liberada para envio agora.
  */
 export async function aplicarStatusModelo(
   supabase: Admin,
   modeloId: string,
-  status: string,
+  evento: string,
   categoria?: string | null,
   motivo?: string | null,
 ): Promise<boolean> {
+  const status = situacaoDoModelo(evento)
   conferir(
     await supabase
       .from('campanhas')
@@ -236,22 +248,44 @@ export async function analisarCampanha(supabase: Admin, campanhaId: string): Pro
 
   const assinatura = assinaturaDoModelo(c)
   try {
-    const { data: igual } = await supabase
-      .from('campanhas')
-      .select('modelo_nome, modelo_id, modelo_categoria')
-      .eq('modelo_assinatura', assinatura)
-      .eq('modelo_status', 'APPROVED')
-      .neq('id', c.id)
-      .order('criado_em', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (igual?.modelo_id) {
+    // A Meta recusa modelo novo com o mesmo texto e rodapé de um que já existe: procura um assim.
+    const { data: mesmoTexto } = conferir(
       await supabase
         .from('campanhas')
-        .update({ modelo_nome: igual.modelo_nome, modelo_id: igual.modelo_id, modelo_categoria: igual.modelo_categoria, modelo_status: 'APPROVED', modelo_assinatura: assinatura })
-        .eq('id', c.id)
-      await aplicarStatusModelo(supabase, igual.modelo_id, 'APPROVED')
-      return { ok: true, mensagem: 'Esta mensagem já foi aprovada pela Meta antes — a campanha segue sem nova análise.' }
+        .select('rodape, modelo_nome, modelo_id, modelo_categoria, modelo_status, modelo_assinatura')
+        .eq('texto', c.texto)
+        .not('modelo_id', 'is', null)
+        .neq('id', c.id)
+        .order('criado_em', { ascending: false }),
+    )
+    const existente = mesmoTexto.find((m) => (m.rodape ?? '') === (c.rodape ?? ''))
+    if (existente?.modelo_id) {
+      const igual = existente.modelo_assinatura === assinatura
+      if (!igual) {
+        return falhar(
+          'Já existe na Meta uma mensagem com este mesmo texto e rodapé, mas com foto ou botões diferentes — a Meta recusa textos repetidos. Mude um pouco o texto ou use a mesma foto e os mesmos botões.',
+        )
+      }
+      if (existente.modelo_status !== 'APPROVED' && existente.modelo_status !== 'PENDING') {
+        return falhar('A Meta não aceita mais esta mesma mensagem (recusada, pausada ou desativada antes). Mude o texto e monte a campanha de novo.')
+      }
+      conferir(
+        await supabase
+          .from('campanhas')
+          .update({
+            modelo_nome: existente.modelo_nome,
+            modelo_id: existente.modelo_id,
+            modelo_categoria: existente.modelo_categoria,
+            modelo_status: existente.modelo_status,
+            modelo_assinatura: assinatura,
+          })
+          .eq('id', c.id),
+      )
+      if (existente.modelo_status === 'APPROVED') {
+        await aplicarStatusModelo(supabase, existente.modelo_id, 'APPROVED')
+        return { ok: true, mensagem: 'Esta mensagem já foi aprovada pela Meta antes — a campanha segue sem nova análise.' }
+      }
+      return { ok: true, mensagem: 'Esta mesma mensagem já está em análise na Meta — a campanha sai junto quando ela aprovar.' }
     }
 
     const nome = nomeDoModelo(c)
@@ -322,7 +356,10 @@ async function conferirModelosPendentes(supabase: Admin, cred: CredenciaisMeta) 
 
 type EnvioReservado = { id: number; whatsapp: string; nome: string | null; tentativas: number }
 /** ok | falha só do contato | falha passageira | problema da conta | sem resposta da Meta (pode ter saído). */
-type ResultadoEnvio = { tipo: 'ok' } | { tipo: ClasseErro | 'incerto'; codigo: number | null; mensagem: string }
+type ResultadoEnvio = { tipo: 'ok'; retida: boolean } | { tipo: ClasseErro | 'incerto'; codigo: number | null; mensagem: string }
+
+/** Mensagens retidas pela Meta para avaliar a qualidade: a campanha espera isso antes de seguir. */
+const ESPERA_RETIDA_MS = 30 * 60_000
 
 /** Erros do Supabase viram exceção (o supabase-js devolve { error } em vez de lançar). */
 export function conferir<R extends { error: unknown; data?: unknown }>(resposta: R): R & { data: NonNullable<R['data']> } {
@@ -332,6 +369,20 @@ export function conferir<R extends { error: unknown; data?: unknown }>(resposta:
 
 /** Espera antes da próxima tentativa: 2, 4, 8, 16 min. */
 const esperaDaTentativa = (tentativas: number) => new Date(Date.now() + 2 ** Math.min(tentativas, 4) * 60_000).toISOString()
+
+/**
+ * Falha da conta avisada depois do envio (ex.: foto inacessível, pagamento): o envio volta
+ * para a fila (até o limite de tentativas) e a campanha pausa — senão a lista inteira seria
+ * gasta com o mesmo erro.
+ */
+export async function devolverPorFalhaDaConta(supabase: Admin, wamid: string, mensagem: string) {
+  const { data: envio } = conferir(await supabase.from('campanha_envios').select('id, campanha_id, tentativas').eq('wamid', wamid).maybeSingle())
+  if (!envio) return
+  if (envio.tentativas < MAX_TENTATIVAS) {
+    conferir(await supabase.from('campanha_envios').update({ status: 'pendente', wamid: null, enviada_em: null }).eq('id', envio.id))
+  }
+  await pausarPorErro(supabase, envio.campanha_id, mensagem)
+}
 
 /** Pausa a campanha por um problema da conta, do número ou da mensagem (a equipe retoma depois de resolver). */
 export async function pausarPorErro(supabase: Admin, campanhaId: string, mensagem: string) {
@@ -361,7 +412,7 @@ async function enviarUm(supabase: Admin, cred: CredenciaisMeta, c: Campanha, env
       if (!error) break
       if (tentativa === 3) throw error
     }
-    return { tipo: 'ok' }
+    return { tipo: 'ok', retida: r.retida }
   } catch (erro) {
     if (!(erro instanceof ErroMeta)) throw erro
     const codigo = erro.codigo
@@ -401,7 +452,7 @@ async function emParalelo<T>(itens: T[], simultaneos: number, tarefa: (item: T) 
   )
 }
 
-type FimDaCampanha = 'fim' | 'tempo' | 'limite' | 'instavel' | 'conta' | 'parada'
+type FimDaCampanha = 'fim' | 'tempo' | 'limite' | 'instavel' | 'retida' | 'conta' | 'parada'
 
 async function enviarCampanha(
   supabase: Admin,
@@ -413,8 +464,8 @@ async function enviarCampanha(
   let enviados = 0
   while (Date.now() - inicio < PRAZO_MS) {
     // A equipe pode ter pausado ou cancelado no meio da rodada.
-    const { data: atual } = conferir(await supabase.from('campanhas').select('status, pausada_motivo').eq('id', c.id).single())
-    if (atual.status !== 'enviando') return { enviados, fim: 'parada' }
+    const { data: atual } = conferir(await supabase.from('campanhas').select('status, pausada_motivo').eq('id', c.id).maybeSingle())
+    if (atual?.status !== 'enviando') return { enviados, fim: 'parada' }
 
     let tamanho = LOTE
     if (limite !== null) {
@@ -427,8 +478,8 @@ async function enviarCampanha(
         return { enviados, fim: 'limite' }
       }
     }
-    if (atual.pausada_motivo === 'limite') {
-      conferir(await supabase.from('campanhas').update({ pausada_motivo: null }).eq('id', c.id).eq('status', 'enviando'))
+    if (atual.pausada_motivo === 'limite' || atual.pausada_motivo === 'retida') {
+      conferir(await supabase.from('campanhas').update({ pausada_motivo: null, aguardar_ate: null }).eq('id', c.id).eq('status', 'enviando'))
     }
 
     const { data: lote } = conferir(await supabase.rpc('reservar_envios_campanha', { p_campanha_id: c.id, p_limite: tamanho }))
@@ -450,9 +501,10 @@ async function enviarCampanha(
     }
 
     // Problema da conta, limite de velocidade ou Meta sem responder interrompem o lote: o resto volta para a fila.
-    const rodada: { parar: { fim: 'conta' | 'instavel'; mensagem: string } | null; enviadosNoLote: number; passageiros: number } = {
+    const rodada: { parar: { fim: 'conta' | 'instavel'; mensagem: string } | null; enviadosNoLote: number; retidas: number; passageiros: number } = {
       parar: null,
       enviadosNoLote: 0,
+      retidas: 0,
       passageiros: 0,
     }
     await emParalelo(lote, SIMULTANEOS, async (envio) => {
@@ -467,7 +519,10 @@ async function enviarCampanha(
         return
       }
       const r = await enviarUm(supabase, cred, c, envio)
-      if (r.tipo === 'ok') rodada.enviadosNoLote++
+      if (r.tipo === 'ok') {
+        rodada.enviadosNoLote++
+        if (r.retida) rodada.retidas++
+      }
       else if (r.tipo === 'conta') rodada.parar ??= { fim: 'conta', mensagem: r.mensagem }
       else if (r.tipo === 'incerto' || r.codigo === 130429 || r.codigo === 80007 || r.codigo === 4) rodada.parar ??= { fim: 'instavel', mensagem: r.mensagem }
       else if (r.tipo === 'repetir') rodada.passageiros++
@@ -480,16 +535,40 @@ async function enviarCampanha(
     }
     // Meta instável (lote inteiro com falha passageira): para a rodada em vez de gastar as tentativas da lista.
     if (rodada.parar || (rodada.enviadosNoLote === 0 && rodada.passageiros > 0)) return { enviados, fim: 'instavel' }
+    // A Meta está segurando mensagens para avaliar a qualidade: mandar mais só acumularia retidas.
+    if (rodada.retidas > 0) {
+      conferir(
+        await supabase
+          .from('campanhas')
+          .update({ pausada_motivo: 'retida', aguardar_ate: new Date(Date.now() + ESPERA_RETIDA_MS).toISOString() })
+          .eq('id', c.id)
+          .eq('status', 'enviando'),
+      )
+      return { enviados, fim: 'retida' }
+    }
   }
   return { enviados, fim: 'tempo' }
 }
 
 export type ResumoRodada = { ok: boolean; mensagem: string; enviados: number }
 
-/** Uma rodada da rotina: modelos em análise → agendadas → envio da fila. */
+/**
+ * Uma rodada da rotina: modelos em análise → agendadas → envio da fila.
+ * Uma rodada por vez (cron e chamadas da tela podem coincidir): o limite diário é do número inteiro.
+ */
 export async function processarCampanhas(supabase: Admin): Promise<ResumoRodada> {
   const cred = completas(await lerCredenciais(supabase))
   if (!cred) return { ok: false, mensagem: NAO_CONECTADO, enviados: 0 }
+  const { data: travada } = conferir(await supabase.rpc('travar_rotina_campanhas'))
+  if (!travada) return { ok: true, mensagem: 'Outra rodada de envio já está em andamento.', enviados: 0 }
+  try {
+    return await rodada(supabase, cred)
+  } finally {
+    await supabase.rpc('destravar_rotina_campanhas')
+  }
+}
+
+async function rodada(supabase: Admin, cred: CredenciaisMeta): Promise<ResumoRodada> {
   const inicio = Date.now()
 
   await conferirModelosPendentes(supabase, cred)
@@ -510,6 +589,7 @@ export async function processarCampanhas(supabase: Admin): Promise<ResumoRodada>
     .from('campanhas')
     .select('*')
     .eq('status', 'enviando')
+    .or(`aguardar_ate.is.null,aguardar_ate.lte.${agora()}`)
     .order('iniciada_em', { ascending: true, nullsFirst: true })
   if (error) throw error
 
@@ -521,8 +601,8 @@ export async function processarCampanhas(supabase: Admin): Promise<ResumoRodada>
     try {
       const r = await enviarCampanha(supabase, cred, c, limite, inicio)
       enviados += r.enviados
-      // Limite diário e instabilidade valem para o número inteiro: as próximas campanhas esperam também.
-      if (r.fim === 'limite' || r.fim === 'instavel') break
+      // Limite diário, instabilidade e retenção valem para a conta inteira: as próximas campanhas esperam também.
+      if (r.fim === 'limite' || r.fim === 'instavel' || r.fim === 'retida') break
     } finally {
       await supabase.from('campanhas').update({ processando_desde: null }).eq('id', c.id)
     }

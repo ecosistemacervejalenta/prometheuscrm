@@ -8,6 +8,9 @@ import { segredosIguais } from '@/features/integracoes/api-auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { urlDoSite } from '@/lib/url'
 
+// Um aviso traz até 1.000 status; os status vão para o banco num comando só.
+export const maxDuration = 60
+
 /**
  * Webhook do WhatsApp oficial (Meta) — Configurações › WhatsApp oficial › passo 7.
  *   GET  → verificação da Meta (hub.verify_token = token de verificação do CRM).

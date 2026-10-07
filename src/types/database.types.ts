@@ -355,6 +355,7 @@ export type Database = {
       campanhas: {
         Row: {
           agendada_para: string | null
+          aguardar_ate: string | null
           atualizado_em: string
           botao_sair: boolean
           botao_texto: string | null
@@ -386,6 +387,7 @@ export type Database = {
         }
         Insert: {
           agendada_para?: string | null
+          aguardar_ate?: string | null
           atualizado_em?: string
           botao_sair?: boolean
           botao_texto?: string | null
@@ -417,6 +419,7 @@ export type Database = {
         }
         Update: {
           agendada_para?: string | null
+          aguardar_ate?: string | null
           atualizado_em?: string
           botao_sair?: boolean
           botao_texto?: string | null
@@ -1867,6 +1870,7 @@ export type Database = {
           numero: string | null
           phone_number_id: string | null
           qualidade: string | null
+          rotina_desde: string | null
           status_nome: string | null
           token_verificacao: string
           ultimo_erro: string | null
@@ -1885,6 +1889,7 @@ export type Database = {
           numero?: string | null
           phone_number_id?: string | null
           qualidade?: string | null
+          rotina_desde?: string | null
           status_nome?: string | null
           token_verificacao?: string
           ultimo_erro?: string | null
@@ -1903,6 +1908,7 @@ export type Database = {
           numero?: string | null
           phone_number_id?: string | null
           qualidade?: string | null
+          rotina_desde?: string | null
           status_nome?: string | null
           token_verificacao?: string
           ultimo_erro?: string | null
@@ -1985,6 +1991,7 @@ export type Database = {
       vw_campanhas: {
         Row: {
           agendada_para: string | null
+          aguardar_ate: string | null
           atualizado_em: string | null
           botao_sair: boolean | null
           botao_texto: string | null
@@ -2408,14 +2415,8 @@ export type Database = {
         Returns: number
       }
       assumir_atendimento: { Args: { p_id: string }; Returns: undefined }
-      atualizar_status_envio_campanha: {
-        Args: {
-          p_erro?: string
-          p_erro_codigo?: number
-          p_quando: string
-          p_status: string
-          p_wamid: string
-        }
+      atualizar_status_envios_campanha: {
+        Args: { p_status: Json }
         Returns: undefined
       }
       atualizar_status_whatsapp: {
@@ -2539,6 +2540,7 @@ export type Database = {
       }
       desconectar_olist: { Args: never; Returns: undefined }
       desconectar_whatsapp_oficial: { Args: never; Returns: undefined }
+      destravar_rotina_campanhas: { Args: never; Returns: undefined }
       eh_admin: { Args: never; Returns: boolean }
       eh_membro_equipe: { Args: never; Returns: boolean }
       endereco_do_cliente: {
@@ -2803,6 +2805,7 @@ export type Database = {
         Returns: undefined
       }
       travar_campanha: { Args: { p_campanha_id: string }; Returns: boolean }
+      travar_rotina_campanhas: { Args: never; Returns: boolean }
       vendas_crm_por_dia: {
         Args: {
           p_canal: Database["public"]["Enums"]["canal_venda"]

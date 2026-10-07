@@ -50,9 +50,10 @@ export function pedidoParaSair(texto: string | null | undefined): boolean {
   return PALAVRAS_SAIR.includes(t)
 }
 
-/** Situação exibida: campanha enviando mas parada no limite diário aparece como espera. */
+/** Situação exibida: campanha enviando mas parada no limite diário ou na avaliação da Meta aparece como espera. */
 export function situacaoDaCampanha(c: { status: StatusCampanha | null; pausada_motivo: string | null }) {
   if (c.status === 'enviando' && c.pausada_motivo === 'limite') return { rotulo: 'Esperando o limite diário', tom: 'alerta' as Tom }
+  if (c.status === 'enviando' && c.pausada_motivo === 'retida') return { rotulo: 'Em avaliação pela Meta', tom: 'alerta' as Tom }
   return STATUS_CAMPANHA[c.status ?? 'preparando']
 }
 

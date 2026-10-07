@@ -7,6 +7,9 @@ import { obterConfiguracoes } from '@/features/configuracoes/queries'
 
 export const metadata: Metadata = { title: 'Nova campanha' }
 
+// As ações desta página falam com a Meta (criação do modelo, foto, verificação): até 5 min.
+export const maxDuration = 300
+
 export default async function PaginaNovaCampanha() {
   const [listas, config, conexao] = await Promise.all([listasParaCampanha(), obterConfiguracoes(), conexaoMeta()])
 

@@ -9,6 +9,9 @@ import { urlDoSite } from '@/lib/url'
 
 export const metadata: Metadata = { title: 'WhatsApp oficial' }
 
+// As ações desta página falam com a Meta (criação do modelo, foto, verificação): até 5 min.
+export const maxDuration = 300
+
 export default async function PaginaWhatsappOficial() {
   const { perfil } = await exigirEquipe()
   const ehAdmin = perfil.papel === 'admin'

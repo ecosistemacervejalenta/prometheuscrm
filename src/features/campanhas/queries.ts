@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { cache } from 'react'
+
 import { exigirEquipe } from '@/lib/auth'
 
 import type { ConexaoMeta } from './meta'
@@ -54,7 +56,8 @@ export async function listarCampanhas() {
   return data
 }
 
-export async function obterCampanha(id: string) {
+/** Campanha com os números (memoizada: a página e o generateMetadata usam a mesma consulta). */
+export const obterCampanha = cache(async (id: string) => {
   const { supabase } = await exigirEquipe()
   const { data } = await supabase.from('vw_campanhas').select('*').eq('id', id).maybeSingle()
   if (!data) return null
@@ -62,7 +65,7 @@ export async function obterCampanha(id: string) {
     ? await supabase.from('perfis').select('nome').eq('id', data.criado_por).maybeSingle()
     : { data: null }
   return { ...data, autor: autor?.nome ?? null }
-}
+})
 
 /** Quem respondeu (mais recentes primeiro). */
 export async function respostasDaCampanha(id: string) {

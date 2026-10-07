@@ -4,7 +4,7 @@
  *
  *   repetir → falha passageira: volta para a fila e sai numa próxima rodada.
  *   contato → problema só daquele número: o envio fica como "falhou".
- *   conta   → problema da conta, do número ou da mensagem: a campanha pausa.
+ *   conta   → problema da conta, do número ou da mensagem (ou erro desconhecido): a campanha pausa.
  */
 export type ClasseErro = 'repetir' | 'contato' | 'conta'
 
@@ -30,6 +30,19 @@ const ERROS: Record<number, { classe: ClasseErro; mensagem: string }> = {
   130497: { classe: 'contato', mensagem: 'A conta não pode enviar para o país deste número.' },
   131021: { classe: 'contato', mensagem: 'O número de destino é o próprio número da loja.' },
   // Da conta, do número ou da mensagem
+  0: { classe: 'conta', mensagem: 'A Meta não aceitou o token. Gere outro e salve em Configurações › WhatsApp oficial.' },
+  3: { classe: 'conta', mensagem: 'O app da Meta não tem permissão para esta ação.' },
+  33: { classe: 'conta', mensagem: 'O número das campanhas foi apagado na Meta.' },
+  131005: { classe: 'conta', mensagem: 'O token não tem permissão para enviar por este número.' },
+  131037: { classe: 'conta', mensagem: 'O nome de exibição do número ainda não foi aprovado pela Meta.' },
+  131045: { classe: 'conta', mensagem: 'Problema no registro do número na Meta. Informe o PIN e salve a conexão de novo.' },
+  131063: { classe: 'conta', mensagem: 'As mensagens de marketing estão desativadas para esta conta na Meta.' },
+  132007: { classe: 'conta', mensagem: 'A Meta considerou que a mensagem viola as políticas do WhatsApp.' },
+  133006: { classe: 'conta', mensagem: 'O número precisa ser verificado de novo na Meta.' },
+  135000: {
+    classe: 'conta',
+    mensagem: 'A Meta suspendeu os envios da conta para revisar a qualidade das mensagens. Aguarde a revisão antes de retomar.',
+  },
   100: { classe: 'conta', mensagem: 'A Meta recusou os dados da mensagem.' },
   131008: { classe: 'conta', mensagem: 'Falta um dado obrigatório na mensagem.' },
   131009: { classe: 'conta', mensagem: 'Um dado da mensagem está inválido.' },
@@ -53,10 +66,13 @@ const ERROS: Record<number, { classe: ClasseErro; mensagem: string }> = {
   133016: { classe: 'conta', mensagem: 'Tentativas de registro demais: a Meta bloqueou novas tentativas por 72 horas.' },
 }
 
-/** Erros que não estão na lista: falha só daquele contato (não trava a campanha). */
+/**
+ * Erros fora da lista pausam a campanha (por segurança: um erro novo da conta não pode
+ * gastar a lista inteira). O contato só vira "falhou" depois de várias tentativas.
+ */
 export function classeDoErro(codigo: number | null): ClasseErro {
   if (codigo === null) return 'repetir'
-  return ERROS[codigo]?.classe ?? 'contato'
+  return ERROS[codigo]?.classe ?? 'conta'
 }
 
 export function mensagemDoErro(codigo: number | null, original?: string | null): string {

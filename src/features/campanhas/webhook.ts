@@ -3,7 +3,7 @@ import 'server-only'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { whatsappCanonico } from '@/lib/whatsapp'
 
-import { aplicarStatusModelo, conferir, pausarPorErro } from './envio'
+import { aplicarStatusModelo, conferir, devolverPorFalhaDaConta } from './envio'
 import { classeDoErro, ERRO_SAIU_DO_MARKETING, mensagemDoErro } from './erros-meta'
 import { TEXTO_BOTAO_SAIR } from './mensagem'
 import { faixaDoLimite } from './meta'
@@ -75,45 +75,42 @@ async function descadastrar(supabase: Admin, numero: string | undefined) {
   }
 }
 
-/**
- * Falha da conta avisada depois do envio (ex.: foto inacessível, pagamento): o envio volta
- * para a fila e a campanha pausa — senão a lista inteira seria gasta com o mesmo erro.
- */
-async function pausarPelaFalha(supabase: Admin, wamid: string, mensagem: string) {
-  const { data: envio } = conferir(await supabase.from('campanha_envios').select('id, campanha_id').eq('wamid', wamid).maybeSingle())
-  if (!envio) return
-  conferir(await supabase.from('campanha_envios').update({ status: 'pendente', wamid: null, enviada_em: null }).eq('id', envio.id))
-  await pausarPorErro(supabase, envio.campanha_id, mensagem)
-}
-
 async function tratarMensagens(supabase: Admin, valor: Valor) {
-  for (const s of (valor.statuses as StatusMeta[] | undefined) ?? []) {
-    if (!s.id || !s.status) continue
+  const statuses = ((valor.statuses as StatusMeta[] | undefined) ?? []).filter((s) => s.id && s.status)
+  const comErro = statuses.map((s) => {
     const erro = s.errors?.[0]
     const codigo = erro?.code ?? null
-    const mensagem = mensagemDoErro(codigo, erro?.error_data?.details ?? erro?.message ?? erro?.title)
+    return { s, codigo, mensagem: mensagemDoErro(codigo, erro?.error_data?.details ?? erro?.message ?? erro?.title) }
+  })
+  // Todos os status do aviso num comando só (a Meta manda até 1.000 por vez).
+  if (comErro.length > 0) {
     conferir(
-      await supabase.rpc('atualizar_status_envio_campanha', {
-        p_wamid: s.id,
-        p_status: s.status,
-        p_quando: quando(s.timestamp),
-        p_erro_codigo: s.status === 'failed' ? (codigo ?? undefined) : undefined,
-        p_erro: s.status === 'failed' ? mensagem : undefined,
+      await supabase.rpc('atualizar_status_envios_campanha', {
+        p_status: comErro.map(({ s, codigo, mensagem }) => ({
+          wamid: s.id,
+          status: s.status,
+          quando: quando(s.timestamp),
+          erro_codigo: s.status === 'failed' ? codigo : null,
+          erro: s.status === 'failed' ? mensagem : null,
+        })),
       }),
     )
+  }
+  for (const { s, codigo, mensagem } of comErro) {
     if (s.status !== 'failed') continue
     if (codigo === ERRO_SAIU_DO_MARKETING) await descadastrar(supabase, s.recipient_id)
-    else if (classeDoErro(codigo) === 'conta') await pausarPelaFalha(supabase, s.id, mensagem)
+    else if (classeDoErro(codigo) === 'conta') await devolverPorFalhaDaConta(supabase, s.id as string, mensagem)
   }
 
   for (const m of (valor.messages as MensagemRecebida[] | undefined) ?? []) {
-    if (!m.from) continue
+    // Contato que esconde o número (ID da Meta, sem "from"): só dá para ligar pela mensagem respondida.
+    if (!m.from && !m.context?.id) continue
     const texto = textoDaMensagem(m)
     const saiu =
       (m.type === 'button' && (m.button?.payload === PAYLOAD_SAIR || m.button?.text === TEXTO_BOTAO_SAIR)) || pedidoParaSair(texto)
     conferir(
       await supabase.rpc('registrar_resposta_campanha', {
-        p_wa_id: m.from,
+        p_wa_id: m.from ?? '',
         p_texto: texto,
         p_quando: quando(m.timestamp),
         p_saiu: saiu,

@@ -154,5 +154,6 @@ export async function enviarModelo(c: CredenciaisMeta, para: string, modelo: Mod
   )
   const wamid = r.messages?.[0]?.id
   if (!wamid) throw new ErroMeta('A Meta não devolveu o id da mensagem.', null)
-  return { wamid, waId: r.contacts?.[0]?.wa_id ?? null }
+  // "held_for_quality_assessment": aceita, mas retida enquanto a Meta avalia a qualidade (pacing).
+  return { wamid, waId: r.contacts?.[0]?.wa_id ?? null, retida: r.messages?.[0]?.message_status === 'held_for_quality_assessment' }
 }

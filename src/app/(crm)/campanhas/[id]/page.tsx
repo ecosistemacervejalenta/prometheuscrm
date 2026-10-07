@@ -34,6 +34,9 @@ import { obterConfiguracoes } from '@/features/configuracoes/queries'
 import { formatarDataHora, formatarNumero, formatarRelativo, formatarWhatsapp } from '@/lib/format'
 import { linkWhatsapp } from '@/lib/whatsapp'
 
+// As ações desta página falam com a Meta (criação do modelo, foto, verificação): até 5 min.
+export const maxDuration = 300
+
 export async function generateMetadata({ params }: PageProps<'/campanhas/[id]'>): Promise<Metadata> {
   const campanha = await obterCampanha((await params).id)
   return { title: campanha?.nome ?? 'Campanha' }
@@ -64,6 +67,15 @@ function Aviso({ campanha, limite }: { campanha: NonNullable<Awaited<ReturnType<
         </Alert>
       )
     case 'enviando':
+      if (campanha.pausada_motivo === 'retida') {
+        return (
+          <Alert tom="alerta" titulo="A Meta está avaliando as primeiras mensagens">
+            Em contas novas, a Meta segura parte das mensagens até medir a reação dos clientes. O envio continua sozinho
+            {campanha.aguardar_ate ? ` a partir de ${formatarDataHora(campanha.aguardar_ate)}` : ''}; se a qualidade for baixa, a Meta pausa a
+            mensagem e a campanha avisa aqui.
+          </Alert>
+        )
+      }
       return campanha.pausada_motivo === 'limite' ? (
         <Alert tom="alerta" titulo="Limite diário atingido">
           O número pode falar com {limite.toLowerCase()} diferentes a cada 24 h. O envio continua sozinho assim que o limite liberar.
@@ -111,7 +123,7 @@ export default async function PaginaCampanha({ params }: PageProps<'/campanhas/[
 
   const [respostas, falhas, conexao, config] = await Promise.all([
     respostasDaCampanha(id),
-    falhasDaCampanha(id),
+    (campanha.falhas ?? 0) + (campanha.ignoradas ?? 0) > 0 ? falhasDaCampanha(id) : Promise.resolve([]),
     conexaoMeta(),
     obterConfiguracoes(),
   ])

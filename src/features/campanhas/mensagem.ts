@@ -7,7 +7,7 @@ import { envPublico } from '@/lib/env'
  * Funções puras: rodam no navegador (prévia ao digitar) e no servidor.
  */
 
-export const LIMITES_MENSAGEM = { texto: 1024, rodape: 60, botao: 25 } as const
+export const LIMITES_MENSAGEM = { texto: 1024, rodape: 60, botao: 25, url: 2000 } as const
 export const IMAGEM_MAXIMA = 5 * 1024 * 1024
 export const TIPOS_IMAGEM = ['image/jpeg', 'image/png']
 
@@ -28,6 +28,10 @@ export type CampoMensagem = 'texto' | 'nomePadrao' | 'rodape' | 'botaoTexto' | '
 export const TEXTO_BOTAO_SAIR = 'Não quero receber'
 
 const VARIAVEIS = /\{(\w+)\}/g
+const EMOJI = /\p{Extended_Pictographic}/u
+
+/** Tamanho que a Meta conta: {nome} vira {{nome}} no modelo. */
+export const tamanhoNaMeta = (texto: string) => texto.trim().replaceAll(VARIAVEL_NOME, '{{nome}}').length
 
 /** Problemas da mensagem por campo (vazio = pronta para a análise da Meta). */
 export function validarMensagem(m: MensagemCampanha): Partial<Record<CampoMensagem, string>> {
@@ -36,7 +40,9 @@ export function validarMensagem(m: MensagemCampanha): Partial<Record<CampoMensag
 
   const desconhecidas = [...texto.matchAll(VARIAVEIS)].map((v) => v[0]).filter((v) => v !== VARIAVEL_NOME)
   if (!texto) erros.texto = 'Escreva a mensagem.'
-  else if (texto.length > LIMITES_MENSAGEM.texto) erros.texto = `Use no máximo ${LIMITES_MENSAGEM.texto.toLocaleString('pt-BR')} caracteres.`
+  else if (tamanhoNaMeta(texto) > LIMITES_MENSAGEM.texto) {
+    erros.texto = `Use no máximo ${LIMITES_MENSAGEM.texto.toLocaleString('pt-BR')} caracteres (cada {nome} conta como 8).`
+  }
   else if (desconhecidas.length > 0) erros.texto = `Só ${VARIAVEL_NOME} é preenchido automaticamente — tire ${desconhecidas[0]}.`
   else if (texto.startsWith(VARIAVEL_NOME) || texto.endsWith(VARIAVEL_NOME)) {
     erros.texto = `A Meta recusa mensagens que começam ou terminam com ${VARIAVEL_NOME}. Ex.: “Olá, {nome}! …”`
@@ -51,7 +57,9 @@ export function validarMensagem(m: MensagemCampanha): Partial<Record<CampoMensag
     const rotulo = m.botaoLink.texto.trim()
     if (!rotulo) erros.botaoTexto = 'Escreva o texto do botão.'
     else if (rotulo.length > LIMITES_MENSAGEM.botao) erros.botaoTexto = `Use no máximo ${LIMITES_MENSAGEM.botao} caracteres.`
+    else if (EMOJI.test(rotulo)) erros.botaoTexto = 'A Meta não aceita emoji no texto do botão.'
     if (!urlValida(m.botaoLink.url)) erros.botaoUrl = 'Cole o link completo, começando com https://'
+    else if (m.botaoLink.url.trim().length > LIMITES_MENSAGEM.url) erros.botaoUrl = 'Link grande demais (a Meta aceita até 2.000 caracteres).'
   }
 
   return erros

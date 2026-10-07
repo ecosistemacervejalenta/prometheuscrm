@@ -21,7 +21,7 @@ import type { ConexaoMeta } from '../meta'
 
 const CHAVE_MARCADOS = 'prometheus:guia-meta'
 const EVENTO_MARCADOS = 'prometheus:guia-meta'
-const CAMPOS_WEBHOOK = ['messages', 'message_template_status_update', 'phone_number_quality_update']
+const CAMPOS_WEBHOOK = ['messages', 'message_template_status_update', 'user_preferences', 'business_capability_update', 'phone_number_quality_update']
 
 function lerMarcados(): string {
   try {
@@ -121,12 +121,12 @@ export function GuiaMeta({ conexao, urlWebhook, ehAdmin }: { conexao: ConexaoMet
             Em developers.facebook.com, clique em <strong>Criar app</strong>.
           </li>
           <li>
-            Escolha o uso <strong>Conectar-se com clientes pelo WhatsApp</strong> (ou o tipo <strong>Empresa</strong>) e selecione o
-            portfólio do passo 1.
+            Escolha o caso de uso <strong>Conectar-se com clientes pelo WhatsApp</strong> (Connect with customers through WhatsApp) e
+            selecione o portfólio do passo 1.
           </li>
           <li>
-            No painel do app, adicione o produto <strong>WhatsApp</strong>. A Meta cria a conta do WhatsApp Business e um número de
-            teste.
+            Em <strong>Casos de uso › Personalizar › Conectar no WhatsApp</strong>, clique em <strong>Começar a usar a API</strong>. Na
+            seção <strong>Configuração da API</strong> (API Setup), escolha uma conta do WhatsApp Business ou crie uma nova.
           </li>
           <li>
             Quando terminar, publique o app (modo <strong>Ao vivo</strong> no painel): alguns avisos do webhook só chegam com o app
@@ -149,8 +149,8 @@ export function GuiaMeta({ conexao, urlWebhook, ehAdmin }: { conexao: ConexaoMet
           <Lista>
             <li>Separe um chip novo (ou um número que não esteja em nenhum WhatsApp).</li>
             <li>
-              No app: <strong>WhatsApp › Configuração da API</strong> (API Setup) › <strong>Adicionar número de telefone</strong>.
-              Confirme pelo código por SMS ou ligação e crie o PIN de 6 dígitos da confirmação em duas etapas.
+              No app: <strong>Casos de uso › Personalizar › Configuração da API</strong> (API Setup) ›{' '}
+              <strong>Adicionar número de telefone</strong>. Confirme pelo código por SMS ou ligação.
             </li>
             <li>Escolha o nome de exibição (ex.: o nome da loja) — a Meta revisa o nome antes de liberar.</li>
           </Lista>
@@ -170,7 +170,11 @@ export function GuiaMeta({ conexao, urlWebhook, ehAdmin }: { conexao: ConexaoMet
           <li>
             No Gerenciador do WhatsApp, abra <strong>Visão geral › Adicionar forma de pagamento</strong> e cadastre um cartão.
           </li>
-          <li>A cobrança é por mensagem de marketing entregue, em dólar, direto da Meta.</li>
+          <li>
+            Cobre em <strong>reais (BRL)</strong>: no Billing Hub, deixe o país de faturamento (Sold-To) como Brasil. Desde julho de 2026
+            contas do Brasil podem ser em BRL, e a partir de julho de 2027 a Meta não entrega mensagens de contas brasileiras em outra moeda.
+          </li>
+          <li>A cobrança é por mensagem de marketing entregue, direto da Meta.</li>
         </Lista>
       ),
     },
@@ -193,7 +197,8 @@ export function GuiaMeta({ conexao, urlWebhook, ehAdmin }: { conexao: ConexaoMet
             </li>
             <li>
               <strong>Gerar novo token</strong>: escolha o app, validade <strong>Nunca</strong> e as permissões{' '}
-              <Codigo>whatsapp_business_messaging</Codigo> e <Codigo>whatsapp_business_management</Codigo>.
+              <Codigo>business_management</Codigo>, <Codigo>whatsapp_business_management</Codigo> e{' '}
+              <Codigo>whatsapp_business_messaging</Codigo>.
             </li>
             <li>
               Copie o token na hora (a Meta mostra uma vez só) e cole no campo <strong>Token permanente</strong> do formulário acima.
@@ -215,7 +220,8 @@ export function GuiaMeta({ conexao, urlWebhook, ehAdmin }: { conexao: ConexaoMet
       conteudo: (
         <Lista>
           <li>
-            No app, abra <strong>WhatsApp › Configuração da API</strong> e selecione o número de campanhas em “De” (From).
+            No app, abra <strong>Casos de uso › Personalizar › Configuração da API</strong> e selecione o número de campanhas em “De”
+            (From).
           </li>
           <li>
             Copie a <strong>Identificação do número de telefone</strong> (Phone number ID) → campo <strong>ID do número</strong>.
@@ -227,6 +233,10 @@ export function GuiaMeta({ conexao, urlWebhook, ehAdmin }: { conexao: ConexaoMet
           <li>
             Em <strong>Configurações do app › Básico</strong>, copie o <strong>ID do app</strong> e, em Mostrar, a{' '}
             <strong>Chave secreta do app</strong> (App secret).
+          </li>
+          <li>
+            No campo <strong>PIN do número</strong>: se o número já tem confirmação em duas etapas, use o PIN dela; se nunca teve, os 6
+            dígitos que você digitar viram o PIN (guarde-o). A Meta aceita no máximo 10 tentativas de registro em 72 horas.
           </li>
           <li>
             Clique em <strong>Salvar e testar conexão</strong>. O token e a chave ficam criptografados no banco — ninguém consegue vê-los
@@ -246,7 +256,8 @@ export function GuiaMeta({ conexao, urlWebhook, ehAdmin }: { conexao: ConexaoMet
       conteudo: (
         <div className="space-y-3">
           <p>
-            No app, abra <strong>WhatsApp › Configuração</strong>, clique em <strong>Editar</strong> no Webhook e cole:
+            No app, abra <strong>Casos de uso › Personalizar › Configuração</strong> (Configuration), clique em <strong>Editar</strong>{' '}
+            no Webhook e cole:
           </p>
           <CampoCopiavel rotulo="URL de retorno (Callback URL)" valor={urlWebhook} />
           {ehAdmin && conexao.token_verificacao ? (
@@ -359,8 +370,9 @@ export function GuiaMeta({ conexao, urlWebhook, ehAdmin }: { conexao: ConexaoMet
               <strong>Deixe o botão “Não quero receber”</strong> em toda campanha: sair é melhor do que bloquear ou denunciar.
             </li>
             <li>
-              <strong>Comece pequeno</strong> — o limite sobe sozinho (250 → 2 mil → 10 mil → 100 mil → ilimitado por dia) quando a
-              qualidade está boa e você usa o limite atual.
+              <strong>Comece pequeno</strong> — contas novas falam com 250 contatos por dia. Para chegar a 2 mil, verifique a empresa ou
+              some 2 mil mensagens entregues em 30 dias; depois o limite sobe sozinho (10 mil → 100 mil → ilimitado) quando a qualidade
+              está boa e você usa o limite atual.
             </li>
             <li>
               <strong>Não repita a mesma pessoa em seguida</strong>: espace as campanhas e varie a mensagem.

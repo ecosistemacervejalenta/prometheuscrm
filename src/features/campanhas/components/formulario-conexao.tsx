@@ -17,10 +17,10 @@ export function FormularioConexao({ conexao }: { conexao: ConexaoMeta }) {
         <Field label="ID do app" name="app_id" obrigatorio dica="Configurações do app › Básico">
           <Input name="app_id" inputMode="numeric" autoComplete="off" defaultValue={conexao.app_id ?? ''} placeholder="Ex.: 1234567890123456" />
         </Field>
-        <Field label="ID do número" name="phone_number_id" obrigatorio dica="WhatsApp › Configuração da API">
+        <Field label="ID do número" name="phone_number_id" obrigatorio dica="Casos de uso › Personalizar › Configuração da API">
           <Input name="phone_number_id" inputMode="numeric" autoComplete="off" defaultValue={conexao.phone_number_id ?? ''} />
         </Field>
-        <Field label="ID da conta do WhatsApp" name="waba_id" obrigatorio dica="WhatsApp › Configuração da API">
+        <Field label="ID da conta do WhatsApp" name="waba_id" obrigatorio dica="Casos de uso › Personalizar › Configuração da API">
           <Input name="waba_id" inputMode="numeric" autoComplete="off" defaultValue={conexao.waba_id ?? ''} />
         </Field>
       </div>
@@ -47,7 +47,7 @@ export function FormularioConexao({ conexao }: { conexao: ConexaoMeta }) {
             placeholder={conexao.tem_app_secret ? '•••••••• salva' : ''}
           />
         </Field>
-        <Field label="PIN do número" name="pin" dica="6 dígitos. Registra o número na API — só na 1ª vez.">
+        <Field label="PIN do número" name="pin" dica="Da confirmação em duas etapas (se nunca teve, os 6 dígitos viram o PIN). Só na 1ª vez.">
           <Input name="pin" inputMode="numeric" autoComplete="off" maxLength={6} />
         </Field>
       </div>

@@ -128,10 +128,10 @@ export async function confirmarCampanha(campanhaId: string): Promise<EstadoAcao>
   if (error) return falha(traduzirErro(error))
 
   // Confirmada, a campanha já existe: se a análise falhar, a página dela mostra o motivo e o "tentar de novo".
+  // Sem revalidatePath: a tela vai direto para a página da campanha (renderizada na hora).
   const site = await urlDoSite()
   const analise = await pedirARotina(site, { acao: 'analisar', campanhaId })
   acordarEnvios(site)
-  atualizarTelas(campanhaId)
   return sucesso(analise.mensagem)
 }
 

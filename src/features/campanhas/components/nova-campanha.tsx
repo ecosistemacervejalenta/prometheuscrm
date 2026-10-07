@@ -44,6 +44,7 @@ import { adicionarContatosCampanha, confirmarCampanha, criarCampanha } from '../
 import {
   IMAGEM_MAXIMA,
   LIMITES_MENSAGEM,
+  tamanhoNaMeta,
   TEXTO_BOTAO_SAIR,
   TIPOS_IMAGEM,
   validarMensagem,
@@ -345,10 +346,11 @@ export function NovaCampanha({
   async function disparar() {
     const parar = (erro: string) => setDisparo((d) => ({ ...d, executando: false, etapa: '', erro }))
     const etapa = (texto: string) => setDisparo((d) => ({ ...d, etapa: texto }))
-    const campanhaId = disparo.campanhaId ?? crypto.randomUUID()
     let { imagemPath, enviados } = disparo
-    setDisparo((d) => ({ ...d, executando: true, erro: null, campanhaId }))
+    setDisparo((d) => ({ ...d, executando: true, erro: null }))
     try {
+      const campanhaId = disparo.campanhaId ?? crypto.randomUUID()
+      setDisparo((d) => ({ ...d, campanhaId }))
       if (!disparo.criada) {
         if (imagem && !imagemPath) {
           etapa('Enviando a foto…')
@@ -610,7 +612,7 @@ export function NovaCampanha({
                     >
                       + {VARIAVEL_NOME}
                     </button>
-                    <Contador atual={mensagem.texto.trim().length} maximo={LIMITES_MENSAGEM.texto} />
+                    <Contador atual={tamanhoNaMeta(mensagem.texto)} maximo={LIMITES_MENSAGEM.texto} />
                   </div>
                 </div>
                 <textarea
@@ -697,6 +699,12 @@ export function NovaCampanha({
                   checked={mensagem.botaoSair}
                   onChange={(e) => setMensagem({ ...mensagem, botaoSair: e.target.checked })}
                 />
+                {mensagem.botaoLink && mensagem.botaoSair && (
+                  <p className="pl-[30px] text-[12px] text-suave">
+                    Com o link e o “{TEXTO_BOTAO_SAIR}” juntos, a mensagem só abre no WhatsApp do celular (no do computador aparece um
+                    aviso para abrir no celular). Regra da Meta.
+                  </p>
+                )}
               </div>
 
               <div className="lg:hidden">
@@ -779,7 +787,7 @@ export function NovaCampanha({
                   <dd className="text-[13px] text-suave">
                     {limite !== null && totalPublico > limite
                       ? `Saem até ${formatarNumero(limite)} por dia; o resto continua sozinho nos dias seguintes.`
-                      : 'Números novos começam com 250 por dia; a Meta aumenta conforme a qualidade.'}
+                      : 'Contas novas começam com 250 por dia; para 2 mil é preciso verificar a empresa ou somar 2 mil entregas em 30 dias.'}
                   </dd>
                 </div>
                 <div>

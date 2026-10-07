@@ -743,13 +743,19 @@ await db.exec(`reset role;`)
   expectEq('o que foi reservado não sai de novo', (await q(`select * from reservar_envios_campanha($1, 10)`, [campanha.id])).length, 0)
   await q(`update campanha_envios set status = 'enviada', wamid = 'wamid.A', enviada_em = now() where id = $1`, [lote[0].id])
   expectEq('limite diário conta contatos das últimas 24 h', (await um(`select contatos_campanha_24h() n`)).n, 1)
-  await q(`select atualizar_status_envio_campanha('wamid.A', 'read', now())`)
-  await q(`select atualizar_status_envio_campanha('wamid.A', 'delivered', now())`)
-  expectEq('status nunca volta (lida continua lida)', await um(`select status, entregue_em is not null entregue from campanha_envios where wamid = 'wamid.A'`), { status: 'lida', entregue: true })
+  await q(`select atualizar_status_envios_campanha($1::jsonb)`, [JSON.stringify([
+    { wamid: 'wamid.A', status: 'read', quando: '2026-10-07T12:02:00Z' },
+    { wamid: 'wamid.A', status: 'delivered', quando: '2026-10-07T12:01:00Z' },
+    { wamid: 'wamid.inexistente', status: 'delivered', quando: '2026-10-07T12:01:00Z' },
+  ])])
+  await q(`select atualizar_status_envios_campanha($1::jsonb)`, [JSON.stringify([{ wamid: 'wamid.A', status: 'delivered', quando: '2026-10-07T12:05:00Z' }])])
+  expectEq('status em lote somados e nunca voltam (lida continua lida)', await um(`select status, entregue_em = '2026-10-07T12:01:00Z' entregue from campanha_envios where wamid = 'wamid.A'`), { status: 'lida', entregue: true })
   await q(`select registrar_resposta_campanha('5511912345678', 'Não quero receber', now(), true, 'wamid.A')`)
   expectEq('botão "Não quero receber" registra a saída', await um(`select (select saiu_em is not null from campanha_envios where wamid = 'wamid.A') saiu,
     (select origem from whatsapp_descadastros where whatsapp = '5511912345678') origem`), { saiu: true, origem: 'botao' })
   await q(`select registrar_resposta_campanha('5521999998888', 'pare', now(), true)`)
+  await q(`select registrar_resposta_campanha('', 'sair', now(), true)`)
+  expectEq('resposta sem número (ID da Meta) não cria descadastro vazio', (await um(`select count(*)::int n from whatsapp_descadastros where whatsapp = ''`)).n, 0)
   expectEq('"pare" de quem não está em campanha também descadastra', (await um(`select origem from whatsapp_descadastros where whatsapp = '5521999998888'`)).origem, 'mensagem')
   expectEq('vw_campanhas soma os números', await um(`select total, enviadas, entregues, lidas, respostas, ignoradas, sairam, pendentes from vw_campanhas where id = $1`, [campanha.id]),
     { total: 2, enviadas: 1, entregues: 1, lidas: 1, respostas: 1, ignoradas: 1, sairam: 1, pendentes: 0 })

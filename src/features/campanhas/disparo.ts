@@ -30,6 +30,11 @@ export async function pedirARotina(site: string, pedido: PedidoRotina): Promise<
       body: JSON.stringify(pedido),
       cache: 'no-store',
     })
+    if (!resposta.ok) {
+      const corpo = (await resposta.json().catch(() => null)) as { mensagem?: string; erro?: string } | null
+      console.error('[campanhas] rotina respondeu', resposta.status, corpo)
+      return { ok: false, mensagem: corpo?.mensagem ?? `A rotina de envio recusou o pedido (${corpo?.erro ?? `HTTP ${resposta.status}`}).` }
+    }
     return (await resposta.json()) as RespostaRotina
   } catch (erro) {
     console.error('[campanhas] rotina indisponível', erro)
@@ -37,13 +42,22 @@ export async function pedirARotina(site: string, pedido: PedidoRotina): Promise<
   }
 }
 
-/** Acorda a rotina de envio em segundo plano, depois de responder a quem chamou. */
+/**
+ * Acorda a rotina de envio em segundo plano, depois de responder a quem chamou.
+ * Não espera a rodada terminar (até 4 min): depois de 10 s a ligação é solta e a rotina
+ * segue sozinha — a Vercel só cancela uma função quando `supportsCancellation` está ligado.
+ */
 export function acordarEnvios(site: string) {
   if (!envServidor.cronSecret) return
   const segredo = envServidor.cronSecret
   after(() =>
-    fetch(`${site}/api/cron/campanhas`, { headers: { Authorization: `Bearer ${segredo}` }, cache: 'no-store' }).catch((erro) =>
-      console.error('[campanhas] não foi possível acordar a rotina de envio', erro),
-    ),
+    fetch(`${site}/api/cron/campanhas`, {
+      headers: { Authorization: `Bearer ${segredo}` },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(10_000),
+    }).catch((erro) => {
+      if (erro instanceof Error && erro.name === 'TimeoutError') return
+      console.error('[campanhas] não foi possível acordar a rotina de envio', erro)
+    }),
   )
 }
