@@ -5,7 +5,7 @@ import { GuiaMeta } from '@/features/campanhas/components/guia-meta'
 import { conexaoMeta, contarDescadastros } from '@/features/campanhas/queries'
 import { CabecalhoConfiguracoes } from '@/features/configuracoes/components/cabecalho'
 import { exigirEquipe } from '@/lib/auth'
-import { urlDoSite } from '@/lib/url'
+import { urlDaRequisicao } from '@/lib/url'
 
 export const metadata: Metadata = { title: 'WhatsApp oficial' }
 
@@ -15,7 +15,7 @@ export const maxDuration = 300
 export default async function PaginaWhatsappOficial() {
   const { perfil } = await exigirEquipe()
   const ehAdmin = perfil.papel === 'admin'
-  const [conexao, descadastros, site] = await Promise.all([conexaoMeta(), contarDescadastros(), urlDoSite()])
+  const [conexao, descadastros, site] = await Promise.all([conexaoMeta(), contarDescadastros(), urlDaRequisicao()])
 
   return (
     <>

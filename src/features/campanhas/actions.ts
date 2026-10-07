@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 
 import { errosDeValidacao, falha, sucesso, traduzirErro, type EstadoAcao } from '@/lib/acoes'
 import { exigirAdmin, exigirEquipe } from '@/lib/auth'
-import { urlDoSite } from '@/lib/url'
+import { urlDaRequisicao } from '@/lib/url'
 import { formParaObjeto, whatsapp } from '@/lib/validacao'
 
 import { acordarEnvios, pedirARotina } from './disparo'
@@ -35,14 +35,14 @@ export async function salvarConexaoMeta(_: EstadoAcao, formData: FormData): Prom
   if (error) return falha(traduzirErro(error))
 
   // Confere na Meta com o que acabou de ser salvo (o token só o servidor lê).
-  const verificacao = await pedirARotina(await urlDoSite(), { acao: 'verificar', pin: dados.data.pin })
+  const verificacao = await pedirARotina(await urlDaRequisicao(), { acao: 'verificar', pin: dados.data.pin })
   atualizarTelas()
   return verificacao.ok ? sucesso(verificacao.mensagem) : falha(verificacao.mensagem)
 }
 
 export async function verificarConexaoMeta(): Promise<EstadoAcao> {
   await exigirEquipe()
-  const verificacao = await pedirARotina(await urlDoSite(), { acao: 'verificar' })
+  const verificacao = await pedirARotina(await urlDaRequisicao(), { acao: 'verificar' })
   atualizarTelas()
   return verificacao.ok ? sucesso(verificacao.mensagem) : falha(verificacao.mensagem)
 }
@@ -129,7 +129,7 @@ export async function confirmarCampanha(campanhaId: string): Promise<EstadoAcao>
 
   // Confirmada, a campanha já existe: se a análise falhar, a página dela mostra o motivo e o "tentar de novo".
   // Sem revalidatePath: a tela vai direto para a página da campanha (renderizada na hora).
-  const site = await urlDoSite()
+  const site = await urlDaRequisicao()
   const analise = await pedirARotina(site, { acao: 'analisar', campanhaId })
   acordarEnvios(site)
   return sucesso(analise.mensagem)
@@ -172,7 +172,7 @@ export async function retomarCampanha(id: string): Promise<EstadoAcao> {
     .eq('status', 'pausada')
   if (error) return falha(traduzirErro(error))
 
-  if (status === 'enviando') acordarEnvios(await urlDoSite())
+  if (status === 'enviando') acordarEnvios(await urlDaRequisicao())
   atualizarTelas(id)
   return sucesso(status === 'enviando' ? 'Envio retomado.' : 'Campanha retomada.')
 }
@@ -223,7 +223,7 @@ export async function reenviarParaAnalise(id: string): Promise<EstadoAcao> {
   if (error) return falha(traduzirErro(error))
   if (data.length === 0) return falha('Esta campanha não está esperando um novo envio para a Meta.')
 
-  const site = await urlDoSite()
+  const site = await urlDaRequisicao()
   const analise = await pedirARotina(site, { acao: 'analisar', campanhaId: id })
   acordarEnvios(site)
   atualizarTelas(id)
@@ -236,7 +236,7 @@ export async function enviarTesteCampanha(_: EstadoAcao, formData: FormData): Pr
   const numero = whatsapp.safeParse(formData.get('numero'))
   if (!numero.success) return { ok: false, erros: { numero: [numero.error.issues[0]?.message ?? 'WhatsApp inválido.'] } }
 
-  const teste = await pedirARotina(await urlDoSite(), {
+  const teste = await pedirARotina(await urlDaRequisicao(), {
     acao: 'teste',
     campanhaId,
     numero: numero.data,

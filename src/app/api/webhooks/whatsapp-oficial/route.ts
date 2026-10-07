@@ -6,7 +6,7 @@ import { lerCredenciais } from '@/features/campanhas/envio'
 import { tratarAvisoMeta, type AvisoMeta } from '@/features/campanhas/webhook'
 import { segredosIguais } from '@/features/integracoes/api-auth'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { urlDoSite } from '@/lib/url'
+import { urlDaRequisicao } from '@/lib/url'
 
 // Um aviso traz até 1.000 status; os status vão para o banco num comando só.
 export const maxDuration = 60
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
   try {
     // Modelo aprovado: a rotina de envio começa logo, sem esperar o próximo cron.
     const conta = { phoneNumberId: credenciais.phone_number_id, wabaId: credenciais.waba_id }
-    if (await tratarAvisoMeta(supabase, aviso, conta)) acordarEnvios(await urlDoSite())
+    if (await tratarAvisoMeta(supabase, aviso, conta)) acordarEnvios(await urlDaRequisicao())
   } catch (e) {
     // 500 faz a Meta reenviar o aviso depois (tudo aqui é idempotente).
     console.error('[whatsapp-oficial] falha ao tratar aviso', e)
