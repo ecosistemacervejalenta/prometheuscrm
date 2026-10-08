@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import type { AbaAtendimento, ItemCaixaEntrada } from '../queries'
 import { EtiquetaChip } from './etiqueta'
 import { FotoContato } from './foto-contato'
+import { BotaoTema } from './tema-atendimento'
 
 const ROTULOS_ABAS: Record<AbaAtendimento, string> = {
   fila: 'Fila',
@@ -70,7 +71,10 @@ export function ListaConversas({
       <div className="space-y-3 border-b border-linha p-3">
         <div className="flex items-center justify-between gap-2 px-1">
           <h1 className="tipo-h3">Atendimento</h1>
-          {avisos}
+          <div className="flex items-center gap-1">
+            {avisos}
+            <BotaoTema />
+          </div>
         </div>
         <nav className="flex gap-0.5 rounded-xl bg-ink/[0.06] p-1" aria-label="Filas de atendimento">
           {(Object.keys(ROTULOS_ABAS) as AbaAtendimento[]).map((chave) => {
@@ -146,7 +150,7 @@ export function ListaConversas({
                         {item.ultima_mensagem_previa ? semFormatacao(item.ultima_mensagem_previa) : 'Sem mensagens'}
                       </p>
                       {naoLidas > 0 && (
-                        <span className="tipo-dado grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-volt px-1.5 text-[11px] text-ink">
+                        <span className="tipo-dado grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-volt px-1.5 text-[11px] text-ink escuro:text-ink-900">
                           {naoLidas}
                         </span>
                       )}

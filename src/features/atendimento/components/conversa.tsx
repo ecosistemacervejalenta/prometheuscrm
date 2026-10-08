@@ -205,7 +205,7 @@ function Bolha({ m, autor }: { m: MensagemConversa; autor: string | null }) {
       <div
         className={cn(
           'max-w-[85%] min-w-0 rounded-2xl px-3 py-2 text-[14px] leading-[21px] shadow-cartao @2xl:max-w-[70%]',
-          saida ? 'rounded-br-md bg-whatsapp-50 ring-1 ring-whatsapp/15' : 'rounded-bl-md bg-superficie ring-1 ring-linha',
+          saida ? 'rounded-br-md bg-whatsapp-50 ring-1 ring-whatsapp/15' : 'rounded-bl-md bg-superficie ring-1 ring-linha escuro:bg-ink-700 escuro:ring-transparent',
           m.status === 'falhou' && 'ring-perigo/40',
         )}
       >
@@ -514,7 +514,7 @@ export function Conversa({
       </div>
 
       {/* Painel do contato: fixo no desktop largo, gaveta nas telas menores */}
-      {painel && <button type="button" aria-label="Fechar detalhes" onClick={() => setPainel(false)} className="animar-fundo fixed inset-0 z-40 bg-ink/40 2xl:hidden" />}
+      {painel && <button type="button" aria-label="Fechar detalhes" onClick={() => setPainel(false)} className="animar-fundo fixed inset-0 z-40 bg-ink/40 escuro:bg-black/60 2xl:hidden" />}
       <aside
         className={cn(
           'min-h-0 w-[320px] shrink-0 overflow-y-auto border-l border-linha bg-superficie',

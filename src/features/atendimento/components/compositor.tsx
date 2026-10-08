@@ -392,7 +392,7 @@ export function Compositor({
             disabled={voz.gravando}
             className={cn(
               'inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-[12px] font-semibold transition-colors',
-              modo === m ? (m === 'nota' ? 'bg-vip text-ink' : 'bg-ink text-white') : 'text-suave hover:bg-ink/5 hover:text-ink',
+              modo === m ? (m === 'nota' ? 'bg-vip text-ink escuro:text-ink-900' : 'bg-ink text-white escuro:bg-ink-600') : 'text-suave hover:bg-ink/5 hover:text-ink',
             )}
           >
             {m === 'nota' ? <StickyNote className="size-3.5" aria-hidden /> : <SendHorizontal className="size-3.5" aria-hidden />}

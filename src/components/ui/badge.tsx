@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 const TONS: Record<Tom, string> = {
   volt: 'bg-volt-100 text-volt-700',
   neutro: 'bg-papel text-suave ring-1 ring-inset ring-linha',
-  escuro: 'bg-ink text-white',
+  escuro: 'bg-ink text-white escuro:bg-ink-600',
   shopify: 'bg-shopify-50 text-shopify-700',
   app: 'bg-app-50 text-app-700',
   vip: 'bg-vip-50 text-vip-700',

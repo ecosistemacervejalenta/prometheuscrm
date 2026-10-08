@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { MessagesSquare, Settings } from 'lucide-react'
+import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 
 import { Alert } from '@/components/ui/alert'
@@ -7,6 +8,7 @@ import { ButtonLink } from '@/components/ui/button'
 import { AtualizacaoAoVivo } from '@/features/atendimento/components/ao-vivo'
 import { Conversa } from '@/features/atendimento/components/conversa'
 import { hrefConversa, ListaConversas } from '@/features/atendimento/components/lista-conversas'
+import { TemaAtendimento } from '@/features/atendimento/components/tema-atendimento'
 import {
   ABAS_ATENDIMENTO,
   configAtendimento,
@@ -17,6 +19,7 @@ import {
   obterConversa,
   type AbaAtendimento,
 } from '@/features/atendimento/queries'
+import { COOKIE_TEMA_ATENDIMENTO } from '@/features/atendimento/tema'
 import { uazapiConfigurada } from '@/features/atendimento/uazapi'
 import { exigirEquipe } from '@/lib/auth'
 import { cn, param } from '@/lib/utils'
@@ -31,18 +34,19 @@ export default async function PaginaAtendimento({ searchParams }: PageProps<'/at
   const termo = param(busca.q)
   const id = param(busca.id)
 
-  const [itens, contagens, conversa, equipe, config, etiquetas] = await Promise.all([
+  const [itens, contagens, conversa, equipe, config, etiquetas, cookiesSalvos] = await Promise.all([
     listarAtendimentos({ aba, busca: termo }),
     contagensAtendimento(),
     id ? obterConversa(id) : null,
     listarEquipe(),
     configAtendimento(),
     id ? listarEtiquetas() : [],
+    cookies(),
   ])
   if (id && !conversa) notFound()
 
   return (
-    <>
+    <TemaAtendimento inicial={cookiesSalvos.get(COOKIE_TEMA_ATENDIMENTO)?.value === 'escuro'}>
       {!uazapiConfigurada() && (
         <Alert tom="alerta" titulo="WhatsApp ainda não conectado" className="mb-3">
           Cadastre UAZAPI_URL e UAZAPI_TOKEN na Vercel e ative o webhook em Configurações › Integrações.
@@ -96,6 +100,6 @@ export default async function PaginaAtendimento({ searchParams }: PageProps<'/at
           </div>
         )}
       </div>
-    </>
+    </TemaAtendimento>
   )
 }

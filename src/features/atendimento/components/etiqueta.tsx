@@ -51,7 +51,7 @@ export function EtiquetaChip({
         'inline-flex max-w-full min-w-0 items-center gap-1 rounded-md font-semibold',
         tamanho === 'sm' ? 'h-5 px-1.5 text-[11px]' : 'h-6 px-2 text-[12px]',
         FUNDO_ETIQUETA[etiqueta.cor] ?? FUNDO_ETIQUETA.cinza,
-        etiqueta.cor === 'amarelo' ? 'text-ink' : 'text-white',
+        etiqueta.cor === 'amarelo' ? 'text-ink escuro:text-ink-900' : 'text-white',
         className,
       )}
     >

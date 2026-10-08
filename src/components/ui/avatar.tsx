@@ -20,7 +20,7 @@ export function Avatar({
         tamanho === 'sm' && 'size-8 text-[11px]',
         tamanho === 'md' && 'size-9 text-xs',
         tamanho === 'lg' && 'size-16 rounded-2xl text-xl',
-        variante === 'claro' ? 'bg-papel text-ink ring-1 ring-linha' : 'bg-volt text-ink',
+        variante === 'claro' ? 'bg-papel text-ink ring-1 ring-linha' : 'bg-volt text-ink escuro:text-ink-900',
         className,
       )}
     >

@@ -113,7 +113,7 @@ export function PainelContato({
                     onClick={() => executar(() => alterarStatusAtendimento(id, s))}
                     className={cn(
                       'h-9 rounded-lg border px-2 text-[12px] font-semibold transition-colors disabled:cursor-default',
-                      atual ? 'border-ink bg-ink text-white' : 'border-linha bg-superficie text-ink hover:border-linha-forte hover:bg-papel',
+                      atual ? 'border-ink bg-ink text-white escuro:border-ink-600 escuro:bg-ink-600' : 'border-linha bg-superficie text-ink hover:border-linha-forte hover:bg-papel',
                     )}
                     title={reabrir ? 'Reabrir o atendimento' : undefined}
                   >

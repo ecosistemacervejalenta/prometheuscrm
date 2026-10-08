@@ -265,6 +265,56 @@
 }
 
 /* -----------------------------------------------------------------------------
+   Modo escuro do Atendimento (estilo WhatsApp Web)
+   Só vale dentro de .tema-escuro: os tokens são redefinidos ali e as utilities
+   (bg-superficie, text-ink, border-linha...) passam a usar as cores escuras.
+   Onde ink é preenchimento escuro (bg-ink, texto sobre volt/vip), o componente
+   usa a variante escuro: com a escala ink-600…900, que não muda.
+   ----------------------------------------------------------------------------- */
+
+@custom-variant escuro (&:where(.tema-escuro, .tema-escuro *));
+
+.tema-escuro,
+main:has(.tema-escuro) {
+  color-scheme: dark;
+
+  --color-ink: #e9edef;
+  --color-papel: #0b141a;
+  --color-superficie: #111b21;
+  --color-linha: #222d34;
+  --color-linha-forte: #2f3b43;
+  --color-suave: #8696a0;
+  --color-sutil: #667781;
+
+  --color-volt-50: #0f2a24;
+  --color-volt-100: #12382f;
+  --color-whatsapp-50: #005c4b;
+  --color-whatsapp-700: #25d366;
+  --color-vip-50: #3a2f12;
+  --color-vip-700: #f0c869;
+  --color-shopify-50: #172238;
+  --color-shopify-700: #8fb0f5;
+  --color-app-50: #221d40;
+  --color-app-700: #b3a8fa;
+  --color-sucesso-50: #0f2e22;
+  --color-alerta-50: #3a2a10;
+  --color-perigo-50: #3b1d20;
+}
+
+/* Fundo da área toda em volta do quadro, como no WhatsApp Web. */
+main:has(.tema-escuro) {
+  background-color: var(--color-papel);
+}
+
+.tema-escuro {
+  color: var(--color-ink);
+}
+
+.tema-escuro ::selection {
+  color: var(--color-ink-900);
+}
+
+/* -----------------------------------------------------------------------------
    Impressão (relatórios do Grupo VIP, pedidos)
    ----------------------------------------------------------------------------- */
 

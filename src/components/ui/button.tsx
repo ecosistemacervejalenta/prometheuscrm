@@ -12,10 +12,10 @@ export type VarianteBotao = 'primario' | 'secundario' | 'fantasma' | 'escuro' | 
 export type TamanhoBotao = 'sm' | 'md' | 'lg' | 'icone'
 
 const VARIANTES: Record<VarianteBotao, string> = {
-  primario: 'bg-volt text-ink hover:bg-volt-600 active:bg-volt-700 active:text-white',
+  primario: 'bg-volt text-ink escuro:text-ink-900 hover:bg-volt-600 active:bg-volt-700 active:text-white',
   secundario: 'bg-superficie text-ink border border-linha hover:border-linha-forte hover:bg-papel',
   fantasma: 'text-ink hover:bg-ink/5',
-  escuro: 'bg-ink text-white hover:bg-ink-700',
+  escuro: 'bg-ink text-white escuro:bg-ink-600 hover:bg-ink-700',
   perigo: 'bg-superficie text-perigo border border-perigo/30 hover:bg-perigo-50',
   whatsapp: 'bg-whatsapp text-white hover:bg-whatsapp-700',
 }
