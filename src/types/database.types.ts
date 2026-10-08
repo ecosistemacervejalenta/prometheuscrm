@@ -1091,9 +1091,11 @@ export type Database = {
           coluna_nome: string | null
           coluna_whatsapp: string | null
           colunas: Json
+          com_email: number
           com_whatsapp: number
           criado_em: string
           criado_por: string | null
+          ddds: Json
           id: string
           nome: string
           origem: string | null
@@ -1108,9 +1110,11 @@ export type Database = {
           coluna_nome?: string | null
           coluna_whatsapp?: string | null
           colunas?: Json
+          com_email?: number
           com_whatsapp?: number
           criado_em?: string
           criado_por?: string | null
+          ddds?: Json
           id?: string
           nome: string
           origem?: string | null
@@ -1125,9 +1129,11 @@ export type Database = {
           coluna_nome?: string | null
           coluna_whatsapp?: string | null
           colunas?: Json
+          com_email?: number
           com_whatsapp?: number
           criado_em?: string
           criado_por?: string | null
+          ddds?: Json
           id?: string
           nome?: string
           origem?: string | null
@@ -2222,6 +2228,7 @@ export type Database = {
       vw_leads_pastas: {
         Row: {
           atualizado_em: string | null
+          com_email: number | null
           com_whatsapp: number | null
           criado_em: string | null
           criado_por: string | null

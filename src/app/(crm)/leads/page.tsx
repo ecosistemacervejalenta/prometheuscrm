@@ -3,17 +3,19 @@ import Link from 'next/link'
 import { Folder, FolderPlus, Upload } from 'lucide-react'
 
 import { ButtonLink } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Kpi } from '@/components/ui/kpi'
 import { PageHeader } from '@/components/ui/page-header'
-import { listarPastas } from '@/features/leads/queries'
+import { PainelDdds } from '@/features/leads/components/painel-ddds'
+import { ResumoEmails } from '@/features/leads/components/resumo-emails'
+import { contarDddsDoBanco, listarPastas } from '@/features/leads/queries'
 import { formatarDataCurta, formatarNumero } from '@/lib/format'
 
 export const metadata: Metadata = { title: 'Banco de Leads' }
 
 export default async function PaginaBancoDeLeads() {
-  const pastas = await listarPastas()
+  const [pastas, contagemDdds] = await Promise.all([listarPastas(), contarDddsDoBanco()])
   const totalLeads = pastas.reduce((s, p) => s + (p.leads ?? 0), 0)
   const totalWhatsapp = pastas.reduce((s, p) => s + (p.com_whatsapp ?? 0), 0)
   const totalListas = pastas.reduce((s, p) => s + (p.listas ?? 0), 0)
@@ -62,6 +64,22 @@ export default async function PaginaBancoDeLeads() {
             <Kpi rotulo="Sem WhatsApp" valor={formatarNumero(totalLeads - totalWhatsapp)} detalhe="ficam fora dos disparos" />
             <Kpi rotulo="Listas importadas" valor={formatarNumero(totalListas)} detalhe={`em ${formatarNumero(pastas.length)} pasta(s)`} />
           </div>
+
+          <Card className="mb-5 lg:mb-6">
+            <CardHeader titulo="Onde estão os números" descricao="WhatsApp por DDD, somando as listas de todas as pastas." />
+            <CardContent>
+              <PainelDdds contagem={contagemDdds} />
+            </CardContent>
+          </Card>
+
+          <Card className="mb-5 lg:mb-6">
+            <CardHeader titulo="E-mails" descricao="Quantos leads têm e-mail, no banco todo e em cada pasta." />
+            <CardContent>
+              <ResumoEmails pastas={pastas} />
+            </CardContent>
+          </Card>
+
+          <h2 className="tipo-h3 mb-3 text-[16px] leading-6">Pastas</h2>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {pastas.map((p) => (
               <Link

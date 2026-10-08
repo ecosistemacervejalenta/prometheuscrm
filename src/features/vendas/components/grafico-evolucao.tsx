@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from 'react'
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
 
 import { formatarMoeda, formatarNumero } from '@/lib/format'
+import { useLargura } from '@/lib/use-largura'
 import { cn } from '@/lib/utils'
 
 import type { Granularidade, PontoSerie } from '../serie'
@@ -28,18 +29,6 @@ function escala(max: number, inteiro: boolean) {
   if (inteiro) passo = Math.max(1, Math.ceil(passo))
   const teto = Math.ceil(max / passo) * passo
   return { teto, marcas: Array.from({ length: Math.round(teto / passo) + 1 }, (_, i) => i * passo) }
-}
-
-function useLargura(ref: RefObject<HTMLElement | null>) {
-  const [largura, setLargura] = useState(0)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const observador = new ResizeObserver(([entrada]) => setLargura(Math.round(entrada.contentRect.width)))
-    observador.observe(el)
-    return () => observador.disconnect()
-  }, [ref])
-  return largura
 }
 
 /**

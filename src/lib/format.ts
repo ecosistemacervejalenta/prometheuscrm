@@ -22,6 +22,12 @@ export function formatarNumero(valor: number | string | null | undefined): strin
   return numero.format(Number(valor ?? 0))
 }
 
+/** Fração em porcentagem: 0.54 → "54%", 0.049 → "4,9%", 0.0004 → "<0,1%". */
+export function formatarPorcentagem(fracao: number): string {
+  if (fracao > 0 && fracao < 0.001) return '<0,1%'
+  return `${(fracao * 100).toLocaleString('pt-BR', { maximumFractionDigits: fracao < 0.1 ? 1 : 0 })}%`
+}
+
 /** Valor numérico para inputs de dinheiro: 1234.5 → "1234,50". */
 export function valorParaInput(valor: number | string | null | undefined): string {
   if (valor === null || valor === undefined || valor === '') return ''
