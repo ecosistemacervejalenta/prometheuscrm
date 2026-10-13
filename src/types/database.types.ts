@@ -1488,6 +1488,7 @@ export type Database = {
           id: string
           nome: string
           papel: Database["public"]["Enums"]["papel_usuario"]
+          participa_tarefas: boolean
           trocar_senha: boolean
         }
         Insert: {
@@ -1500,6 +1501,7 @@ export type Database = {
           id: string
           nome?: string
           papel?: Database["public"]["Enums"]["papel_usuario"]
+          participa_tarefas?: boolean
           trocar_senha?: boolean
         }
         Update: {
@@ -1512,6 +1514,7 @@ export type Database = {
           id?: string
           nome?: string
           papel?: Database["public"]["Enums"]["papel_usuario"]
+          participa_tarefas?: boolean
           trocar_senha?: boolean
         }
         Relationships: []

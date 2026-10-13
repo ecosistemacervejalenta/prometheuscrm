@@ -220,6 +220,7 @@ npm run db:types:local  # regenera os tipos TypeScript
 - **Avisos no login (sino 🔔)**: quem é marcado como responsável recebe o aviso na hora (tempo real) e ao entrar no CRM. Comentários, impedimentos, mudança de prazo e conclusão também avisam os envolvidos — nunca quem fez a ação. Abrir a tarefa marca os avisos dela como lidos.
 - Atalhos **Minhas · Atrasadas · Impedidas · Sem prazo**, busca e filtros por responsável e prioridade. Concluídas mostram se foram entregues no prazo.
 - Excluir: só quem criou a tarefa ou um administrador (o histórico e as imagens vão junto).
+- Quem aparece para ser marcado: membros ativos com `perfis.participa_tarefas` ligado (padrão para membros novos). A conta técnica de desenvolvimento fica de fora.
 
 ### Configurações
 - **Loja e mensagens**: nome, WhatsApp da loja, chave PIX, favorecido e os modelos de mensagem (seção 9).
@@ -299,7 +300,7 @@ erDiagram
 
 | Tabela | Descrição |
 |---|---|
-| `perfis` | Membros da equipe (1:1 com `auth.users`), papel `admin`/`equipe`, `ativo`, `trocar_senha` (entrou com senha temporária). |
+| `perfis` | Membros da equipe (1:1 com `auth.users`), papel `admin`/`equipe`, `ativo`, `trocar_senha` (entrou com senha temporária), `participa_tarefas` (aparece como responsável no quadro de Tarefas). |
 | `configuracoes` | Linha única: loja, PIX, modelos de mensagem. |
 | `fornecedores` | Empresas fornecedoras. CNPJ só dígitos, único. |
 | `vendedores` | Representantes comerciais. |

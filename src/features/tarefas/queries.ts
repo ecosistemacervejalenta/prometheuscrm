@@ -116,10 +116,15 @@ export async function resumoTarefas() {
   }
 }
 
-/** Membros ativos (quem pode ser responsável). */
+/** Membros ativos que participam do quadro (quem pode ser responsável). */
 export async function listarEquipe(): Promise<Pessoa[]> {
   const { supabase } = await exigirEquipe()
-  const { data, error } = await supabase.from('perfis').select('id, nome, email').eq('ativo', true).order('nome')
+  const { data, error } = await supabase
+    .from('perfis')
+    .select('id, nome, email')
+    .eq('ativo', true)
+    .eq('participa_tarefas', true)
+    .order('nome')
   if (error) throw error
   return data.map((p) => ({ id: p.id, nome: p.nome || p.email || 'Sem nome' }))
 }
