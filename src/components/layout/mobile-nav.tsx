@@ -30,7 +30,7 @@ import { SinoAvisos } from '@/features/notificacoes/components/sino-avisos'
 import { formatarNumero } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-import type { PropsSidebar } from './sidebar'
+import { LINK_MEU_PERFIL, type PropsSidebar } from './sidebar'
 
 /**
  * Navegação mobile (< 1024px) no padrão de app iOS:
@@ -141,7 +141,7 @@ export function MobileNav({ perfil, contagens, avisos }: Pick<PropsSidebar, 'per
               className="-m-1.5 rounded-full p-1.5 active:opacity-60"
               aria-label="Abrir perfil e menu"
             >
-              <Avatar nome={perfil.nome} tamanho="sm" variante="volt" />
+              <Avatar nome={perfil.nome} foto={perfil.foto} tamanho="sm" variante="volt" />
             </button>
           </div>
         </div>
@@ -191,15 +191,21 @@ export function MobileNav({ perfil, contagens, avisos }: Pick<PropsSidebar, 'per
           <div className="animar-folha absolute inset-x-0 bottom-0 max-h-[88dvh] overflow-y-auto overscroll-contain rounded-t-[28px] bg-papel px-4 pt-2 pb-[calc(env(safe-area-inset-bottom)+20px)] shadow-flutuante">
             <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-linha-forte" aria-hidden />
 
-            <div className="mb-4 flex items-center gap-3 rounded-2xl bg-superficie p-4">
-              <Avatar nome={perfil.nome} tamanho="md" variante="volt" />
+            <Link
+              href={LINK_MEU_PERFIL}
+              onClick={() => setMaisAberto(false)}
+              className="mb-4 flex items-center gap-3 rounded-2xl bg-superficie p-4 active:bg-papel"
+            >
+              <Avatar nome={perfil.nome} foto={perfil.foto} tamanho="md" variante="volt" />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold">{perfil.nome}</p>
                 <p className="truncate text-[13px] text-suave">
                   {perfil.cargo ?? (perfil.papel === 'admin' ? 'Administrador' : 'Equipe')}
                 </p>
+                <p className="mt-0.5 text-[13px] font-semibold text-ink">{perfil.foto ? 'Meu perfil' : 'Adicionar foto de perfil'}</p>
               </div>
-            </div>
+              <ChevronRight className="size-4 text-sutil" aria-hidden />
+            </Link>
 
             <ul className="overflow-hidden rounded-2xl bg-superficie">
               {itensMais.map((item) => {

@@ -39,7 +39,7 @@ export default async function LayoutCrm({ children }: LayoutProps<'/'>) {
     <Toaster>
       <div className="min-h-screen lg:flex">
         <Sidebar
-          perfil={{ nome: perfil.nome || perfil.email || 'Equipe', cargo: perfil.cargo, papel: perfil.papel }}
+          perfil={{ nome: perfil.nome || perfil.email || 'Equipe', cargo: perfil.cargo, papel: perfil.papel, foto: perfil.foto_url }}
           contagens={{
             clientes: clientes.count ?? 0,
             aReceber: aReceber.count ?? 0,

@@ -40,7 +40,7 @@ type ItemMenu = {
 }
 
 export type PropsSidebar = {
-  perfil: { nome: string; cargo: string | null; papel: string }
+  perfil: { nome: string; cargo: string | null; papel: string; foto: string | null }
   contagens: { clientes: number; aReceber: number; preVendasAtivas: number; atendimentos: number; tarefas: number }
   meuId: string
   avisos: PropsAvisos
@@ -64,6 +64,9 @@ function itensMenu(contagens: PropsSidebar['contagens']): ItemMenu[] {
     { href: '/configuracoes', rotulo: 'Configurações', icone: Settings },
   ]
 }
+
+/** Onde cada pessoa troca nome, cargo e foto. */
+export const LINK_MEU_PERFIL = '/configuracoes/equipe#meu-perfil'
 
 function Navegacao({ contagens }: { contagens: PropsSidebar['contagens'] }) {
   const caminho = usePathname()
@@ -109,14 +112,20 @@ function Navegacao({ contagens }: { contagens: PropsSidebar['contagens'] }) {
 
 function Usuario({ perfil }: { perfil: PropsSidebar['perfil'] }) {
   return (
-    <div className="flex items-center gap-3 border-t border-white/10 pt-4">
-      <Avatar nome={perfil.nome} variante="volt" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-white">{perfil.nome}</p>
-        <p className="truncate text-[12px] text-white/50">
-          {perfil.cargo ?? (perfil.papel === 'admin' ? 'Administrador' : 'Equipe')}
-        </p>
-      </div>
+    <div className="flex items-center gap-1 border-t border-white/10 pt-4">
+      <Link
+        href={LINK_MEU_PERFIL}
+        title="Meu perfil"
+        className="-ml-1.5 flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1.5 transition-colors hover:bg-ink-800"
+      >
+        <Avatar nome={perfil.nome} foto={perfil.foto} variante="volt" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-white">{perfil.nome}</p>
+          <p className="truncate text-[12px] text-white/50">
+            {perfil.cargo ?? (perfil.papel === 'admin' ? 'Administrador' : 'Equipe')}
+          </p>
+        </div>
+      </Link>
       <form action={sair}>
         <button
           type="submit"

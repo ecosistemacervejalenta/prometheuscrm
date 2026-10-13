@@ -8,6 +8,7 @@ import { ListaMobile } from '@/components/ui/lista-mobile'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { atualizarAcessoMembro } from '@/features/configuracoes/actions'
 import { CabecalhoConfiguracoes } from '@/features/configuracoes/components/cabecalho'
+import { FotoPerfil } from '@/features/configuracoes/components/foto-perfil'
 import { FormularioCadastroMembro, FormularioMeuPerfil } from '@/features/configuracoes/components/formularios'
 import { BotaoNovaSenha } from '@/features/configuracoes/components/senha-temporaria'
 import { listarEquipe } from '@/features/configuracoes/queries'
@@ -37,7 +38,7 @@ export default async function PaginaEquipe() {
             {equipe.map((m) => (
               <li key={m.id} className="px-4 py-3">
                 <div className="flex items-center gap-3">
-                  <Avatar nome={m.nome || m.email} variante={m.ativo ? 'volt' : 'claro'} />
+                  <Avatar nome={m.nome || m.email} foto={m.foto_url} variante={m.ativo ? 'volt' : 'claro'} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[15px] font-semibold">
                       {m.nome || '—'} {m.id === perfil.id && <span className="text-[12px] font-normal text-suave">(você)</span>}
@@ -79,7 +80,7 @@ export default async function PaginaEquipe() {
                 <TR key={m.id}>
                   <TD>
                     <div className="flex items-center gap-3">
-                      <Avatar nome={m.nome || m.email} tamanho="sm" variante={m.ativo ? 'volt' : 'claro'} />
+                      <Avatar nome={m.nome || m.email} foto={m.foto_url} tamanho="sm" variante={m.ativo ? 'volt' : 'claro'} />
                       <div>
                         <p className="font-semibold">
                           {m.nome || '—'} {m.id === perfil.id && <span className="text-[12px] font-normal text-suave">(você)</span>}
@@ -123,12 +124,15 @@ export default async function PaginaEquipe() {
               </CardContent>
             </Card>
           )}
-          <Card>
-            <CardHeader titulo="Meu perfil" />
-            <CardContent>
-              <FormularioMeuPerfil perfil={perfil} />
-            </CardContent>
-          </Card>
+          <div id="meu-perfil" className="scroll-mt-20">
+            <Card>
+              <CardHeader titulo="Meu perfil" />
+              <CardContent className="space-y-6">
+                <FotoPerfil nome={perfil.nome || perfil.email || 'Equipe'} foto={perfil.foto_url} />
+                <FormularioMeuPerfil perfil={perfil} />
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </>

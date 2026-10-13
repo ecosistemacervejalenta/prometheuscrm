@@ -225,3 +225,54 @@ export async function salvarMeuPerfil(_: EstadoAcao, formData: FormData): Promis
   revalidatePath('/', 'layout')
   return sucesso('Perfil atualizado.')
 }
+
+// Foto de perfil -------------------------------------------------------------------
+
+const BUCKET_FOTOS_PERFIL = 'avatares'
+
+/** Caminho no bucket (<id>/<arquivo>.jpg) a partir da URL pública salva no perfil. */
+function caminhoDaFotoPerfil(url: string | null, perfilId: string) {
+  const caminho = url?.split(`/object/public/${BUCKET_FOTOS_PERFIL}/`)[1]?.split('?')[0]
+  return caminho?.startsWith(`${perfilId}/`) ? caminho : null
+}
+
+/** Recebe a foto já recortada no navegador (quadrado de 512 px em JPEG) e troca a do perfil. */
+export async function salvarFotoPerfil(formData: FormData): Promise<EstadoAcao> {
+  const { supabase, perfil } = await exigirEquipe()
+  const foto = formData.get('foto')
+  if (!(foto instanceof File) || foto.size === 0) return falha('Escolha uma foto.')
+  if (foto.type !== 'image/jpeg') return falha('Formato de foto inválido. Escolha a foto de novo.')
+  if (foto.size > 2 * 1024 * 1024) return falha('A foto passou de 2 MB. Escolha outra.')
+
+  const armazenamento = supabase.storage.from(BUCKET_FOTOS_PERFIL)
+  const caminho = `${perfil.id}/${crypto.randomUUID()}.jpg`
+  const { error: erroEnvio } = await armazenamento.upload(caminho, foto, {
+    contentType: 'image/jpeg',
+    cacheControl: '31536000',
+    upsert: false,
+  })
+  if (erroEnvio) return falha(`Não foi possível enviar a foto: ${erroEnvio.message}`)
+
+  const foto_url = armazenamento.getPublicUrl(caminho).data.publicUrl
+  const { error } = await supabase.from('perfis').update({ foto_url }).eq('id', perfil.id)
+  if (error) {
+    await armazenamento.remove([caminho])
+    return falha(traduzirErro(error))
+  }
+
+  const anterior = caminhoDaFotoPerfil(perfil.foto_url, perfil.id)
+  if (anterior) await armazenamento.remove([anterior])
+  revalidatePath('/', 'layout')
+  return sucesso('Foto de perfil atualizada.')
+}
+
+export async function removerFotoPerfil(): Promise<EstadoAcao> {
+  const { supabase, perfil } = await exigirEquipe()
+  const { error } = await supabase.from('perfis').update({ foto_url: null }).eq('id', perfil.id)
+  if (error) return falha(traduzirErro(error))
+
+  const anterior = caminhoDaFotoPerfil(perfil.foto_url, perfil.id)
+  if (anterior) await supabase.storage.from(BUCKET_FOTOS_PERFIL).remove([anterior])
+  revalidatePath('/', 'layout')
+  return sucesso('Foto removida. No lugar dela aparecem as suas iniciais.')
+}
