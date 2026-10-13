@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
-import { Plus, Repeat, Tags } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { Plus, ReceiptText, Repeat, Tags, type LucideIcon } from 'lucide-react'
 
 import { ButtonLink } from '@/components/ui/button'
 import { Kpi } from '@/components/ui/kpi'
 import { PageHeader } from '@/components/ui/page-header'
+import { AbasContas } from '@/features/contas/components/contas-fixas'
 import { DividasPorFornecedor } from '@/features/contas/components/dividas-por-fornecedor'
 import { TabelaContas } from '@/features/contas/components/tabela-contas'
 import { contasAtrasadasAntesDe, contasDoMes, dividasPorFornecedor, resumirContas } from '@/features/contas/queries'
@@ -14,6 +16,15 @@ import { param } from '@/lib/utils'
 
 export const metadata: Metadata = { title: 'Contas a pagar' }
 
+function TituloSecao({ icone: Icone, children }: { icone: LucideIcon; children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Icone className="size-4 text-suave" aria-hidden />
+      {children}
+    </span>
+  )
+}
+
 export default async function PaginaContas({ searchParams }: PageProps<'/contas'>) {
   const mes = mesValido(param((await searchParams).mes))
   const ehMesAtual = mes === mesAtual()
@@ -23,6 +34,8 @@ export default async function PaginaContas({ searchParams }: PageProps<'/contas'
   const resumo = resumirContas(contas)
   const fixas = contas.filter((c) => c.tipo === 'fixa')
   const variaveis = contas.filter((c) => c.tipo === 'variavel')
+  const totalFixas = resumirContas(fixas).total
+  const totalVariaveis = resumirContas(variaveis).total
   const totalAtrasadas = atrasadas.reduce((s, c) => s + Number(c.valor ?? 0), 0)
 
   return (
@@ -35,9 +48,6 @@ export default async function PaginaContas({ searchParams }: PageProps<'/contas'
             <ButtonLink href="/contas/categorias">
               <Tags /> Categorias
             </ButtonLink>
-            <ButtonLink href="/contas/fixas">
-              <Repeat /> Contas fixas
-            </ButtonLink>
             <ButtonLink href="/contas/nova" variante="primario">
               <Plus /> Nova conta
             </ButtonLink>
@@ -45,10 +55,11 @@ export default async function PaginaContas({ searchParams }: PageProps<'/contas'
         }
       />
 
+      <AbasContas ativa="mes" />
       <NavegadorMes caminho="/contas" mes={mes} />
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi rotulo="Total do mês" valor={formatarMoeda(resumo.total)} detalhe={`${contas.length} contas`} />
+        <Kpi rotulo="Total do mês" valor={formatarMoeda(resumo.total)} detalhe={`${fixas.length} fixas · ${variaveis.length} variáveis`} />
         <Kpi rotulo="Pago" valor={formatarMoeda(resumo.pago)} tendencia="positiva" detalhe="já quitado" />
         <Kpi rotulo="A pagar" valor={formatarMoeda(resumo.aPagar)} detalhe="pendente" />
         <Kpi
@@ -70,12 +81,14 @@ export default async function PaginaContas({ searchParams }: PageProps<'/contas'
           />
         )}
         <TabelaContas
-          titulo="Contas fixas"
+          titulo={<TituloSecao icone={Repeat}>Contas fixas</TituloSecao>}
+          descricao={`Assinaturas, software e mão de obra — todo mês · ${fixas.length} conta(s) · ${formatarMoeda(totalFixas)}`}
           contas={fixas}
           acoes={<ButtonLink href="/contas/fixas/nova" tamanho="sm"><Plus /> Fixa</ButtonLink>}
         />
         <TabelaContas
-          titulo="Contas variáveis"
+          titulo={<TituloSecao icone={ReceiptText}>Contas variáveis</TituloSecao>}
+          descricao={`Boletos de fornecedores e consumo (água, luz, internet) · ${variaveis.length} conta(s) · ${formatarMoeda(totalVariaveis)}`}
           contas={variaveis}
           acoes={<ButtonLink href="/contas/nova" tamanho="sm"><Plus /> Variável</ButtonLink>}
         />

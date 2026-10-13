@@ -6,7 +6,7 @@ import { ActionButton } from '@/components/ui/action-button'
 import { PageHeader } from '@/components/ui/page-header'
 import { excluirContaFixa, salvarContaFixa } from '@/features/contas/actions'
 import { FormularioContaFixa } from '@/features/contas/components/formularios'
-import { obterContaFixa } from '@/features/contas/queries'
+import { obterContaFixa, projetosDasContasFixas } from '@/features/contas/queries'
 import { nomesDasCategorias } from '@/features/financeiro/queries'
 import { opcoesFornecedores } from '@/features/fornecedores/queries'
 import { mesAtual } from '@/lib/datas'
@@ -15,7 +15,12 @@ export const metadata: Metadata = { title: 'Editar conta fixa' }
 
 export default async function PaginaEditarContaFixa({ params }: PageProps<'/contas/fixas/[id]/editar'>) {
   const { id } = await params
-  const [conta, fornecedores, categorias] = await Promise.all([obterContaFixa(id), opcoesFornecedores(), nomesDasCategorias('pagar')])
+  const [conta, fornecedores, categorias, projetos] = await Promise.all([
+    obterContaFixa(id),
+    opcoesFornecedores(),
+    nomesDasCategorias('pagar'),
+    projetosDasContasFixas(),
+  ])
   if (!conta) notFound()
 
   return (
@@ -38,6 +43,7 @@ export default async function PaginaEditarContaFixa({ params }: PageProps<'/cont
         acao={salvarContaFixa.bind(null, id)}
         fornecedores={fornecedores}
         categorias={categorias}
+        projetos={projetos}
         conta={conta}
         mesAtual={mesAtual()}
       />

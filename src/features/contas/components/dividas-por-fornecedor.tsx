@@ -7,13 +7,11 @@ import { useState } from 'react'
 import { GraficoPizza, type FatiaPizza } from '@/components/graficos/grafico-pizza'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { formatarDataCurta, formatarMoeda, formatarNumero } from '@/lib/format'
+import { COR_NEUTRA as COR_OUTROS, PALETA_CATEGORICA as PALETA } from '@/lib/paleta'
 import { cn } from '@/lib/utils'
 
 import type { DividaFornecedor } from '../queries'
 
-/** Paleta categórica validada (daltonismo e contraste) — uma cor fixa por fornecedor. */
-const PALETA = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7']
-const COR_OUTROS = '#9aa1ad'
 const LINHAS_INICIAIS = 10
 
 type Visao = 'total' | 'mes'

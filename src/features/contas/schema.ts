@@ -43,6 +43,8 @@ export const esquemaContaFixa = comCategoriaNova(
       descricao: texto('Descreva a conta.').max(200, 'Use no máximo 200 caracteres.'),
       categoria,
       fornecedor_id: fornecedorOpcional,
+      finalidade: textoOpcional.refine((v) => !v || v.length <= 300, 'Use no máximo 300 caracteres.'),
+      projeto: texto('Informe o projeto.').max(60, 'Use no máximo 60 caracteres.'),
       valor: dinheiro('Informe o valor.'),
       dia_vencimento: z.coerce
         .number({ error: 'Informe o dia.' })

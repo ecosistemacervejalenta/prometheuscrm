@@ -1,111 +1,127 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
-import { Pause, Play, Plus, Repeat } from 'lucide-react'
+import { Plus, Repeat, Tags } from 'lucide-react'
 
-import { ActionButton } from '@/components/ui/action-button'
-import { Badge } from '@/components/ui/badge'
 import { ButtonLink } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
-import { ListaMobile } from '@/components/ui/lista-mobile'
+import { Kpi } from '@/components/ui/kpi'
 import { PageHeader } from '@/components/ui/page-header'
-import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
-import { alternarContaFixa } from '@/features/contas/actions'
-import { listarContasFixas } from '@/features/contas/queries'
-import { formatarMes, formatarMoeda } from '@/lib/format'
+import { AbasContas, ComposicaoCustoFixo, TabelaContasFixas } from '@/features/contas/components/contas-fixas'
+import { contasDoMes, listarContasFixas, resumirContas } from '@/features/contas/queries'
+import { coresDosProjetos, resumirContasFixas } from '@/features/contas/regras'
+import { mesAtual } from '@/lib/datas'
+import { formatarDataCurta, formatarMes, formatarMoeda, formatarPorcentagem } from '@/lib/format'
 
 export const metadata: Metadata = { title: 'Contas fixas' }
 
 export default async function PaginaContasFixas() {
-  const contas = await listarContasFixas()
-  const totalMensal = contas.filter((c) => c.ativa).reduce((s, c) => s + Number(c.valor), 0)
+  const mes = mesAtual()
+  // contasDoMes gera as contas fixas deste mês (se ainda não existirem) antes de listar.
+  const [contas, contasDoMesAtual] = await Promise.all([listarContasFixas(), contasDoMes(mes)])
+
+  const resumo = resumirContasFixas(contas, mes)
+  const cores = coresDosProjetos(contas.map((c) => c.projeto))
+  const nomeDoMes = formatarMes(mes).split(' ')[0]
+
+  const fixasDoMes = contasDoMesAtual.filter((c) => c.tipo === 'fixa')
+  const doMes = Object.fromEntries(fixasDoMes.flatMap((c) => (c.conta_fixa_id ? [[c.conta_fixa_id, c]] : [])))
+  const situacaoDoMes = resumirContas(fixasDoMes)
+  const pagas = fixasDoMes.filter((c) => c.status === 'paga').length
+  const validas = fixasDoMes.filter((c) => c.status !== 'cancelada').length
+  const proxima = fixasDoMes.find((c) => c.status === 'pendente' && c.situacao !== 'vencida')
+
+  const novaContaFixa = (
+    <ButtonLink href="/contas/fixas/nova" variante="primario">
+      <Plus /> Nova conta fixa
+    </ButtonLink>
+  )
 
   return (
     <>
       <PageHeader
-        titulo="Contas fixas"
-        contexto={`${formatarMoeda(totalMensal)} por mês em contas ativas`}
-        voltar={{ href: '/contas', rotulo: 'Contas a pagar' }}
+        contexto="Assinaturas, software e mão de obra — geradas todo mês"
+        titulo="Contas a pagar"
         acoes={
-          <ButtonLink href="/contas/fixas/nova" variante="primario">
-            <Plus /> Nova conta fixa
-          </ButtonLink>
+          <>
+            <ButtonLink href="/contas/categorias">
+              <Tags /> Categorias
+            </ButtonLink>
+            {novaContaFixa}
+          </>
         }
       />
-      <Card>
-        {contas.length === 0 ? (
+      <AbasContas ativa="fixas" />
+
+      {contas.length === 0 ? (
+        <Card>
           <EmptyState
             icone={Repeat}
             titulo="Nenhuma conta fixa"
-            descricao="Cadastre aluguel, internet, contador... Elas aparecem automaticamente em todos os meses."
-            acao={<ButtonLink href="/contas/fixas/nova" variante="primario"><Plus /> Nova conta fixa</ButtonLink>}
+            descricao="Cadastre assinaturas, software, folha de pagamento... Elas aparecem automaticamente em todos os meses."
+            acao={novaContaFixa}
           />
-        ) : (
-          <>
-          <ListaMobile className="border-t-0">
-            {contas.map((c) => (
-              <li key={c.id} className={c.ativa ? 'px-4 py-3' : 'px-4 py-3 opacity-60'}>
-                <Link href={`/contas/fixas/${c.id}/editar`} className="flex items-start gap-3 active:opacity-70">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[15px] font-semibold">{c.descricao}</p>
-                    <p className="truncate text-[13px] text-suave">
-                      todo dia {String(c.dia_vencimento).padStart(2, '0')} · {c.categoria}
-                      {c.fornecedores?.nome && ` · ${c.fornecedores.nome}`}
-                    </p>
-                  </div>
-                  <p className="tipo-dado shrink-0 text-[15px]">{formatarMoeda(c.valor)}</p>
-                </Link>
-                <div className="mt-2.5 flex items-center justify-between gap-2">
-                  {c.ativa ? <Badge tom="sucesso" ponto>Ativa</Badge> : <Badge>Pausada</Badge>}
-                  <ActionButton acao={alternarContaFixa.bind(null, c.id, !c.ativa)}>
-                    {c.ativa ? <><Pause /> Pausar</> : <><Play /> Reativar</>}
-                  </ActionButton>
-                </div>
-              </li>
+        </Card>
+      ) : (
+        <>
+          <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Kpi rotulo="Custo fixo por mês" valor={formatarMoeda(resumo.total)} detalhe={`${resumo.quantidade} conta(s) ativa(s)`} />
+            <Kpi rotulo="Custo fixo por ano" valor={formatarMoeda(resumo.total * 12)} detalhe="se nada mudar" />
+            <Kpi
+              rotulo={`Pago em ${nomeDoMes.toLowerCase()}`}
+              valor={formatarMoeda(situacaoDoMes.pago)}
+              tendencia="positiva"
+              detalhe={`${pagas} de ${validas} conta(s)`}
+            />
+            <Kpi
+              rotulo={`Falta pagar em ${nomeDoMes.toLowerCase()}`}
+              valor={formatarMoeda(situacaoDoMes.aPagar)}
+              tendencia={situacaoDoMes.qtdVencidas > 0 ? 'negativa' : situacaoDoMes.aPagar === 0 ? 'positiva' : 'neutra'}
+              detalhe={
+                situacaoDoMes.qtdVencidas > 0
+                  ? `${situacaoDoMes.qtdVencidas} vencida(s) · ${formatarMoeda(situacaoDoMes.vencido)}`
+                  : proxima
+                    ? `próxima: ${proxima.descricao} em ${formatarDataCurta(proxima.vencimento)}`
+                    : 'tudo pago'
+              }
+            />
+          </div>
+
+          <div className="space-y-6">
+            {resumo.quantidade > 0 && (
+              <ComposicaoCustoFixo
+                total={resumo.total}
+                porCategoria={resumo.porCategoria}
+                porProjeto={resumo.porProjeto}
+                cores={cores}
+              />
+            )}
+            {resumo.porCategoria.map((grupo) => (
+              <TabelaContasFixas
+                key={grupo.nome}
+                titulo={grupo.nome}
+                descricao={`${grupo.contas.length} conta(s) · ${formatarMoeda(grupo.valor)} por mês · ${formatarPorcentagem(resumo.total ? grupo.valor / resumo.total : 0)} do custo fixo`}
+                contas={grupo.contas}
+                cores={cores}
+                mes={mes}
+                nomeDoMes={nomeDoMes}
+                doMes={doMes}
+              />
             ))}
-          </ListaMobile>
-          <Table somenteDesktop>
-            <THead>
-              <TR>
-                <TH>Conta</TH>
-                <TH>Vence todo dia</TH>
-                <TH>Período</TH>
-                <TH className="text-right">Valor</TH>
-                <TH>Status</TH>
-                <TH className="text-right">Ações</TH>
-              </TR>
-            </THead>
-            <TBody>
-              {contas.map((c) => (
-                <TR key={c.id}>
-                  <TD>
-                    <Link href={`/contas/fixas/${c.id}/editar`} className="font-semibold hover:text-volt-700">
-                      {c.descricao}
-                    </Link>
-                    <p className="text-[13px] text-suave">
-                      {c.categoria}
-                      {c.fornecedores?.nome && ` · ${c.fornecedores.nome}`}
-                    </p>
-                  </TD>
-                  <TD className="tipo-dado">{String(c.dia_vencimento).padStart(2, '0')}</TD>
-                  <TD className="text-[13px] text-suave">
-                    desde {formatarMes(c.inicio_em.slice(0, 7))}
-                    {c.fim_em && ` até ${formatarMes(c.fim_em.slice(0, 7))}`}
-                  </TD>
-                  <TD className="tipo-dado text-right">{formatarMoeda(c.valor)}</TD>
-                  <TD>{c.ativa ? <Badge tom="sucesso" ponto>Ativa</Badge> : <Badge>Pausada</Badge>}</TD>
-                  <TD className="text-right">
-                    <ActionButton acao={alternarContaFixa.bind(null, c.id, !c.ativa)}>
-                      {c.ativa ? <><Pause /> Pausar</> : <><Play /> Reativar</>}
-                    </ActionButton>
-                  </TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
-          </>
-        )}
-      </Card>
+            {resumo.foraDoTotal.length > 0 && (
+              <TabelaContasFixas
+                titulo="Fora do custo deste mês"
+                descricao="Pausadas, encerradas ou que ainda vão começar · não entram no total"
+                contas={resumo.foraDoTotal}
+                cores={cores}
+                mes={mes}
+                nomeDoMes={nomeDoMes}
+                doMes={doMes}
+                foraDoTotal
+              />
+            )}
+          </div>
+        </>
+      )}
     </>
   )
 }

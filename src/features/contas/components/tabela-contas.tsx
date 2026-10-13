@@ -5,6 +5,7 @@ import { SITUACAO_CONTA } from '@/lib/rotulos'
 import type { ContaPagarDetalhe } from '@/types'
 
 import { pagarConta, reabrirConta, removerConta } from '../actions'
+import { PROJETO_GERAL } from '../regras'
 
 function paraLancamento(c: ContaPagarDetalhe): Lancamento {
   const id = c.id ?? ''
@@ -12,7 +13,8 @@ function paraLancamento(c: ContaPagarDetalhe): Lancamento {
   return {
     id,
     descricao: c.descricao ?? '',
-    detalhe: [c.categoria, c.fornecedor_nome].filter(Boolean).join(' · '),
+    // Fixas mostram o projeto (menos "Geral", que é o padrão).
+    detalhe: [c.categoria, c.projeto !== PROJETO_GERAL && c.projeto, c.fornecedor_nome].filter(Boolean).join(' · '),
     vencimento: c.vencimento,
     valor: c.valor,
     situacao: c.situacao ?? 'em_dia',
@@ -37,7 +39,7 @@ export function TabelaContas({
   vazio,
   dataCompleta,
 }: {
-  titulo: string
+  titulo: ReactNode
   descricao?: string
   contas: ContaPagarDetalhe[]
   acoes?: ReactNode

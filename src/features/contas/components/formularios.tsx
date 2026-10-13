@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+
 import { ActionForm, SubmitButton, type AcaoFormulario } from '@/components/form/action-form'
 import { Checkbox, Field, FormActions, FormSection, Input, MoneyInput, Select, Textarea } from '@/components/form/fields'
 import { ButtonLink } from '@/components/ui/button'
@@ -10,16 +12,20 @@ import { valorParaInput } from '@/lib/format'
 import { FORMAS_PAGAMENTO } from '@/lib/rotulos'
 import type { ContaFixa, ContaPagar } from '@/types'
 
+import { PROJETO_GERAL } from '../regras'
+
 type OpcaoFornecedor = { id: string; nome: string; ativo: boolean }
 
 function CamposBase({
   fornecedores,
   categorias,
   inicial,
+  exemplo = 'Ex.: Boleto do fornecedor, Conta de luz',
 }: {
   fornecedores: OpcaoFornecedor[]
   categorias: string[]
   inicial?: { descricao?: string; categoria?: string; fornecedor_id?: string | null }
+  exemplo?: string
 }) {
   // Fornecedores inativos só aparecem se já estiverem vinculados a esta conta.
   const opcoes = fornecedores.filter((f) => f.ativo || f.id === inicial?.fornecedor_id)
@@ -29,7 +35,7 @@ function CamposBase({
         <Input
           name="descricao"
           defaultValue={inicial?.descricao}
-          placeholder="Ex.: Aluguel, Lote de cervejas, Frete"
+          placeholder={exemplo}
           maxLength={200}
           autoFocus={!inicial}
         />
@@ -47,6 +53,40 @@ function CamposBase({
         </Select>
       </Field>
     </>
+  )
+}
+
+const NOVO_PROJETO = '__novo__'
+
+/**
+ * Campo "Projeto": projetos já usados + "+ Novo projeto…". No novo, o nome digitado
+ * é que vai como `projeto` (o <select> deixa de enviar o valor).
+ */
+function CampoProjeto({ projetos, inicial, className }: { projetos: string[]; inicial?: string; className?: string }) {
+  const opcoes = inicial && !projetos.includes(inicial) ? [...projetos, inicial] : projetos
+  const [valor, setValor] = useState(inicial ?? PROJETO_GERAL)
+  const novo = valor === NOVO_PROJETO
+
+  return (
+    <Field
+      label="Projeto"
+      name="projeto"
+      obrigatorio
+      className={className}
+      dica={novo ? 'Fica salvo para as próximas contas.' : 'Onde esse custo é usado.'}
+    >
+      <Select name={novo ? undefined : 'projeto'} value={valor} onChange={(e) => setValor(e.target.value)} aria-label="Projeto">
+        {opcoes.map((p) => (
+          <option key={p} value={p}>
+            {p}
+          </option>
+        ))}
+        <option value={NOVO_PROJETO}>+ Novo projeto…</option>
+      </Select>
+      {novo && (
+        <Input name="projeto" aria-label="Nome do novo projeto" placeholder="Ex.: Lupp" maxLength={60} autoFocus className="mt-2" />
+      )}
+    </Field>
   )
 }
 
@@ -78,7 +118,7 @@ export function FormularioContaVariavel({
       <ActionForm action={acao}>
         <FormSection
           titulo="Conta variável"
-          descricao="Lançamento avulso. Parcelada, vira uma conta por mês; com vários boletos, uma conta por boleto."
+          descricao="Boletos de fornecedores e contas de consumo (água, luz, internet...), lançados mês a mês. Parcelada, vira uma conta por mês; com vários boletos, uma conta por boleto."
         >
           <CamposBase fornecedores={fornecedores} categorias={categorias} />
           <CamposParcelamento hoje={hoje} variosBoletos />
@@ -109,20 +149,41 @@ export function FormularioContaFixa({
   acao,
   fornecedores,
   categorias,
+  projetos,
   conta,
   mesAtual,
 }: {
   acao: AcaoFormulario
   fornecedores: OpcaoFornecedor[]
   categorias: string[]
+  projetos: string[]
   conta?: ContaFixa | null
   mesAtual: string
 }) {
   return (
     <Card className="px-5 pt-6 sm:px-6">
       <ActionForm action={acao}>
-        <FormSection titulo="Conta fixa" descricao="Gerada automaticamente todo mês (aluguel, internet, contador...).">
-          <CamposBase fornecedores={fornecedores} categorias={categorias} inicial={conta ?? undefined} />
+        <FormSection titulo="Conta fixa" descricao="Assinaturas, software e mão de obra: o mesmo custo todo mês, gerado automaticamente.">
+          <CamposBase
+            fornecedores={fornecedores}
+            categorias={categorias}
+            inicial={conta ?? undefined}
+            exemplo="Ex.: Shopify, Folha de pagamento"
+          />
+          <Field
+            label="Finalidade"
+            name="finalidade"
+            className="sm:col-span-4"
+            dica="Para que serve? Justifica o custo na lista de contas fixas."
+          >
+            <Input
+              name="finalidade"
+              defaultValue={conta?.finalidade ?? ''}
+              placeholder="Ex.: Servidor do n8n (automações)"
+              maxLength={300}
+            />
+          </Field>
+          <CampoProjeto projetos={projetos} inicial={conta?.projeto} className="sm:col-span-2" />
           <Field label="Valor" name="valor" obrigatorio className="sm:col-span-3" dica="Muda todo mês? Use uma estimativa e ajuste na conta do mês.">
             <MoneyInput name="valor" defaultValue={valorParaInput(conta?.valor)} />
           </Field>

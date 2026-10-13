@@ -661,10 +661,12 @@ export type Database = {
           descricao: string
           dia_vencimento: number
           fim_em: string | null
+          finalidade: string | null
           fornecedor_id: string | null
           id: string
           inicio_em: string
           observacoes: string | null
+          projeto: string
           valor: number
         }
         Insert: {
@@ -675,10 +677,12 @@ export type Database = {
           descricao: string
           dia_vencimento: number
           fim_em?: string | null
+          finalidade?: string | null
           fornecedor_id?: string | null
           id?: string
           inicio_em?: string
           observacoes?: string | null
+          projeto?: string
           valor: number
         }
         Update: {
@@ -689,10 +693,12 @@ export type Database = {
           descricao?: string
           dia_vencimento?: number
           fim_em?: string | null
+          finalidade?: string | null
           fornecedor_id?: string | null
           id?: string
           inicio_em?: string
           observacoes?: string | null
+          projeto?: string
           valor?: number
         }
         Relationships: [
@@ -2097,6 +2103,7 @@ export type Database = {
           id: string | null
           observacoes: string | null
           pago_em: string | null
+          projeto: string | null
           situacao: string | null
           status: Database["public"]["Enums"]["status_conta"] | null
           tipo: Database["public"]["Enums"]["tipo_conta"] | null

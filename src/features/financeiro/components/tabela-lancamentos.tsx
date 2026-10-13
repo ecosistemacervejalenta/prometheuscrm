@@ -46,7 +46,7 @@ export function TabelaLancamentos({
   vazio = 'Nenhuma conta neste mês.',
   dataCompleta = false,
 }: {
-  titulo: string
+  titulo: ReactNode
   descricao?: string
   lancamentos: Lancamento[]
   acoes?: ReactNode

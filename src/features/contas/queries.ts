@@ -3,6 +3,8 @@ import 'server-only'
 import { exigirEquipe } from '@/lib/auth'
 import { primeiroDia } from '@/lib/datas'
 
+import { PROJETO_GERAL } from './regras'
+
 /**
  * Contas de um mês. Antes de listar, garante que as contas fixas do mês
  * foram geradas (a função é idempotente — não duplica).
@@ -71,6 +73,18 @@ export async function listarContasFixas() {
     .order('dia_vencimento')
   if (error) throw error
   return data
+}
+
+export type ContaFixaListada = Awaited<ReturnType<typeof listarContasFixas>>[number]
+
+/** Projetos já usados nas contas fixas ("Geral" sempre aparece), em ordem alfabética. */
+export async function projetosDasContasFixas() {
+  const { supabase } = await exigirEquipe()
+  const { data, error } = await supabase.from('contas_fixas').select('projeto')
+  if (error) throw error
+  return [...new Set([PROJETO_GERAL, ...data.map((c) => c.projeto)])].sort((a, b) =>
+    a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }),
+  )
 }
 
 export async function obterContaFixa(id: string) {
