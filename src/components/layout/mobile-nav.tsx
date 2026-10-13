@@ -8,6 +8,7 @@ import {
   Crown,
   HandCoins,
   LayoutDashboard,
+  ListTodo,
   LogOut,
   Megaphone,
   MessagesSquare,
@@ -25,6 +26,7 @@ import { useEffect, useState } from 'react'
 import { Icone } from '@/components/marca/marca'
 import { Avatar } from '@/components/ui/avatar'
 import { sair } from '@/features/auth/actions'
+import { SinoAvisos } from '@/features/notificacoes/components/sino-avisos'
 import { formatarNumero } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -49,6 +51,7 @@ const ABAS: Aba[] = [
 type ItemMais = { href: string; rotulo: string; icone: LucideIcon; cor: string; contagem?: number }
 
 const TITULOS: Array<[string, string]> = [
+  ['/tarefas', 'Tarefas'],
   ['/atendimento', 'Atendimento'],
   ['/clientes', 'Clientes'],
   ['/leads', 'Banco de Leads'],
@@ -67,12 +70,13 @@ function ativo(caminho: string, href: string) {
   return href === '/' ? caminho === '/' : caminho.startsWith(href)
 }
 
-export function MobileNav({ perfil, contagens }: PropsSidebar) {
+export function MobileNav({ perfil, contagens, avisos }: Pick<PropsSidebar, 'perfil' | 'contagens' | 'avisos'>) {
   const caminho = usePathname()
   const [maisAberto, setMaisAberto] = useState(false)
   const [rolou, setRolou] = useState(false)
 
   const itensMais: ItemMais[] = [
+    { href: '/tarefas', rotulo: 'Tarefas', icone: ListTodo, cor: '#5b48d6', contagem: contagens.tarefas },
     { href: '/pedidos', rotulo: 'Pedidos', icone: ShoppingBag, cor: '#2a78d6', contagem: contagens.aReceber },
     { href: '/grupo-vip', rotulo: 'Grupo VIP', icone: Crown, cor: '#c8930a' },
     { href: '/leads', rotulo: 'Banco de Leads', icone: BookUser, cor: '#0f8a8a' },
@@ -122,21 +126,24 @@ export function MobileNav({ perfil, contagens }: PropsSidebar) {
           </Link>
           <p
             className={cn(
-              'pointer-events-none absolute inset-x-16 truncate text-center text-[17px] font-semibold transition-opacity duration-200',
+              'pointer-events-none absolute inset-x-24 truncate text-center text-[17px] font-semibold transition-opacity duration-200',
               rolou ? 'opacity-100' : 'opacity-0',
             )}
             aria-hidden={!rolou}
           >
             {titulo}
           </p>
-          <button
-            type="button"
-            onClick={() => setMaisAberto(true)}
-            className="-m-1.5 rounded-full p-1.5 active:opacity-60"
-            aria-label="Abrir perfil e menu"
-          >
-            <Avatar nome={perfil.nome} tamanho="sm" variante="volt" />
-          </button>
+          <div className="flex items-center gap-2">
+            <SinoAvisos {...avisos} variante="topo" />
+            <button
+              type="button"
+              onClick={() => setMaisAberto(true)}
+              className="-m-1.5 rounded-full p-1.5 active:opacity-60"
+              aria-label="Abrir perfil e menu"
+            >
+              <Avatar nome={perfil.nome} tamanho="sm" variante="volt" />
+            </button>
+          </div>
         </div>
       </header>
 

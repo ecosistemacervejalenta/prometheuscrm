@@ -55,6 +55,14 @@ const RESTRICOES: Record<string, string> = {
   etiquetas_atendimento_nome_key: 'Já existe uma etiqueta com este nome.',
   etiquetas_atendimento_nome_check: 'O nome da etiqueta deve ter de 1 a 40 caracteres.',
   etiquetas_atendimento_cor_check: 'Escolha uma das cores da lista.',
+  tarefas_titulo_check: 'O título da tarefa deve ter de 1 a 160 caracteres.',
+  tarefas_descricao_check: 'A descrição deve ter no máximo 10.000 caracteres.',
+  tarefas_impedimento_check: 'O motivo do impedimento deve ter de 1 a 2.000 caracteres.',
+  tarefa_eventos_texto_check: 'O comentário deve ter de 1 a 4.000 caracteres.',
+  tarefa_responsaveis_pkey: 'Esta pessoa já é responsável pela tarefa.',
+  tarefa_anexos_mime_check: 'Só imagens JPG, PNG, WEBP ou GIF podem ser anexadas.',
+  tarefa_anexos_tamanho_check: 'Cada imagem pode ter no máximo 10 MB.',
+  tarefa_anexos_path_key: 'Esta imagem já foi anexada.',
 }
 
 /** Traduz erros do Supabase/Postgres em mensagens claras em português. */

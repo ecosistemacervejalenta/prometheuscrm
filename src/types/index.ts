@@ -33,6 +33,10 @@ export type MensagemWhatsapp = Tables<'whatsapp_mensagens'>
 export type EventoAtendimento = Tables<'atendimento_eventos'>
 export type Campanha = Tables<'campanhas'>
 export type EnvioCampanha = Tables<'campanha_envios'>
+export type Tarefa = Tables<'tarefas'>
+export type EventoTarefa = Tables<'tarefa_eventos'>
+export type AnexoTarefa = Tables<'tarefa_anexos'>
+export type Notificacao = Tables<'notificacoes'>
 
 // Visões
 export type ClienteResumo = Tables<'vw_clientes'>
@@ -45,6 +49,7 @@ export type LeadDetalhe = Tables<'vw_leads'>
 export type PastaLeadsResumo = Tables<'vw_leads_pastas'>
 export type AtendimentoResumo = Tables<'vw_atendimentos'>
 export type CampanhaResumo = Tables<'vw_campanhas'>
+export type TarefaResumo = Tables<'vw_tarefas'>
 
 // Enums
 export type CanalVenda = Enums<'canal_venda'>
@@ -63,6 +68,8 @@ export type StatusAtendimento = Enums<'status_atendimento'>
 export type StatusMensagemWhatsapp = Enums<'status_mensagem_whatsapp'>
 export type StatusCampanha = Enums<'status_campanha'>
 export type StatusEnvioCampanha = Enums<'status_envio_campanha'>
+export type StatusTarefa = Enums<'status_tarefa'>
+export type PrioridadeTarefa = Enums<'prioridade_tarefa'>
 
 export type MetricasPainel = {
   receita: number

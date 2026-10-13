@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.15"
   }
   public: {
     Tables: {
@@ -1206,6 +1206,71 @@ export type Database = {
           },
         ]
       }
+      notificacoes: {
+        Row: {
+          autor_id: string | null
+          criado_em: string
+          id: string
+          lida_em: string | null
+          perfil_id: string
+          tarefa_id: string | null
+          texto: string | null
+          tipo: string
+          titulo: string
+        }
+        Insert: {
+          autor_id?: string | null
+          criado_em?: string
+          id?: string
+          lida_em?: string | null
+          perfil_id: string
+          tarefa_id?: string | null
+          texto?: string | null
+          tipo: string
+          titulo: string
+        }
+        Update: {
+          autor_id?: string | null
+          criado_em?: string
+          id?: string
+          lida_em?: string | null
+          perfil_id?: string
+          tarefa_id?: string | null
+          texto?: string | null
+          tipo?: string
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificacoes_autor_id_fkey"
+            columns: ["autor_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificacoes_perfil_id_fkey"
+            columns: ["perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificacoes_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificacoes_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "vw_tarefas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pedido_itens: {
         Row: {
           descricao: string
@@ -1419,6 +1484,7 @@ export type Database = {
           cargo: string | null
           criado_em: string
           email: string | null
+          foto_url: string | null
           id: string
           nome: string
           papel: Database["public"]["Enums"]["papel_usuario"]
@@ -1430,6 +1496,7 @@ export type Database = {
           cargo?: string | null
           criado_em?: string
           email?: string | null
+          foto_url?: string | null
           id: string
           nome?: string
           papel?: Database["public"]["Enums"]["papel_usuario"]
@@ -1441,6 +1508,7 @@ export type Database = {
           cargo?: string | null
           criado_em?: string
           email?: string | null
+          foto_url?: string | null
           id?: string
           nome?: string
           papel?: Database["public"]["Enums"]["papel_usuario"]
@@ -1620,6 +1688,235 @@ export type Database = {
             columns: ["fornecedor_id"]
             isOneToOne: false
             referencedRelation: "fornecedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tarefa_anexos: {
+        Row: {
+          altura: number | null
+          criado_em: string
+          enviado_por: string | null
+          id: string
+          largura: number | null
+          mime: string
+          nome: string
+          path: string
+          tamanho: number
+          tarefa_id: string
+        }
+        Insert: {
+          altura?: number | null
+          criado_em?: string
+          enviado_por?: string | null
+          id?: string
+          largura?: number | null
+          mime: string
+          nome: string
+          path: string
+          tamanho: number
+          tarefa_id: string
+        }
+        Update: {
+          altura?: number | null
+          criado_em?: string
+          enviado_por?: string | null
+          id?: string
+          largura?: number | null
+          mime?: string
+          nome?: string
+          path?: string
+          tamanho?: number
+          tarefa_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tarefa_anexos_enviado_por_fkey"
+            columns: ["enviado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefa_anexos_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefa_anexos_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "vw_tarefas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tarefa_eventos: {
+        Row: {
+          autor_id: string | null
+          criado_em: string
+          dados: Json
+          id: string
+          tarefa_id: string
+          texto: string | null
+          tipo: string
+        }
+        Insert: {
+          autor_id?: string | null
+          criado_em?: string
+          dados?: Json
+          id?: string
+          tarefa_id: string
+          texto?: string | null
+          tipo: string
+        }
+        Update: {
+          autor_id?: string | null
+          criado_em?: string
+          dados?: Json
+          id?: string
+          tarefa_id?: string
+          texto?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tarefa_eventos_autor_id_fkey"
+            columns: ["autor_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefa_eventos_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefa_eventos_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "vw_tarefas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tarefa_responsaveis: {
+        Row: {
+          adicionado_por: string | null
+          criado_em: string
+          perfil_id: string
+          tarefa_id: string
+        }
+        Insert: {
+          adicionado_por?: string | null
+          criado_em?: string
+          perfil_id: string
+          tarefa_id: string
+        }
+        Update: {
+          adicionado_por?: string | null
+          criado_em?: string
+          perfil_id?: string
+          tarefa_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tarefa_responsaveis_adicionado_por_fkey"
+            columns: ["adicionado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefa_responsaveis_perfil_id_fkey"
+            columns: ["perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefa_responsaveis_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "tarefas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefa_responsaveis_tarefa_id_fkey"
+            columns: ["tarefa_id"]
+            isOneToOne: false
+            referencedRelation: "vw_tarefas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tarefas: {
+        Row: {
+          atualizado_em: string
+          concluida_em: string | null
+          criado_em: string
+          criado_por: string | null
+          descricao: string | null
+          id: string
+          impedida_em: string | null
+          impedida_por: string | null
+          impedimento: string | null
+          numero: number
+          prazo: string | null
+          prioridade: Database["public"]["Enums"]["prioridade_tarefa"]
+          status: Database["public"]["Enums"]["status_tarefa"]
+          titulo: string
+        }
+        Insert: {
+          atualizado_em?: string
+          concluida_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          descricao?: string | null
+          id?: string
+          impedida_em?: string | null
+          impedida_por?: string | null
+          impedimento?: string | null
+          numero?: never
+          prazo?: string | null
+          prioridade?: Database["public"]["Enums"]["prioridade_tarefa"]
+          status?: Database["public"]["Enums"]["status_tarefa"]
+          titulo: string
+        }
+        Update: {
+          atualizado_em?: string
+          concluida_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          descricao?: string | null
+          id?: string
+          impedida_em?: string | null
+          impedida_por?: string | null
+          impedimento?: string | null
+          numero?: never
+          prazo?: string | null
+          prioridade?: Database["public"]["Enums"]["prioridade_tarefa"]
+          status?: Database["public"]["Enums"]["status_tarefa"]
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tarefas_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefas_impedida_por_fkey"
+            columns: ["impedida_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
             referencedColumns: ["id"]
           },
         ]
@@ -2407,6 +2704,48 @@ export type Database = {
           },
         ]
       }
+      vw_tarefas: {
+        Row: {
+          anexos: number | null
+          atrasada: boolean | null
+          atualizado_em: string | null
+          busca: string | null
+          comentarios: number | null
+          concluida_em: string | null
+          criado_em: string | null
+          criado_por: string | null
+          criado_por_nome: string | null
+          descricao: string | null
+          id: string | null
+          impedida_em: string | null
+          impedida_por: string | null
+          impedida_por_nome: string | null
+          impedimento: string | null
+          numero: number | null
+          prazo: string | null
+          prioridade: Database["public"]["Enums"]["prioridade_tarefa"] | null
+          responsaveis: Json | null
+          responsaveis_ids: string[] | null
+          status: Database["public"]["Enums"]["status_tarefa"] | null
+          titulo: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tarefas_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tarefas_impedida_por_fkey"
+            columns: ["impedida_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       adicionar_contatos_campanha: {
@@ -2535,6 +2874,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      criar_tarefa: {
+        Args: { p_dados: Json; p_responsaveis: string[] }
+        Returns: Json
       }
       ddd_do_whatsapp: { Args: { p_whatsapp: string }; Returns: string }
       ddds_dos_leads: {
@@ -2674,6 +3017,15 @@ export type Database = {
           p_tipo: string
         }
         Returns: string
+      }
+      registrar_evento_tarefa: {
+        Args: {
+          p_dados?: Json
+          p_tarefa_id: string
+          p_texto?: string
+          p_tipo: string
+        }
+        Returns: undefined
       }
       registrar_mensagem_whatsapp: { Args: { p: Json }; Returns: Json }
       registrar_pedido_pre_venda: {
@@ -2858,6 +3210,7 @@ export type Database = {
       origem_cliente: "manual" | "pre_venda" | "shopify" | "app" | "importacao"
       origem_pedido: "link" | "manual" | "shopify" | "app" | "api"
       papel_usuario: "admin" | "equipe"
+      prioridade_tarefa: "baixa" | "media" | "alta" | "urgente"
       situacao_frete: "vip" | "a_cotar" | "cotado"
       status_atendimento:
         | "fila"
@@ -2900,6 +3253,7 @@ export type Database = {
         | "cancelado"
       status_pre_venda: "rascunho" | "ativa" | "encerrada"
       status_recebimento: "pendente" | "recebida" | "cancelada"
+      status_tarefa: "a_fazer" | "fazendo" | "concluida"
       tipo_conta: "fixa" | "variavel"
     }
     CompositeTypes: {
@@ -3034,6 +3388,7 @@ export const Constants = {
       origem_cliente: ["manual", "pre_venda", "shopify", "app", "importacao"],
       origem_pedido: ["link", "manual", "shopify", "app", "api"],
       papel_usuario: ["admin", "equipe"],
+      prioridade_tarefa: ["baixa", "media", "alta", "urgente"],
       situacao_frete: ["vip", "a_cotar", "cotado"],
       status_atendimento: [
         "fila",
@@ -3081,6 +3436,7 @@ export const Constants = {
       ],
       status_pre_venda: ["rascunho", "ativa", "encerrada"],
       status_recebimento: ["pendente", "recebida", "cancelada"],
+      status_tarefa: ["a_fazer", "fazendo", "concluida"],
       tipo_conta: ["fixa", "variavel"],
     },
   },

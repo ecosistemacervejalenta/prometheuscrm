@@ -1,12 +1,13 @@
 import { Sidebar } from '@/components/layout/sidebar'
 import { Toaster } from '@/components/ui/toaster'
+import { listarAvisos } from '@/features/notificacoes/queries'
 import { exigirEquipe } from '@/lib/auth'
 
 export default async function LayoutCrm({ children }: LayoutProps<'/'>) {
   const { supabase, perfil } = await exigirEquipe()
   const agora = new Date().toISOString()
 
-  const [clientes, aReceber, preVendas, atendimentos] = await Promise.all([
+  const [clientes, aReceber, preVendas, atendimentos, minhasTarefas, avisos] = await Promise.all([
     supabase.from('clientes').select('id', { count: 'exact', head: true }),
     supabase
       .from('pedidos')
@@ -25,6 +26,13 @@ export default async function LayoutCrm({ children }: LayoutProps<'/'>) {
       .gt('nao_lidas', 0)
       .in('status', ['fila', 'em_atendimento', 'aguardando_cliente'])
       .or(`status.eq.fila,responsavel_id.eq.${perfil.id}`),
+    // Tarefas: as abertas em que você é responsável.
+    supabase
+      .from('vw_tarefas')
+      .select('id', { count: 'exact', head: true })
+      .neq('status', 'concluida')
+      .contains('responsaveis_ids', [perfil.id]),
+    listarAvisos(),
   ])
 
   return (
@@ -37,7 +45,10 @@ export default async function LayoutCrm({ children }: LayoutProps<'/'>) {
             aReceber: aReceber.count ?? 0,
             preVendasAtivas: preVendas.count ?? 0,
             atendimentos: atendimentos.count ?? 0,
+            tarefas: minhasTarefas.count ?? 0,
           }}
+          meuId={perfil.id}
+          avisos={avisos}
         />
         <main className="min-w-0 flex-1 px-4 pt-2 pb-[calc(var(--altura-abas)+env(safe-area-inset-bottom)+24px)] sm:px-6 lg:px-8 lg:py-8 print:p-0">
           <div className="mx-auto max-w-[1280px]">{children}</div>

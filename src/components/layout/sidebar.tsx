@@ -7,6 +7,7 @@ import {
   Crown,
   HandCoins,
   LayoutDashboard,
+  ListTodo,
   LogOut,
   Megaphone,
   MessagesSquare,
@@ -23,6 +24,8 @@ import { usePathname } from 'next/navigation'
 import { Logo } from '@/components/marca/marca'
 import { Avatar } from '@/components/ui/avatar'
 import { sair } from '@/features/auth/actions'
+import { AvisosAoVivo } from '@/features/notificacoes/components/avisos-ao-vivo'
+import { SinoAvisos, type PropsAvisos } from '@/features/notificacoes/components/sino-avisos'
 import { formatarNumero } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -38,12 +41,15 @@ type ItemMenu = {
 
 export type PropsSidebar = {
   perfil: { nome: string; cargo: string | null; papel: string }
-  contagens: { clientes: number; aReceber: number; preVendasAtivas: number; atendimentos: number }
+  contagens: { clientes: number; aReceber: number; preVendasAtivas: number; atendimentos: number; tarefas: number }
+  meuId: string
+  avisos: PropsAvisos
 }
 
 function itensMenu(contagens: PropsSidebar['contagens']): ItemMenu[] {
   return [
     { href: '/', rotulo: 'Visão geral', icone: LayoutDashboard },
+    { href: '/tarefas', rotulo: 'Tarefas', icone: ListTodo, contagem: contagens.tarefas },
     { href: '/atendimento', rotulo: 'Atendimento', icone: MessagesSquare, destaque: contagens.atendimentos },
     { href: '/clientes', rotulo: 'Clientes', icone: Users, contagem: contagens.clientes },
     { href: '/leads', rotulo: 'Banco de Leads', icone: BookUser },
@@ -125,14 +131,19 @@ function Usuario({ perfil }: { perfil: PropsSidebar['perfil'] }) {
   )
 }
 
-export function Sidebar({ perfil, contagens }: PropsSidebar) {
+export function Sidebar({ perfil, contagens, meuId, avisos }: PropsSidebar) {
   return (
     <>
+      <AvisosAoVivo meuId={meuId} naoLidos={avisos.naoLidos} />
+
       {/* Desktop */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col overflow-y-auto bg-ink px-4 py-6 lg:flex print:hidden">
-        <Link href="/" className="mb-8 px-3">
-          <Logo variante="negativa" largura={132} prioridade />
-        </Link>
+        <div className="mb-8 flex items-center justify-between gap-2 pr-1 pl-3">
+          <Link href="/">
+            <Logo variante="negativa" largura={132} prioridade />
+          </Link>
+          <SinoAvisos {...avisos} variante="menu" />
+        </div>
         <Navegacao contagens={contagens} />
         <div className="mt-auto pt-6">
           <Usuario perfil={perfil} />
@@ -140,7 +151,7 @@ export function Sidebar({ perfil, contagens }: PropsSidebar) {
       </aside>
 
       {/* Mobile: barra superior + abas inferiores (padrão de app iOS) */}
-      <MobileNav perfil={perfil} contagens={contagens} />
+      <MobileNav perfil={perfil} contagens={contagens} avisos={avisos} />
     </>
   )
 }

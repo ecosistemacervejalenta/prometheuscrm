@@ -5,6 +5,8 @@ import type {
   StatusPedido,
   StatusAtendimento,
   StatusPreVenda,
+  StatusTarefa,
+  PrioridadeTarefa,
   SituacaoFrete,
 } from '@/types'
 
@@ -70,6 +72,20 @@ export const STATUS_ATENDIMENTO: Record<StatusAtendimento, { rotulo: string; tom
   em_atendimento: { rotulo: 'Em atendimento', tom: 'shopify' },
   aguardando_cliente: { rotulo: 'Aguardando cliente', tom: 'app' },
   resolvido: { rotulo: 'Resolvido', tom: 'sucesso' },
+}
+
+export const STATUS_TAREFA: Record<StatusTarefa, { rotulo: string; tom: Tom }> = {
+  a_fazer: { rotulo: 'A fazer', tom: 'neutro' },
+  fazendo: { rotulo: 'Fazendo', tom: 'shopify' },
+  concluida: { rotulo: 'Concluído', tom: 'sucesso' },
+}
+
+/** Da menos para a mais urgente (mesma ordem do enum no banco). */
+export const PRIORIDADE_TAREFA: Record<PrioridadeTarefa, { rotulo: string; tom: Tom }> = {
+  baixa: { rotulo: 'Baixa', tom: 'neutro' },
+  media: { rotulo: 'Média', tom: 'shopify' },
+  alta: { rotulo: 'Alta', tom: 'alerta' },
+  urgente: { rotulo: 'Urgente', tom: 'perigo' },
 }
 
 export const SITUACAO_CONTA: Record<string, { rotulo: string; tom: Tom }> = {

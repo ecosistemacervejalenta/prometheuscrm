@@ -212,6 +212,15 @@ npm run db:types:local  # regenera os tipos TypeScript
 - Tabela de **cobranças**: itens de cada cliente, total, situação, quantas cobranças já foram enviadas, botões **Cobrar** (WhatsApp) e **Pago**.
 - **Imprimir**: gera um relatório A4 com cabeçalho da marca, resumo por cerveja e a lista de separação por cliente (com caixinha “Separado”).
 
+### Tarefas (demandas internas)
+- **Quadro** A fazer → Fazendo → Concluído. No computador, arraste o cartão entre as colunas; no celular, escolha a coluna nas abas e mude o status dentro do cartão.
+- Cada tarefa tem **um ou mais responsáveis** (membros da equipe com login), **prazo com data e hora**, **prioridade** (baixa, média, alta, urgente), detalhes e **imagens** (fotos ou prints — dá para colar com Ctrl+V; ficam no bucket privado `tarefas`, reduzidas no navegador para no máximo 2000 px).
+- **Impedimento**: quando algo trava a tarefa, registre o motivo. O cartão fica vermelho com o motivo até alguém resolver (a resolução e o motivo antigo ficam no histórico).
+- **Histórico** dentro do cartão: comentários da equipe + registro automático (pelo banco) de cada mudança — status, prazo, prioridade, responsáveis, imagens, impedimentos.
+- **Avisos no login (sino 🔔)**: quem é marcado como responsável recebe o aviso na hora (tempo real) e ao entrar no CRM. Comentários, impedimentos, mudança de prazo e conclusão também avisam os envolvidos — nunca quem fez a ação. Abrir a tarefa marca os avisos dela como lidos.
+- Atalhos **Minhas · Atrasadas · Impedidas · Sem prazo**, busca e filtros por responsável e prioridade. Concluídas mostram se foram entregues no prazo.
+- Excluir: só quem criou a tarefa ou um administrador (o histórico e as imagens vão junto).
+
 ### Configurações
 - **Loja e mensagens**: nome, WhatsApp da loja, chave PIX, favorecido e os modelos de mensagem (seção 9).
 - **Integrações**: webhooks (n8n), fila de eventos com reenvio, instruções da Shopify, cron e API.
@@ -306,10 +315,15 @@ erDiagram
 | `atividades` | Linha do tempo (cliente/pedido), gravada pelas funções e triggers. |
 | `webhooks` | Destinos de eventos (n8n etc.) com segredo HMAC. |
 | `eventos_integracao` | Fila *outbox* de eventos com tentativas e erros. |
+| `tarefas` | Demandas internas: `numero`, status, prioridade, `prazo`, `impedimento` (motivo atual), `concluida_em`. |
+| `tarefa_responsaveis` | N:N — quem cuida de cada tarefa (só membros ativos). |
+| `tarefa_anexos` | Imagens da tarefa (bucket privado `tarefas`, `path` = `<tarefa_id>/<arquivo>`). |
+| `tarefa_eventos` | Histórico da tarefa: comentários + registros automáticos gravados por trigger. |
+| `notificacoes` | Avisos de cada membro (sino). Nascem no banco; o membro só marca como lido. |
 
 ### 7.3 Visões (respeitam o RLS — `security_invoker`)
 
-`vw_clientes` (LTV, pedidos, em aberto, último pedido) · `vw_pedidos` (cliente, pré-venda, unidades) · `vw_pre_vendas` (status efetivo, pedidos, total, recebido, unidades) · `vw_pre_venda_itens` (vendido e restante) · `vw_contas_pagar` (situação: em dia, vence logo, vencida, paga, cancelada).
+`vw_clientes` (LTV, pedidos, em aberto, último pedido) · `vw_pedidos` (cliente, pré-venda, unidades) · `vw_pre_vendas` (status efetivo, pedidos, total, recebido, unidades) · `vw_pre_venda_itens` (vendido e restante) · `vw_contas_pagar` (situação: em dia, vence logo, vencida, paga, cancelada) · `vw_tarefas` (responsáveis, anexos, comentários, atraso, busca).
 
 ### 7.4 Funções (RPC)
 
@@ -325,6 +339,7 @@ erDiagram
 | `metricas_painel(inicio, fim)` · `receita_semanal(semanas)` · `resumo_produtos_vendidos(...)` | Equipe | Relatórios. |
 | `importar_pedido_shopify(pedido)` | **Somente servidor** | Importação idempotente de pedidos da Shopify. |
 | `pedido_json(pedido)` | Equipe / servidor | Pedido completo em JSON (eventos e API). |
+| `criar_tarefa(dados, responsaveis)` | Equipe | Cria a tarefa e marca os responsáveis numa transação (os marcados recebem aviso). |
 
 ### 7.5 Segurança no banco (RLS)
 

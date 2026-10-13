@@ -256,10 +256,26 @@
   animation: entrar-passo 0.38s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* Painel que entra pela direita (cartão aberto das Tarefas, no desktop). */
+@keyframes entrar-lateral {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@utility animar-lateral {
+  animation: entrar-lateral 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animar-folha,
   .animar-fundo,
-  .animar-passo {
+  .animar-passo,
+  .animar-lateral,
+  .lg\:animar-lateral {
     animation: none;
   }
 }

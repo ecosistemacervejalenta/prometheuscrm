@@ -785,6 +785,81 @@ await db.exec(`reset role;`)
   await db.exec(`reset role;`)
 }
 
+// Tarefas internas ----------------------------------------------------------------
+{
+  await db.exec(`reset role; update perfis set ativo = true, trocar_senha = false where id in ('${uid}', '${uid2}');`)
+  const como = (id) => `reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${id}', false);`
+  const avisos = async () => (await q(`select tipo from notificacoes order by criado_em, tipo`)).map((n) => n.tipo)
+
+  await db.exec(como(uid))
+  await expectError('tarefa sem responsável é recusada', `select criar_tarefa('{"titulo":"Sem dono"}'::jsonb, '{}'::uuid[])`)
+  await expectError('tarefa sem título é recusada', `select criar_tarefa('{"titulo":"   "}'::jsonb, array[$1]::uuid[])`, [uid])
+  const t = (await um(`select criar_tarefa($1::jsonb, array[$2, $3, $3]::uuid[]) r`, [
+    JSON.stringify({ titulo: '  Comprar   lúpulo ', descricao: ' ', prioridade: 'alta', prazo: '2026-10-20T18:00:00-03:00' }), uid, uid2,
+  ])).r
+  expectEq('tarefa criada com título limpo e quem criou', await um(`select titulo, descricao, status, prioridade, criado_por = $2 minha from tarefas where id = $1`, [t.id, uid]),
+    { titulo: 'Comprar lúpulo', descricao: null, status: 'a_fazer', prioridade: 'alta', minha: true })
+  expectEq('quadro traz os responsáveis (sem repetir)', (await um(`select cardinality(responsaveis_ids) n, atrasada from vw_tarefas where id = $1`, [t.id])), { n: 2, atrasada: false })
+  expectEq('quem criou não recebe aviso da própria ação', await avisos(), [])
+
+  await db.exec(como(uid2))
+  expectEq('responsável marcado recebe o aviso no login', await um(`select tipo, titulo, autor_id = $1 da_ana from notificacoes`, [uid]),
+    { tipo: 'tarefa_atribuida', titulo: `Ana Ribeiro marcou você na tarefa #${t.numero}`, da_ana: true })
+  await q(`update tarefas set status = 'fazendo' where id = $1`, [t.id])
+  await q(`update tarefas set impedimento = '  Fornecedor sem estoque ' where id = $1`, [t.id])
+  expectEq('impedimento guarda motivo, quem e quando', await um(`select impedimento, impedida_por = $2 meu, impedida_em is not null quando from tarefas where id = $1`, [t.id, uid2]),
+    { impedimento: 'Fornecedor sem estoque', meu: true, quando: true })
+  await q(`insert into tarefa_eventos (tarefa_id, tipo, texto) values ($1, 'comentario', 'Liguei para o fornecedor')`, [t.id])
+  await expectError('equipe não grava registro automático na mão', `insert into tarefa_eventos (tarefa_id, tipo) values ($1, 'status')`, [t.id])
+  await expectError('comentário não sai em nome de outro', `insert into tarefa_eventos (tarefa_id, tipo, texto, autor_id) values ($1, 'comentario', 'Fui eu', $2)`, [t.id, uid])
+  await expectError('membro não cria aviso para outro', `insert into notificacoes (perfil_id, tipo, titulo) values ($1, 'tarefa_comentario', 'x')`, [uid])
+  expectEq('membro não vê os avisos dos outros', (await um(`select count(*)::int n from notificacoes where perfil_id <> $1`, [uid2])).n, 0)
+  await q(`update notificacoes set lida_em = now()`)
+  expectEq('membro marca os avisos como lidos', (await um(`select count(*)::int n from notificacoes where lida_em is null`)).n, 0)
+  await expectError('aviso não pode ser reescrito', `update notificacoes set titulo = 'outro'`)
+  await q(`delete from tarefas where id = $1`, [t.id])
+  expectEq('só quem criou (ou admin) exclui a tarefa', (await um(`select count(*)::int n from tarefas where id = $1`, [t.id])).n, 1)
+
+  await db.exec(como(uid))
+  expectEq('quem criou é avisado do impedimento e do comentário', await avisos(), ['tarefa_impedida', 'tarefa_comentario'])
+  await q(`update tarefas set impedimento = null where id = $1`, [t.id])
+  await q(`update tarefas set prazo = '2026-10-22T09:30:00-03:00' where id = $1`, [t.id])
+  await expectError('anexo fora da pasta da tarefa', `insert into tarefa_anexos (tarefa_id, path, nome, mime, tamanho) values ($1, 'outra/print.png', 'print.png', 'image/png', 10)`, [t.id])
+  await expectError('anexo só aceita imagem', `insert into tarefa_anexos (tarefa_id, path, nome, mime, tamanho) values ($1, $2, 'a.pdf', 'application/pdf', 10)`, [t.id, `${t.id}/a.pdf`])
+  await q(`insert into tarefa_anexos (tarefa_id, path, nome, mime, tamanho) values ($1, $2, 'print.png', 'image/png', 2048)`, [t.id, `${t.id}/print.png`])
+  await q(`update tarefas set impedimento = 'Esperando o frete' where id = $1`, [t.id])
+  await q(`update tarefas set status = 'concluida' where id = $1`, [t.id])
+  expectEq('concluir marca a data e tira o impedimento', await um(`select concluida_em is not null concluida, impedimento, impedida_em from tarefas where id = $1`, [t.id]),
+    { concluida: true, impedimento: null, impedida_em: null })
+  await q(`delete from tarefa_responsaveis where tarefa_id = $1 and perfil_id = $2`, [t.id, uid2])
+  expectEq('histórico registra cada mudança, na ordem', (await q(`select tipo from tarefa_eventos where tarefa_id = $1 order by criado_em`, [t.id])).map((e) => e.tipo), [
+    'criada', 'responsavel_adicionado', 'responsavel_adicionado', 'status', 'impedimento', 'comentario',
+    'impedimento_resolvido', 'prazo', 'anexo_adicionado', 'impedimento', 'status', 'responsavel_removido',
+  ])
+  expectEq('resolver guarda o motivo antigo', (await um(`select dados->>'motivo' m from tarefa_eventos where tarefa_id = $1 and tipo = 'impedimento_resolvido'`, [t.id])).m, 'Fornecedor sem estoque')
+  expectEq('vw_tarefas conta anexos e comentários', await um(`select anexos, comentarios, cardinality(responsaveis_ids) resp from vw_tarefas where id = $1`, [t.id]), { anexos: 1, comentarios: 1, resp: 1 })
+
+  await db.exec(`reset role;`)
+  expectEq('responsável é avisado de impedimento resolvido, prazo e conclusão',
+    (await q(`select tipo, texto from notificacoes where perfil_id = $1 and lida_em is null order by criado_em`, [uid2])).map((n) => `${n.tipo}${n.texto ? `: ${n.texto}` : ''}`),
+    ['tarefa_desimpedida', 'tarefa_prazo: Novo prazo: 22/10/2026 às 09:30', 'tarefa_impedida: Esperando o frete', 'tarefa_concluida'])
+  const fantasma = (await q(`insert into auth.users (email) values ('fantasma@prometheus.beer') returning id`))[0].id
+  await db.exec(como(uid))
+  await expectError('membro sem acesso não vira responsável', `insert into tarefa_responsaveis (tarefa_id, perfil_id) values ($1, $2)`, [t.id, fantasma])
+  await db.exec(como(fantasma))
+  expectEq('inativo não vê tarefas', (await um(`select count(*)::int n from vw_tarefas`)).n, 0)
+  await expectError('inativo não cria tarefa', `select criar_tarefa('{"titulo":"x"}'::jsonb, array[$1]::uuid[])`, [fantasma])
+  await db.exec(`reset role; set role anon; select set_config('request.jwt.claim.sub', '', false);`)
+  await expectError('anon não lê tarefas', `select * from vw_tarefas`)
+  await expectError('anon não lê avisos', `select * from notificacoes`)
+  await db.exec(como(uid))
+  await q(`delete from tarefas where id = $1`, [t.id])
+  await db.exec(`reset role;`)
+  expectEq('excluir a tarefa leva histórico, anexos e avisos junto', await um(`select
+    (select count(*)::int from tarefa_eventos where tarefa_id = $1) e, (select count(*)::int from tarefa_anexos where tarefa_id = $1) a,
+    (select count(*)::int from notificacoes where tarefa_id = $1) n`, [t.id]), { e: 0, a: 0, n: 0 })
+}
+
 await db.exec(`set role service_role;`)
 show('service_role identifica cliente', (await q(`select identificar_cliente_pre_venda('11987654321') r`))[0].r)
 await db.exec(`reset role;`)
