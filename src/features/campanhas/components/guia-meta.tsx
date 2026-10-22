@@ -129,8 +129,13 @@ export function GuiaMeta({ conexao, urlWebhook, ehAdmin }: { conexao: ConexaoMet
             seção <strong>Configuração da API</strong> (API Setup), escolha uma conta do WhatsApp Business ou crie uma nova.
           </li>
           <li>
-            Quando terminar, publique o app (modo <strong>Ao vivo</strong> no painel): alguns avisos do webhook só chegam com o app
-            publicado.
+            Em <strong>Configurações do app › Básico</strong>, preencha a <strong>URL da Política de Privacidade</strong> (pode ser a
+            página de privacidade do site da loja), escolha a <strong>categoria</strong> e clique em <strong>Salvar alterações</strong>.
+            Sem isso a Meta não deixa publicar.
+          </li>
+          <li>
+            Publique o app (botão <strong>Publicar</strong> / modo <strong>Ao vivo</strong> no painel): com o app em desenvolvimento,
+            alguns avisos do webhook não chegam.
           </li>
         </Lista>
       ),
@@ -163,19 +168,27 @@ export function GuiaMeta({ conexao, urlWebhook, ehAdmin }: { conexao: ConexaoMet
       resumo: 'Sem cartão cadastrado, a Meta não entrega mensagens de marketing.',
       links: [
         { href: 'https://business.facebook.com/wa/manage/home/', rotulo: 'Abrir o Gerenciador do WhatsApp' },
+        { href: 'https://business.facebook.com/billing_hub', rotulo: 'Abrir o Billing Hub' },
         { href: 'https://developers.facebook.com/docs/whatsapp/pricing', rotulo: 'Tabela de preços' },
       ],
       conteudo: (
-        <Lista>
-          <li>
-            No Gerenciador do WhatsApp, abra <strong>Visão geral › Adicionar forma de pagamento</strong> e cadastre um cartão.
-          </li>
-          <li>
-            Cobre em <strong>reais (BRL)</strong>: no Billing Hub, deixe o país de faturamento (Sold-To) como Brasil. Desde julho de 2026
-            contas do Brasil podem ser em BRL, e a partir de julho de 2027 a Meta não entrega mensagens de contas brasileiras em outra moeda.
-          </li>
-          <li>A cobrança é por mensagem de marketing entregue, direto da Meta.</li>
-        </Lista>
+        <div className="space-y-3">
+          <Alert tom="alerta" titulo="Escolha Real (BRL) — não dá para trocar depois">
+            A moeda é escolhida uma vez só, quando a conta de cobrança é criada. A partir de julho de 2027 a Meta para de entregar
+            mensagens de contas brasileiras cobradas em outra moeda (dólar, por exemplo).
+          </Alert>
+          <Lista>
+            <li>
+              Antes do cartão: no <strong>Billing Hub</strong>, confira se o país de faturamento (Sold-To) do portfólio é{' '}
+              <strong>Brasil</strong>.
+            </li>
+            <li>
+              No Gerenciador do WhatsApp, abra <strong>Visão geral › Adicionar forma de pagamento</strong>. Quando a Meta pedir país e
+              moeda, escolha <strong>Brasil</strong> e <strong>Real brasileiro (BRL)</strong>, e cadastre o cartão.
+            </li>
+            <li>A cobrança é por mensagem de marketing entregue, direto da Meta (fatura da Facebook Brasil).</li>
+          </Lista>
+        </div>
       ),
     },
     {
@@ -259,6 +272,11 @@ export function GuiaMeta({ conexao, urlWebhook, ehAdmin }: { conexao: ConexaoMet
             No app, abra <strong>Casos de uso › Personalizar › Configuração</strong> (Configuration), clique em <strong>Editar</strong>{' '}
             no Webhook e cole:
           </p>
+          {!urlWebhook.startsWith('https://') && (
+            <Alert tom="alerta" titulo="Abra esta tela pelo endereço do CRM na internet">
+              A Meta só aceita endereço com https. Entre no CRM pelo site publicado (não pelo computador local) e copie a URL de lá.
+            </Alert>
+          )}
           <CampoCopiavel rotulo="URL de retorno (Callback URL)" valor={urlWebhook} />
           {ehAdmin && conexao.token_verificacao ? (
             <CampoCopiavel rotulo="Token de verificação (Verify token)" valor={conexao.token_verificacao} />
@@ -276,9 +294,34 @@ export function GuiaMeta({ conexao, urlWebhook, ehAdmin }: { conexao: ConexaoMet
             .
           </p>
           <p className="text-[13px] text-suave">
-            A ligação do app com a sua conta do WhatsApp o CRM já faz ao salvar a conexão.
+            Para conferir na hora, clique em <strong>Testar</strong> ao lado de <Codigo>messages</Codigo>: este passo fica verde quando o
+            aviso chega. A ligação do app com a sua conta do WhatsApp o CRM já faz ao salvar a conexão.
           </p>
         </div>
+      ),
+    },
+    {
+      chave: 'primeira',
+      titulo: 'Primeira campanha: só com a equipe',
+      resumo: 'Um ensaio com 3 a 5 números da equipe antes de mandar para clientes.',
+      links: [{ href: '/campanhas/nova', rotulo: 'Montar a campanha' }],
+      conteudo: (
+        <Lista>
+          <li>
+            Em <strong>Campanhas › Nova campanha</strong>, escolha <strong>Colar números</strong> e cole só os WhatsApps da equipe.
+          </li>
+          <li>
+            Em “Quando enviar”, escolha <strong>Agendar</strong> (ex.: para daqui a 2 horas). Com “Agora”, a campanha sai assim que a
+            Meta aprova, sem tempo para o teste.
+          </li>
+          <li>
+            Quando a página da campanha mostrar <strong>Aprovada</strong>, use <strong>Enviar teste</strong> e confira foto, nome e
+            botões no celular. Não toque em “Não quero receber”: o número sai das próximas campanhas.
+          </li>
+          <li>
+            Deu certo? Comece com clientes em listas pequenas (até 250 por dia no início) e acompanhe a qualidade aqui em cima.
+          </li>
+        </Lista>
       ),
     },
   ]
@@ -372,7 +415,7 @@ export function GuiaMeta({ conexao, urlWebhook, ehAdmin }: { conexao: ConexaoMet
             <li>
               <strong>Comece pequeno</strong> — contas novas falam com 250 contatos por dia. Para chegar a 2 mil, verifique a empresa ou
               some 2 mil mensagens entregues em 30 dias; depois o limite sobe sozinho (10 mil → 100 mil → ilimitado) quando a qualidade
-              está boa e você usa o limite atual.
+              está boa e você usa pelo menos metade do limite em 7 dias. O limite vale para o portfólio inteiro, não por número.
             </li>
             <li>
               <strong>Não repita a mesma pessoa em seguida</strong>: espace as campanhas e varie a mensagem.
