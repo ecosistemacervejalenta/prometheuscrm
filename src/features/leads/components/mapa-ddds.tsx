@@ -1,256 +1,175 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
+import { useMemo } from 'react'
 
 import { formatarNumero, formatarPorcentagem, plural } from '@/lib/format'
-import { useLargura } from '@/lib/use-largura'
 import { cn } from '@/lib/utils'
 
-import { POSICAO_DO_DDD, REGIAO_DO_DDD } from '../ddd'
-import { ESTADOS_DO_MAPA, MAPA_BRASIL, projetar } from '../mapa-brasil'
-
-type Caixa = readonly [x: number, y: number, largura: number, altura: number]
-type Visao = 'brasil' | 'sudeste'
-
-/** Raio da maior bolha e o mínimo (para os DDDs pequenos continuarem visíveis), em unidades do mapa inteiro. */
-const RAIO_MAX = 52
-const RAIO_MIN = 4.5
-/** O número do DDD vai dentro da bolha a partir deste raio na tela (px). */
-const RAIO_COM_ROTULO = 14
-
-const compacto = new Intl.NumberFormat('pt-BR', { notation: 'compact' })
-
-/** Raio pela área (o dobro de números = o dobro da área), relativo ao maior DDD. */
-const raioDe = (numeros: number, maior: number) => Math.max(RAIO_MIN, RAIO_MAX * Math.sqrt(numeros / maior))
-
-// O recorte "Sudeste e Sul" tem a mesma proporção do Brasil inteiro: a moldura do mapa não muda de tamanho.
-const [SUL_X, SUL_Y] = projetar(-53.6, -16.6)
-const SUL_LARGURA = projetar(-40.6, -16.6)[0] - SUL_X
-const VISOES: Record<Visao, { rotulo: string; caixa: Caixa }> = {
-  brasil: { rotulo: 'Brasil', caixa: [0, 0, MAPA_BRASIL.largura, MAPA_BRASIL.altura] },
-  sudeste: { rotulo: 'Sudeste e Sul', caixa: [SUL_X, SUL_Y, SUL_LARGURA, (SUL_LARGURA * MAPA_BRASIL.altura) / MAPA_BRASIL.largura] },
-}
-
-/** Caixa visível do mapa, indo suavemente até `alvo` (de uma vez para quem pediu menos movimento). */
-function useCaixaAnimada(alvo: Caixa) {
-  const [caixa, setCaixa] = useState(alvo)
-  const atual = useRef(alvo)
-  useEffect(() => {
-    const de = atual.current
-    const duracao = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 450
-    const inicio = performance.now()
-    let quadro = 0
-    const passo = (agora: number) => {
-      const t = duracao ? Math.min(1, (agora - inicio) / duracao) : 1
-      const suave = t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2
-      const proxima = de.map((v, i) => v + (alvo[i] - v) * suave) as unknown as Caixa
-      atual.current = proxima
-      setCaixa(proxima)
-      if (t < 1) quadro = requestAnimationFrame(passo)
-    }
-    quadro = requestAnimationFrame(passo)
-    return () => cancelAnimationFrame(quadro)
-  }, [alvo])
-  return caixa
-}
+import { NOME_DA_UF, ufDoDdd } from '../ddd'
+import { ESTADOS_DO_MAPA, MAPA_BRASIL } from '../mapa-brasil'
 
 /**
- * Mapa do Brasil com uma bolha por DDD na cidade principal (área proporcional aos números).
- * Mouse ou toque mostram o DDD; `ativo`/`aoAtivar` ligam o mapa ao ranking ao lado.
- * O recorte "Sudeste e Sul" separa os DDDs de São Paulo, que no Brasil inteiro ficam colados.
+ * Faixas da fatia de cada estado no total. Fixas (e não proporcionais ao maior)
+ * porque São Paulo concentra a maior parte dos números: numa escala contínua o
+ * resto do país ficaria todo branco. `tom` = quanto do verde entra na mistura.
+ */
+const FAIXAS = [
+  { ate: 0.002, rotulo: 'até 0,2%', tom: 16 },
+  { ate: 0.005, rotulo: '0,2–0,5%', tom: 34 },
+  { ate: 0.01, rotulo: '0,5–1%', tom: 54 },
+  { ate: 0.05, rotulo: '1–5%', tom: 76 },
+  { ate: Infinity, rotulo: '5% ou mais', tom: 100 },
+] as const
+
+/** Verde da faixa misturado à superfície: claro → escuro no tema claro e escuro → vivo no escuro. */
+const corDoTom = (tom: number) => `color-mix(in oklab, var(--color-whatsapp-700) ${tom}%, var(--color-superficie))`
+const SEM_NUMEROS = 'var(--color-linha)'
+
+/** Caixa de cada estado no mapa (para posicionar a dica), lida dos próprios caminhos (só M/L absolutos). */
+const CAIXA_DA_UF = Object.fromEntries(
+  ESTADOS_DO_MAPA.map((e) => {
+    const n = (e.d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
+    const xs = n.filter((_, i) => i % 2 === 0)
+    const ys = n.filter((_, i) => i % 2 === 1)
+    return [e.uf, { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) }]
+  }),
+)
+
+/**
+ * Mapa do Brasil com cada estado pintado pela fatia dos números (DDDs somados pela
+ * UF da cidade principal). Mouse ou toque mostram o estado e os DDDs dele;
+ * `ufAtiva`/`aoAtivarUf` ligam o mapa ao ranking ao lado.
  */
 export function MapaDdds({
   porDdd,
   total,
-  ativo,
-  aoAtivar,
+  ufAtiva,
+  aoAtivarUf,
 }: {
   porDdd: Array<{ ddd: string; numeros: number }>
   /** Base do "% do total" (todos os números com WhatsApp). */
   total: number
-  ativo: string | null
-  aoAtivar: (ddd: string | null) => void
+  ufAtiva: string | null
+  aoAtivarUf: (uf: string | null) => void
 }) {
-  const [visao, setVisao] = useState<Visao>('brasil')
-  const caixa = useCaixaAnimada(VISOES[visao].caixa)
-  const moldura = useRef<HTMLDivElement>(null)
-  const largura = useLargura(moldura)
-
-  const maior = Math.max(0, ...porDdd.map((d) => d.numeros))
-  // Maiores primeiro: as pequenas ficam por cima e continuam visíveis.
-  const bolhas = useMemo(
-    () =>
-      porDdd
-        .filter((d) => d.numeros > 0 && POSICAO_DO_DDD[d.ddd])
-        .map((d) => {
-          const [x, y] = projetar(...POSICAO_DO_DDD[d.ddd])
-          return { ...d, x, y, r: raioDe(d.numeros, maior) }
-        })
-        .sort((a, b) => b.r - a.r),
-    [porDdd, maior],
-  )
-
-  const [cx, cy, cw, ch] = caixa
-  // As bolhas têm o mesmo tamanho na tela em qualquer recorte: no mapa, o raio é r / zoom.
-  const zoom = MAPA_BRASIL.largura / cw
-  const pxPorUnidade = largura / cw
-  const pxPorRaio = largura / MAPA_BRASIL.largura
-
-  // Número dentro da bolha só quando cabe e nenhuma bolha menor (desenhada por cima) cobre o centro.
-  const rotuladas = bolhas.filter(
-    (b, i) =>
-      b.r * pxPorRaio >= RAIO_COM_ROTULO &&
-      bolhas.slice(i + 1).every((o) => Math.hypot(o.x - b.x, o.y - b.y) * pxPorUnidade > o.r * pxPorRaio + 9),
-  )
-
-  function apontar(e: PointerEvent<SVGSVGElement>) {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const escala = rect.width / cw
-    if (!escala) return
-    const x = cx + (e.clientX - rect.left) / escala
-    const y = cy + (e.clientY - rect.top) / escala
-    // Dentro de bolhas sobrepostas vale a menor (a de cima); fora, a borda mais próxima até 10 px.
-    let achada: string | null = null
-    let melhor = Infinity
-    for (const b of bolhas) {
-      const folga = (Math.hypot(b.x - x, b.y - y) - b.r / zoom) * escala
-      const nota = folga <= 0 ? b.r - 1e6 : folga
-      if (folga <= 10 && nota < melhor) {
-        melhor = nota
-        achada = b.ddd
-      }
+  const estados = useMemo(() => {
+    const porUf = new Map<string, { numeros: number; ddds: Array<{ ddd: string; numeros: number }> }>()
+    for (const d of porDdd) {
+      const uf = ufDoDdd(d.ddd)
+      if (!uf || d.numeros <= 0) continue
+      const estado = porUf.get(uf) ?? { numeros: 0, ddds: [] }
+      estado.numeros += d.numeros
+      estado.ddds.push(d)
+      porUf.set(uf, estado)
     }
-    if (achada !== ativo) aoAtivar(achada)
+    for (const e of porUf.values()) e.ddds.sort((a, b) => b.numeros - a.numeros)
+    return porUf
+  }, [porDdd])
+
+  const faixaDe = (numeros: number) => FAIXAS.find((f) => numeros / (total || 1) < f.ate) ?? FAIXAS[FAIXAS.length - 1]
+  const corDe = (uf: string) => {
+    const numeros = estados.get(uf)?.numeros ?? 0
+    return numeros > 0 ? corDoTom(faixaDe(numeros).tom) : SEM_NUMEROS
   }
 
-  const destaque = bolhas.find((b) => b.ddd === ativo)
-  const dica = destaque && destaque.x >= cx && destaque.x <= cx + cw && destaque.y >= cy && destaque.y <= cy + ch ? destaque : null
+  const maior = [...estados].sort((a, b) => b[1].numeros - a[1].numeros)[0]
+  const ativo = ufAtiva ? ESTADOS_DO_MAPA.find((e) => e.uf === ufAtiva) : undefined
+  const dica = ufAtiva ? { uf: ufAtiva, ...(estados.get(ufAtiva) ?? { numeros: 0, ddds: [] }) } : null
+
   let posicaoDica: { left: string; top: string; transform: string } | null = null
-  if (dica) {
-    const raio = dica.r / zoom
-    const esquerda = ((dica.x - cx) / cw) * 100
-    const acima = (dica.y - raio - cy) / ch > 0.16
-    const topo = (((acima ? dica.y - raio : dica.y + raio) - cy) / ch) * 100
+  if (dica && CAIXA_DA_UF[dica.uf]) {
+    const c = CAIXA_DA_UF[dica.uf]
+    const esquerda = ((c.x0 + c.x1) / 2 / MAPA_BRASIL.largura) * 100
+    const acima = c.y0 / MAPA_BRASIL.altura > 0.18
+    const topo = ((acima ? c.y0 : c.y1) / MAPA_BRASIL.altura) * 100
     const tx = esquerda < 22 ? '-12%' : esquerda > 78 ? '-88%' : '-50%'
-    posicaoDica = { left: `${esquerda}%`, top: `${topo}%`, transform: `translate(${tx}, ${acima ? 'calc(-100% - 8px)' : '8px'})` }
+    posicaoDica = { left: `${esquerda}%`, top: `${topo}%`, transform: `translate(${tx}, ${acima ? 'calc(-100% - 6px)' : '6px'})` }
   }
-
-  const potencia = maior > 0 ? 10 ** Math.floor(Math.log10(maior)) : 0
-  const referencias = [potencia, potencia / 10, potencia / 100].filter((v) => v >= 10)
-  const primeiro = bolhas.length ? bolhas[0] : null
 
   return (
     <div className="min-w-0">
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-        <div className="inline-flex rounded-lg bg-ink/[0.06] p-0.5" role="group" aria-label="Recorte do mapa">
-          {(Object.keys(VISOES) as Visao[]).map((v) => (
-            <button
-              key={v}
-              type="button"
-              aria-pressed={visao === v}
-              onClick={() => setVisao(v)}
-              className={cn(
-                'rounded-md px-3 py-1.5 text-[13px] font-semibold transition-colors',
-                visao === v ? 'bg-superficie text-ink shadow-sm' : 'text-suave hover:text-ink',
-              )}
-            >
-              {VISOES[v].rotulo}
-            </button>
-          ))}
-        </div>
-
-        {/* Legenda de tamanho: bolhas de referência no mesmo tamanho das do mapa. */}
-        {pxPorRaio > 0 && referencias.length > 0 && (
-          <div className="flex items-end gap-3" aria-hidden>
-            {referencias.map((v) => {
-              const r = raioDe(v, maior) * pxPorRaio
-              return (
-                <div key={v} className="flex flex-col items-center gap-1">
-                  <svg width={2 * r + 2} height={2 * r + 2} className="overflow-visible">
-                    <circle cx={r + 1} cy={r + 1} r={r} fill="var(--color-whatsapp-700)" fillOpacity={0.78} />
-                  </svg>
-                  <span className="tipo-dado text-[11px] leading-none text-suave">{compacto.format(v)}</span>
-                </div>
-              )
-            })}
-          </div>
-        )}
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5" aria-hidden>
+        <span className="text-[12px] font-semibold text-ink">Fatia dos números</span>
+        {FAIXAS.map((f) => (
+          <span key={f.rotulo} className="inline-flex items-center gap-1.5 text-[12px] text-suave">
+            <span className="size-3 rounded-[3px]" style={{ background: corDoTom(f.tom) }} />
+            {f.rotulo}
+          </span>
+        ))}
+        <span className="inline-flex items-center gap-1.5 text-[12px] text-suave">
+          <span className="size-3 rounded-[3px]" style={{ background: SEM_NUMEROS }} />
+          sem números
+        </span>
       </div>
 
-      <div ref={moldura} className="relative" style={{ aspectRatio: `${MAPA_BRASIL.largura} / ${MAPA_BRASIL.altura}` }}>
+      <div className="relative" style={{ aspectRatio: `${MAPA_BRASIL.largura} / ${MAPA_BRASIL.altura}` }}>
         <svg
-          viewBox={caixa.join(' ')}
+          viewBox={`0 0 ${MAPA_BRASIL.largura} ${MAPA_BRASIL.altura}`}
           className="absolute inset-0 size-full touch-manipulation"
           role="img"
           aria-label={
-            primeiro
-              ? `Mapa do Brasil com os números por DDD. O maior é o DDD ${primeiro.ddd} (${REGIAO_DO_DDD[primeiro.ddd]}), com ${formatarNumero(primeiro.numeros)}.`
+            maior
+              ? `Mapa do Brasil com os números por estado. O maior é ${NOME_DA_UF[maior[0]]}, com ${formatarNumero(maior[1].numeros)} (${formatarPorcentagem(maior[1].numeros / (total || 1))}).`
               : 'Mapa do Brasil'
           }
-          onPointerMove={apontar}
-          onPointerDown={apontar}
-          // No toque o "leave" vem logo ao soltar o dedo: a dica fica até tocar em outro lugar.
-          onPointerLeave={(e) => e.pointerType !== 'touch' && aoAtivar(null)}
+          // No toque o "leave" vem logo ao soltar o dedo: a dica fica até tocar fora do mapa.
+          onPointerLeave={(e) => e.pointerType !== 'touch' && aoAtivarUf(null)}
+          onPointerDown={(e) => e.target === e.currentTarget && aoAtivarUf(null)}
         >
           {ESTADOS_DO_MAPA.map((e) => (
             <path
               key={e.uf}
               d={e.d}
-              fill="var(--color-papel)"
-              stroke="var(--color-linha-forte)"
-              strokeWidth={1}
-              strokeLinejoin="round"
-              vectorEffect="non-scaling-stroke"
-            />
-          ))}
-          {bolhas.map((b) => (
-            <circle
-              key={b.ddd}
-              cx={b.x}
-              cy={b.y}
-              r={b.r / zoom}
-              fill="var(--color-whatsapp-700)"
-              fillOpacity={ativo ? (b.ddd === ativo ? 0.95 : 0.28) : 0.78}
+              fill={corDe(e.uf)}
+              fillOpacity={ufAtiva && ufAtiva !== e.uf ? 0.55 : 1}
               stroke="var(--color-superficie)"
               strokeWidth={1.5}
+              strokeLinejoin="round"
               vectorEffect="non-scaling-stroke"
-              className="transition-[fill-opacity] duration-150"
+              className="cursor-default transition-[fill-opacity] duration-150"
+              onPointerEnter={() => aoAtivarUf(e.uf)}
+              onPointerDown={() => aoAtivarUf(e.uf)}
             />
           ))}
-          {/* Contorno da bolha em destaque por cima de todas (a do 11 fica embaixo das vizinhas). */}
-          {destaque && (
-            <circle
-              cx={destaque.x}
-              cy={destaque.y}
-              r={destaque.r / zoom}
+          {/* Contorno do estado em destaque por cima dos vizinhos. */}
+          {ativo && (
+            <path
+              d={ativo.d}
               fill="none"
               stroke="var(--color-ink)"
               strokeWidth={2}
+              strokeLinejoin="round"
               vectorEffect="non-scaling-stroke"
               pointerEvents="none"
             />
-          )}
-          {pxPorUnidade > 0 && (
-            <g className="pointer-events-none font-mono select-none" fontWeight={700} textAnchor="middle" fill="white">
-              {rotuladas.map((b) => (
-                <text key={b.ddd} x={b.x} y={b.y} dy="0.35em" fontSize={11 / pxPorUnidade}>
-                  {b.ddd}
-                </text>
-              ))}
-            </g>
           )}
         </svg>
 
         {dica && posicaoDica && (
           <div
-            className="pointer-events-none absolute z-10 rounded-lg border border-linha bg-superficie px-3 py-2 whitespace-nowrap shadow-flutuante"
+            className="pointer-events-none absolute z-10 max-w-64 rounded-lg border border-linha bg-superficie px-3 py-2 shadow-flutuante"
             style={posicaoDica}
           >
-            <p className="tipo-dado text-[14px] font-semibold text-ink">{plural(dica.numeros, 'número')}</p>
-            <p className="text-[12px] leading-4 text-suave">
-              DDD {dica.ddd} · {REGIAO_DO_DDD[dica.ddd]}
+            <p className="text-[13px] font-semibold whitespace-nowrap text-ink">
+              {NOME_DA_UF[dica.uf]} <span className="font-normal text-suave">· {dica.uf}</span>
             </p>
-            <p className="mt-0.5 text-[12px] leading-4 text-suave">{formatarPorcentagem(total ? dica.numeros / total : 0)} do total</p>
+            {dica.numeros > 0 ? (
+              <>
+                <p className="tipo-dado mt-0.5 text-[14px] font-semibold whitespace-nowrap text-ink">{plural(dica.numeros, 'número')}</p>
+                <p className="text-[12px] leading-4 whitespace-nowrap text-suave">
+                  {formatarPorcentagem(dica.numeros / (total || 1))} do total · {plural(dica.ddds.length, 'DDD')}
+                </p>
+                <p className={cn('tipo-dado mt-1 text-[12px] leading-4 text-suave', dica.ddds.length > 4 && 'whitespace-nowrap')}>
+                  {dica.ddds
+                    .slice(0, 4)
+                    .map((d) => `${d.ddd}: ${formatarNumero(d.numeros)}`)
+                    .join(' · ')}
+                  {dica.ddds.length > 4 && ' …'}
+                </p>
+              </>
+            ) : (
+              <p className="text-[12px] text-suave">sem números</p>
+            )}
           </div>
         )}
       </div>

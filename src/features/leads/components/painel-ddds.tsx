@@ -7,17 +7,19 @@ import { classesBotao } from '@/components/ui/button'
 import { formatarNumero, formatarPorcentagem } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-import { REGIAO_DO_DDD, resumirDdds, type ContagemDdd } from '../ddd'
+import { REGIAO_DO_DDD, resumirDdds, ufDoDdd, type ContagemDdd } from '../ddd'
 import { MapaDdds } from './mapa-ddds'
 
 const NO_RANKING = 10
 
 /**
- * Números com WhatsApp por DDD: mapa do Brasil e ranking do maior para o menor.
- * O DDD sob o mouse (ou com o foco do teclado) no ranking fica em destaque no mapa, e vice-versa.
+ * Números com WhatsApp por DDD: mapa do Brasil por estado e ranking do maior para o menor.
+ * O DDD sob o mouse (ou com o foco do teclado) destaca o estado dele no mapa; o estado
+ * sob o mouse no mapa destaca os DDDs dele no ranking.
  */
 export function PainelDdds({ contagem }: { contagem: ContagemDdd[] }) {
   const [ativo, setAtivo] = useState<string | null>(null)
+  const [ufNoMapa, setUfNoMapa] = useState<string | null>(null)
   const [todos, setTodos] = useState(false)
   const { total, semDdd, porDdd } = resumirDdds(contagem)
 
@@ -30,10 +32,11 @@ export function PainelDdds({ contagem }: { contagem: ContagemDdd[] }) {
   const visiveis = todos ? ordenados : ordenados.slice(0, NO_RANKING)
   const tres = ordenados.slice(0, 3)
   const somaTres = tres.reduce((s, d) => s + d.numeros, 0)
+  const ufAtiva = ufNoMapa ?? (ativo ? (ufDoDdd(ativo) ?? null) : null)
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-8">
-      <MapaDdds porDdd={ordenados} total={total} ativo={ativo} aoAtivar={setAtivo} />
+      <MapaDdds porDdd={ordenados} total={total} ufAtiva={ufAtiva} aoAtivarUf={setUfNoMapa} />
 
       <div className="min-w-0">
         {tres.length === 3 && (
@@ -52,7 +55,10 @@ export function PainelDdds({ contagem }: { contagem: ContagemDdd[] }) {
               onPointerLeave={() => setAtivo(null)}
               onFocus={() => setAtivo(d.ddd)}
               onBlur={() => setAtivo(null)}
-              className={cn('cursor-default rounded-lg px-2 py-1.5 transition-colors', ativo === d.ddd && 'bg-papel')}
+              className={cn(
+                'cursor-default rounded-lg px-2 py-1.5 transition-colors',
+                (ativo === d.ddd || (ufNoMapa && ufDoDdd(d.ddd) === ufNoMapa)) && 'bg-papel',
+              )}
             >
               <div className="flex items-baseline gap-2.5">
                 <span className="tipo-dado w-5 shrink-0 text-right text-[12px] text-sutil">{i + 1}</span>

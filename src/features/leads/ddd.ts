@@ -178,11 +178,23 @@ const REGIAO_DA_UF: Record<string, Regiao> = {
   TO: 'Norte', PA: 'Norte', AP: 'Norte', AM: 'Norte', RR: 'Norte', AC: 'Norte', RO: 'Norte',
 }
 
+export const NOME_DA_UF: Record<string, string> = {
+  AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia', CE: 'Ceará', DF: 'Distrito Federal',
+  ES: 'Espírito Santo', GO: 'Goiás', MA: 'Maranhão', MT: 'Mato Grosso', MS: 'Mato Grosso do Sul', MG: 'Minas Gerais',
+  PA: 'Pará', PB: 'Paraíba', PR: 'Paraná', PE: 'Pernambuco', PI: 'Piauí', RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte',
+  RS: 'Rio Grande do Sul', RO: 'Rondônia', RR: 'Roraima', SC: 'Santa Catarina', SP: 'São Paulo', SE: 'Sergipe', TO: 'Tocantins',
+}
+
+/** UF do DDD, pela cidade principal ('11' → 'SP'). */
+export function ufDoDdd(ddd: string): string | undefined {
+  return REGIAO_DO_DDD[ddd]?.split('/')[1]
+}
+
 /** Números por região do Brasil (pela UF da cidade do DDD), na ordem de REGIOES. */
 export function somarRegioes(porDdd: Array<{ ddd: string; numeros: number }>) {
   const soma = new Map<Regiao, number>(REGIOES.map((r) => [r, 0]))
   for (const d of porDdd) {
-    const regiao = REGIAO_DA_UF[REGIAO_DO_DDD[d.ddd]?.split('/')[1] ?? '']
+    const regiao = REGIAO_DA_UF[ufDoDdd(d.ddd) ?? '']
     if (regiao) soma.set(regiao, (soma.get(regiao) ?? 0) + d.numeros)
   }
   return REGIOES.map((regiao) => ({ regiao, numeros: soma.get(regiao) ?? 0 }))
