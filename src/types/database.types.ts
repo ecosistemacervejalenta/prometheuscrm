@@ -1106,6 +1106,7 @@ export type Database = {
           nome: string
           origem: string | null
           pasta_id: string
+          sem_whatsapp_com_email: number
           status: Database["public"]["Enums"]["status_lista_leads"]
           total: number
         }
@@ -1125,6 +1126,7 @@ export type Database = {
           nome: string
           origem?: string | null
           pasta_id: string
+          sem_whatsapp_com_email?: number
           status?: Database["public"]["Enums"]["status_lista_leads"]
           total?: number
         }
@@ -1144,6 +1146,7 @@ export type Database = {
           nome?: string
           origem?: string | null
           pasta_id?: string
+          sem_whatsapp_com_email?: number
           status?: Database["public"]["Enums"]["status_lista_leads"]
           total?: number
         }
@@ -2571,6 +2574,7 @@ export type Database = {
           leads: number | null
           listas: number | null
           nome: string | null
+          sem_whatsapp_com_email: number | null
           ultima_lista_em: string | null
           whatsapp_unicos: number | null
           whatsapp_validos: number | null

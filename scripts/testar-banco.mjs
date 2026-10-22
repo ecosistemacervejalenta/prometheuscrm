@@ -421,6 +421,7 @@ expectEq('vw_leads marca quem já é cliente', await q(`select linha, ja_cliente
   [{ linha: 1, ja_cliente: true }, { linha: 3, ja_cliente: false }, { linha: 4, ja_cliente: false }, { linha: 5, ja_cliente: false }])
 expectEq('busca encontra por qualquer coluna', (await q(`select linha from leads where lista_id = $1 and busca like '%912 345%' order by linha`, [lista.id])).map((r) => r.linha), [4])
 expectEq('vw_leads_pastas soma listas e leads', await um(`select listas, leads, com_whatsapp from vw_leads_pastas where id = $1`, [pasta.id]), { listas: 1, leads: 4, com_whatsapp: 2 })
+expectEq('lista e pasta contam quem está sem WhatsApp e com e-mail', await um(`select (select sem_whatsapp_com_email from leads_listas where id = $1) lista, (select sem_whatsapp_com_email from vw_leads_pastas where id = $2) pasta`, [lista.id, pasta.id]), { lista: 1, pasta: 1 })
 await expectError('não exclui pasta com listas', `delete from leads_pastas where id = $1`, [pasta.id])
 await expectError('lista com nome repetido na mesma pasta', `insert into leads_listas (pasta_id, nome) values ($1, 'grupo vip')`, [pasta.id])
 await expectError('lote acima de 5.000 é recusado', `select importar_leads($1, (select jsonb_agg(jsonb_build_object('linha', g)) from generate_series(1, 5001) g))`, [lista.id])

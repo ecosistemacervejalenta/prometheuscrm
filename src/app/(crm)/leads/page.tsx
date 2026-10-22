@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/ui/page-header'
 import { PainelDdds } from '@/features/leads/components/painel-ddds'
-import { ResumoEmails } from '@/features/leads/components/resumo-emails'
 import { ResumoLeads } from '@/features/leads/components/resumo-leads'
 import { ResumoRegioes } from '@/features/leads/components/resumo-regioes'
 import { resumirDdds } from '@/features/leads/ddd'
@@ -21,6 +20,8 @@ export default async function PaginaBancoDeLeads() {
   const totalLeads = pastas.reduce((s, p) => s + (p.leads ?? 0), 0)
   const totalWhatsapp = pastas.reduce((s, p) => s + (p.com_whatsapp ?? 0), 0)
   const totalListas = pastas.reduce((s, p) => s + (p.listas ?? 0), 0)
+  const totalEmails = pastas.reduce((s, p) => s + (p.com_email ?? 0), 0)
+  const totalSoEmail = pastas.reduce((s, p) => s + (p.sem_whatsapp_com_email ?? 0), 0)
   const { porDdd } = resumirDdds(contagemDdds)
 
   return (
@@ -61,6 +62,8 @@ export default async function PaginaBancoDeLeads() {
               onde="banco"
               leads={totalLeads}
               comWhatsapp={totalWhatsapp}
+              comEmail={totalEmails}
+              semWhatsappComEmail={totalSoEmail}
               listas={totalListas}
               pastas={pastas.length}
               incompletas={0}
@@ -90,26 +93,23 @@ export default async function PaginaBancoDeLeads() {
                 </div>
                 <p className="tipo-rotulo mt-4 text-suave">Leads</p>
                 <p className="tipo-numero mt-0.5 text-[28px] leading-8">{formatarNumero(p.leads)}</p>
-                <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-linha pt-3">
-                  <div>
-                    <dt className="tipo-rotulo text-suave">WhatsApp válidos</dt>
-                    <dd className="tipo-dado mt-0.5 text-[15px]">{formatarNumero(p.whatsapp_validos)}</dd>
-                  </div>
-                  <div>
-                    <dt className="tipo-rotulo text-suave">Repetidos</dt>
-                    <dd className="tipo-dado mt-0.5 text-[15px]">
-                      {formatarNumero(Math.max(0, (p.com_whatsapp ?? 0) - (p.whatsapp_unicos ?? 0)))}
-                    </dd>
-                  </div>
+                <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3 border-t border-linha pt-3">
+                  {indicadoresDaPasta(p).map((i) => (
+                    <div key={i.rotulo} className="min-w-0">
+                      <dt className="tipo-rotulo text-suave">{i.rotulo}</dt>
+                      <dd className="tipo-dado mt-0.5 text-[15px]">{formatarNumero(i.valor)}</dd>
+                      {i.detalhe && <dd className="truncate text-[11px] leading-4 text-sutil">{i.detalhe}</dd>}
+                    </div>
+                  ))}
                 </dl>
               </Link>
             ))}
           </div>
 
-          <Card className="mb-5 lg:mb-6">
+          <Card>
             <CardHeader
               titulo="Onde estão os números"
-              descricao="WhatsApp válidos por região e por DDD, sem repetir, somando todas as pastas."
+              descricao={`WhatsApp válidos por região e por DDD, sem repetir, somando todas as pastas · ${formatarNumero(porDdd.length)} DDDs diferentes`}
             />
             <CardContent>
               <div className="mb-6 border-b border-linha pb-5">
@@ -118,15 +118,25 @@ export default async function PaginaBancoDeLeads() {
               <PainelDdds contagem={contagemDdds} />
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader titulo="E-mails" descricao="Quantos leads têm e-mail, no banco todo e em cada pasta." />
-            <CardContent>
-              <ResumoEmails pastas={pastas} />
-            </CardContent>
-          </Card>
         </>
       )}
     </>
   )
+}
+
+type PastaDoBanco = Awaited<ReturnType<typeof listarPastas>>[number]
+
+/** Os quatro números do cartão da pasta: WhatsApp (válidos, repetidos) e e-mail (com, sem WhatsApp). */
+function indicadoresDaPasta(p: PastaDoBanco) {
+  const semWhatsapp = Math.max(0, (p.leads ?? 0) - (p.com_whatsapp ?? 0))
+  return [
+    { rotulo: 'WhatsApp válidos', valor: p.whatsapp_validos ?? 0, detalhe: null },
+    { rotulo: 'Repetidos', valor: Math.max(0, (p.com_whatsapp ?? 0) - (p.whatsapp_unicos ?? 0)), detalhe: 'entre listas' },
+    { rotulo: 'Com e-mail', valor: p.com_email ?? 0, detalhe: null },
+    {
+      rotulo: 'Sem WhatsApp',
+      valor: semWhatsapp,
+      detalhe: semWhatsapp ? `${formatarNumero(p.sem_whatsapp_com_email ?? 0)} com e-mail` : null,
+    },
+  ]
 }

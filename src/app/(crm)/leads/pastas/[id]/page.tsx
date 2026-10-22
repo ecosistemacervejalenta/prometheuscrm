@@ -51,6 +51,8 @@ export default async function PaginaPasta({ params, searchParams }: PageProps<'/
             onde="pasta"
             leads={pasta.leads ?? 0}
             comWhatsapp={pasta.com_whatsapp ?? 0}
+            comEmail={pasta.com_email ?? 0}
+            semWhatsappComEmail={pasta.sem_whatsapp_com_email ?? 0}
             listas={listas.length}
             incompletas={listas.filter((l) => l.status === 'importando').length}
             contagem={contagem}
@@ -61,7 +63,7 @@ export default async function PaginaPasta({ params, searchParams }: PageProps<'/
         <Card className="mb-5 lg:mb-6">
           <CardHeader
             titulo="Números por DDD"
-            descricao="Escolha um DDD para ver quantos números a pasta tem dele e baixar só esses."
+            descricao={`${formatarNumero(resumirDdds(contagem).porDdd.length)} DDDs diferentes · escolha um para ver quantos números a pasta tem dele e baixar só esses.`}
             acoes={
               <FilterBar caminho={`/leads/pastas/${id}`}>
                 <FilterSelect name="ddd" valor={ddd} rotulo="Todos os DDDs" opcoes={opcoesDdd(resumirDdds(contagem).porDdd)} />

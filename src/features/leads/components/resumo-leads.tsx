@@ -1,19 +1,21 @@
+import { Mail, MessageCircle } from 'lucide-react'
+
 import { formatarNumero, formatarPorcentagem } from '@/lib/format'
-import { cn } from '@/lib/utils'
 
-import { REGIAO_DO_DDD, resumirDdds, type ContagemDdd } from '../ddd'
-
-const DDDS_DO_BRASIL = Object.keys(REGIAO_DO_DDD).length
+import { resumirDdds, type ContagemDdd } from '../ddd'
 
 /**
  * Resumo da pasta ou do banco: total de leads (soma das listas) em destaque e, ao
- * lado, o que dá para usar — WhatsApp válidos sem repetir, DDDs diferentes,
- * repetidos entre listas e sem WhatsApp. A conta no rodapé fecha com o total.
+ * lado, como dá para falar com eles — uma linha de WhatsApp (válidos sem repetir,
+ * repetidos entre listas, sem WhatsApp) e uma de e-mail (com, sem, sem nenhum
+ * contato). A conta no rodapé fecha com o total.
  */
 export function ResumoLeads({
   onde,
   leads,
   comWhatsapp,
+  comEmail,
+  semWhatsappComEmail,
   listas,
   pastas = 1,
   incompletas,
@@ -24,34 +26,55 @@ export function ResumoLeads({
   leads: number
   /** Linhas com WhatsApp, somando as listas (o mesmo número conta uma vez por lista). */
   comWhatsapp: number
+  comEmail: number
+  semWhatsappComEmail: number
   listas: number
   pastas?: number
   incompletas: number
   /** Números diferentes por DDD (da pasta: `ddds_dos_leads`; do banco: `leads_resumo`). */
   contagem: ContagemDdd[]
 }) {
-  const { total: diferentes, semDdd, porDdd } = resumirDdds(contagem)
+  const { total: diferentes, semDdd } = resumirDdds(contagem)
   const validos = diferentes - semDdd
   const repetidos = Math.max(0, comWhatsapp - diferentes)
   const semWhatsapp = Math.max(0, leads - comWhatsapp)
+  const semEmail = Math.max(0, leads - comEmail)
+  const semContato = Math.max(0, semWhatsapp - semWhatsappComEmail)
+  const dosLeads = (n: number) => (leads ? `${formatarPorcentagem(n / leads)} dos leads` : '—')
 
-  const indicadores = [
+  const linhas = [
     {
-      rotulo: 'WhatsApp válidos',
-      valor: validos,
-      detalhe: `números diferentes com DDD do Brasil · ${leads ? formatarPorcentagem(validos / leads) : '—'} dos leads`,
+      canal: 'WhatsApp',
+      icone: MessageCircle,
+      indicadores: [
+        { rotulo: 'WhatsApp válidos', valor: validos, detalhe: `números diferentes, com DDD do Brasil · ${dosLeads(validos)}` },
+        {
+          rotulo: 'Repetidos entre listas',
+          valor: repetidos,
+          detalhe: `mesmo número em mais de uma ${onde === 'pasta' ? 'lista' : 'lista ou pasta'} · já contados 1 vez nos válidos`,
+        },
+        {
+          rotulo: 'Sem WhatsApp',
+          valor: semWhatsapp,
+          detalhe: semWhatsapp
+            ? `${formatarNumero(semWhatsappComEmail)} têm e-mail · ${formatarNumero(semContato)} sem nenhum contato`
+            : 'todos os leads têm WhatsApp',
+        },
+      ],
     },
-    { rotulo: 'DDDs diferentes', valor: porDdd.length, detalhe: `de ${DDDS_DO_BRASIL} DDDs do Brasil` },
     {
-      rotulo: 'Repetidos entre listas',
-      valor: repetidos,
-      detalhe: onde === 'pasta' ? 'mesmo número em mais de uma lista' : 'mesmo número em mais de uma lista ou pasta',
+      canal: 'E-mail',
+      icone: Mail,
+      indicadores: [
+        { rotulo: 'Com e-mail', valor: comEmail, detalhe: dosLeads(comEmail) },
+        { rotulo: 'Sem e-mail', valor: semEmail, detalhe: dosLeads(semEmail) },
+        { rotulo: 'Sem nenhum contato', valor: semContato, detalhe: 'sem WhatsApp e sem e-mail' },
+      ],
     },
-    { rotulo: 'Sem WhatsApp', valor: semWhatsapp, detalhe: 'sem número ou número inválido' },
   ]
 
   return (
-    <div className="grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
+    <div className="grid lg:grid-cols-[minmax(0,0.75fr)_minmax(0,2fr)]">
       <div className="p-4 lg:p-5">
         <p className="tipo-rotulo text-suave">{onde === 'pasta' ? 'Leads na pasta' : 'Leads no banco'}</p>
         <p className="tipo-numero mt-1 text-[44px] leading-[48px] lg:text-[56px] lg:leading-[60px]">{formatarNumero(leads)}</p>
@@ -61,18 +84,27 @@ export function ResumoLeads({
             : `somando ${formatarNumero(listas)} lista(s) em ${formatarNumero(pastas)} pasta(s)`}
         </p>
       </div>
-      <dl className="grid grid-cols-2 border-t border-linha lg:border-t-0 lg:border-l">
-        {indicadores.map((i, n) => (
-          <div
-            key={i.rotulo}
-            className={cn('min-w-0 p-4 lg:px-5', n % 2 === 1 && 'border-l border-linha', n >= 2 && 'border-t border-linha')}
-          >
-            <dt className="tipo-rotulo text-suave">{i.rotulo}</dt>
-            <dd className="tipo-numero mt-1 text-[22px] leading-7 lg:text-[26px] lg:leading-8">{formatarNumero(i.valor)}</dd>
-            <dd className="mt-0.5 text-[12px] leading-4 text-suave">{i.detalhe}</dd>
-          </div>
+
+      <div className="grid gap-px border-t border-linha bg-linha lg:border-t-0 lg:border-l">
+        {linhas.map(({ canal, icone: Icone, indicadores }) => (
+          <section key={canal} aria-label={canal} className="bg-superficie">
+            <p className="flex items-center gap-1.5 px-4 pt-3 text-[12px] font-semibold text-ink lg:px-5">
+              <Icone className="size-3.5 text-suave" aria-hidden />
+              {canal}
+            </p>
+            <dl className="grid sm:grid-cols-3">
+              {indicadores.map((i) => (
+                <div key={i.rotulo} className="min-w-0 px-4 pt-1.5 pb-3.5 lg:px-5">
+                  <dt className="tipo-rotulo text-suave">{i.rotulo}</dt>
+                  <dd className="tipo-numero mt-1 text-[22px] leading-7 lg:text-[26px] lg:leading-8">{formatarNumero(i.valor)}</dd>
+                  <dd className="mt-0.5 text-[12px] leading-4 text-suave">{i.detalhe}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
         ))}
-      </dl>
+      </div>
+
       <p className="border-t border-linha px-4 py-3 text-[12px] text-sutil lg:col-span-2 lg:px-5">
         {formatarNumero(leads)} leads = {formatarNumero(validos)} WhatsApp válidos
         {semDdd > 0 && ` + ${formatarNumero(semDdd)} estrangeiros ou inválidos`} + {formatarNumero(repetidos)} repetidos entre listas +{' '}
