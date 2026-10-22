@@ -882,6 +882,21 @@ await db.exec(`reset role;`)
     (select count(*)::int from notificacoes where tarefa_id = $1) n`, [t.id]), { e: 0, a: 0, n: 0 })
 }
 
+// Frase do dia ---------------------------------------------------------------------
+{
+  const como = (id) => `reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${id}', false);`
+  await db.exec(como(uid))
+  await q(`insert into frase_do_dia_vistas (perfil_id, dia, ip) values ($1, '2026-10-22', '200.1.1.1')`, [uid])
+  await expectError('mesmo login, IP e dia não registra duas vezes', `insert into frase_do_dia_vistas (perfil_id, dia, ip) values ($1, '2026-10-22', '200.1.1.1')`, [uid])
+  await q(`insert into frase_do_dia_vistas (perfil_id, dia, ip) values ($1, '2026-10-22', '189.2.2.2')`, [uid])
+  await expectError('membro não registra em nome de outro', `insert into frase_do_dia_vistas (perfil_id, dia, ip) values ($1, '2026-10-22', '200.1.1.1')`, [uid2])
+  await db.exec(como(uid2))
+  expectEq('membro não vê o que os outros viram', (await um(`select count(*)::int n from frase_do_dia_vistas`)).n, 0)
+  await db.exec(`reset role; set role anon; select set_config('request.jwt.claim.sub', '', false);`)
+  await expectError('anon não lê a frase do dia', `select * from frase_do_dia_vistas`)
+  await db.exec(`reset role;`)
+}
+
 await db.exec(`set role service_role;`)
 show('service_role identifica cliente', (await q(`select identificar_cliente_pre_venda('11987654321') r`))[0].r)
 await db.exec(`reset role;`)

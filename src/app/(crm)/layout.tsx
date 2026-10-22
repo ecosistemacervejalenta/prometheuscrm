@@ -1,5 +1,6 @@
 import { Sidebar } from '@/components/layout/sidebar'
 import { Toaster } from '@/components/ui/toaster'
+import { FraseDoDia } from '@/features/motivacao/components/frase-do-dia'
 import { listarAvisos } from '@/features/notificacoes/queries'
 import { exigirEquipe } from '@/lib/auth'
 
@@ -54,6 +55,7 @@ export default async function LayoutCrm({ children }: LayoutProps<'/'>) {
           <div className="mx-auto max-w-[1280px]">{children}</div>
         </main>
       </div>
+      <FraseDoDia nome={perfil.nome?.trim().split(/\s+/)[0] ?? ''} />
     </Toaster>
   )
 }

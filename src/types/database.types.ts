@@ -989,6 +989,35 @@ export type Database = {
         }
         Relationships: []
       }
+      frase_do_dia_vistas: {
+        Row: {
+          dia: string
+          ip: string
+          perfil_id: string
+          visto_em: string
+        }
+        Insert: {
+          dia: string
+          ip: string
+          perfil_id: string
+          visto_em?: string
+        }
+        Update: {
+          dia?: string
+          ip?: string
+          perfil_id?: string
+          visto_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "frase_do_dia_vistas_perfil_id_fkey"
+            columns: ["perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integracao_olist: {
         Row: {
           access_expira_em: string | null
