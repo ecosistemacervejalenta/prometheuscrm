@@ -12,7 +12,7 @@ import { ItemMobile, ListaMobile } from '@/components/ui/lista-mobile'
 import { PageHeader } from '@/components/ui/page-header'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { ResumoDdd } from '@/features/leads/components/resumo-ddd'
-import { ResumoPasta } from '@/features/leads/components/resumo-pasta'
+import { ResumoLeads } from '@/features/leads/components/resumo-leads'
 import { dddValido, opcoesDdd, resumirDdds } from '@/features/leads/ddd'
 import { contarDdds, obterPasta } from '@/features/leads/queries'
 import { formatarDataCurta, formatarNumero } from '@/lib/format'
@@ -47,7 +47,8 @@ export default async function PaginaPasta({ params, searchParams }: PageProps<'/
       />
       {listas.length > 0 && (
         <Card className="mb-5 lg:mb-6">
-          <ResumoPasta
+          <ResumoLeads
+            onde="pasta"
             leads={pasta.leads ?? 0}
             comWhatsapp={pasta.com_whatsapp ?? 0}
             listas={listas.length}

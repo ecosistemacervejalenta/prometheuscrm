@@ -6,24 +6,28 @@ import { REGIAO_DO_DDD, resumirDdds, type ContagemDdd } from '../ddd'
 const DDDS_DO_BRASIL = Object.keys(REGIAO_DO_DDD).length
 
 /**
- * Resumo da pasta: total de leads (soma das listas) em destaque e, ao lado, o que
- * dá para usar — WhatsApp válidos sem repetir, DDDs diferentes, repetidos entre
- * listas e sem WhatsApp. A conta no rodapé fecha com o total.
+ * Resumo da pasta ou do banco: total de leads (soma das listas) em destaque e, ao
+ * lado, o que dá para usar — WhatsApp válidos sem repetir, DDDs diferentes,
+ * repetidos entre listas e sem WhatsApp. A conta no rodapé fecha com o total.
  */
-export function ResumoPasta({
+export function ResumoLeads({
+  onde,
   leads,
   comWhatsapp,
   listas,
+  pastas = 1,
   incompletas,
   contagem,
 }: {
+  onde: 'pasta' | 'banco'
   /** Linhas importadas, somando as listas (cada lista já descarta o número repetido nela). */
   leads: number
   /** Linhas com WhatsApp, somando as listas (o mesmo número conta uma vez por lista). */
   comWhatsapp: number
   listas: number
+  pastas?: number
   incompletas: number
-  /** Números diferentes da pasta por DDD (`ddds_dos_leads`). */
+  /** Números diferentes por DDD (da pasta: `ddds_dos_leads`; do banco: `leads_resumo`). */
   contagem: ContagemDdd[]
 }) {
   const { total: diferentes, semDdd, porDdd } = resumirDdds(contagem)
@@ -38,16 +42,24 @@ export function ResumoPasta({
       detalhe: `números diferentes com DDD do Brasil · ${leads ? formatarPorcentagem(validos / leads) : '—'} dos leads`,
     },
     { rotulo: 'DDDs diferentes', valor: porDdd.length, detalhe: `de ${DDDS_DO_BRASIL} DDDs do Brasil` },
-    { rotulo: 'Repetidos entre listas', valor: repetidos, detalhe: 'mesmo número em mais de uma lista' },
+    {
+      rotulo: 'Repetidos entre listas',
+      valor: repetidos,
+      detalhe: onde === 'pasta' ? 'mesmo número em mais de uma lista' : 'mesmo número em mais de uma lista ou pasta',
+    },
     { rotulo: 'Sem WhatsApp', valor: semWhatsapp, detalhe: 'sem número ou número inválido' },
   ]
 
   return (
     <div className="grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
       <div className="p-4 lg:p-5">
-        <p className="tipo-rotulo text-suave">Leads na pasta</p>
+        <p className="tipo-rotulo text-suave">{onde === 'pasta' ? 'Leads na pasta' : 'Leads no banco'}</p>
         <p className="tipo-numero mt-1 text-[44px] leading-[48px] lg:text-[56px] lg:leading-[60px]">{formatarNumero(leads)}</p>
-        <p className="mt-1 text-[13px] text-suave">somando as {formatarNumero(listas)} lista(s) importada(s)</p>
+        <p className="mt-1 text-[13px] text-suave">
+          {onde === 'pasta'
+            ? `somando as ${formatarNumero(listas)} lista(s) importada(s)`
+            : `somando ${formatarNumero(listas)} lista(s) em ${formatarNumero(pastas)} pasta(s)`}
+        </p>
       </div>
       <dl className="grid grid-cols-2 border-t border-linha lg:border-t-0 lg:border-l">
         {indicadores.map((i, n) => (

@@ -428,6 +428,18 @@ const listaTemp = await um(`insert into leads_listas (pasta_id, nome) values ($1
 await q(`select importar_leads($1, '[{"linha":1,"nome":"x","whatsapp":"11911112222"}]'::jsonb)`, [listaTemp.id])
 await q(`delete from leads_listas where id = $1`, [listaTemp.id])
 expectEq('excluir lista apaga os leads dela', Number((await um(`select count(*) n from leads where lista_id = $1`, [listaTemp.id])).n), 0)
+expectEq('pasta guarda WhatsApp sem repetir', await um(`select whatsapp_unicos, whatsapp_validos from leads_pastas where id = $1`, [pasta.id]), { whatsapp_unicos: 2, whatsapp_validos: 1 })
+const pasta2 = await um(`insert into leads_pastas (nome) values ('Outra pasta') returning id`)
+const lista2 = await um(`insert into leads_listas (pasta_id, nome) values ($1, 'Repetidos') returning id`, [pasta2.id])
+await q(`select importar_leads($1, '[{"linha":1,"whatsapp":"11987654321"},{"linha":2,"whatsapp":"21999998888"}]'::jsonb)`, [lista2.id])
+await q(`select concluir_importacao_leads($1)`, [lista2.id])
+expectEq('banco conta o número repetido em duas pastas uma vez só', await um(`select whatsapp_unicos, ddds from leads_resumo`), { whatsapp_unicos: 3, ddds: { 11: 1, 21: 1 } })
+await q(`update leads_listas set pasta_id = $1 where id = $2`, [pasta.id, lista2.id])
+expectEq('mover lista recalcula as duas pastas', await q(`select whatsapp_unicos, whatsapp_validos from leads_pastas where id in ($1, $2) order by nome`, [pasta.id, pasta2.id]),
+  [{ whatsapp_unicos: 3, whatsapp_validos: 2 }, { whatsapp_unicos: 0, whatsapp_validos: 0 }])
+await q(`delete from leads_listas where id = $1`, [lista2.id])
+expectEq('excluir lista recalcula a pasta e o banco', await um(`select p.whatsapp_unicos, r.whatsapp_unicos as banco from leads_pastas p, leads_resumo r where p.id = $1`, [pasta.id]), { whatsapp_unicos: 2, banco: 2 })
+await q(`delete from leads_pastas where id = $1`, [pasta2.id])
 
 // RLS ---------------------------------------------------------------------------
 const uid =(await q(`insert into auth.users (email, raw_user_meta_data) values ('ana@prometheus.beer', '{"nome":"Ana Ribeiro"}') returning id`))[0].id
@@ -488,6 +500,7 @@ const listaMembro = await um(`insert into leads_listas (pasta_id, nome) values (
 expectEq('membro importa leads', (await um(`select importar_leads($1, '[{"linha":1,"nome":"Lead","whatsapp":"21999998888"}]'::jsonb) n`, [listaMembro.id])).n, 1)
 await q(`select concluir_importacao_leads($1)`, [listaMembro.id])
 expectEq('membro vê a lista pronta e o lead', await um(`select (select status from leads_listas where id = $1) status, (select count(*)::int from vw_leads where lista_id = $1) leads`, [listaMembro.id]), { status: 'pronta', leads: 1 })
+expectEq('importação do membro atualiza o resumo do banco', (await um(`select whatsapp_unicos from leads_resumo`)).whatsapp_unicos, 3)
 const statusOlist = (await um(`select status_integracao_olist() s`)).s
 expectEq('status do Olist sem expor tokens', { conectado: statusOlist.conectado, expirada: statusOlist.expirada, temToken: JSON.stringify(statusOlist).includes('segredo') }, { conectado: true, expirada: false, temToken: false })
 await db.exec(`reset role;`)

@@ -61,22 +61,20 @@ export async function contarDdds(escopo: { pastaId: string } | { listaId: string
 }
 
 /**
- * Números por DDD de todo o banco, somando as listas (cada lista guarda a própria
- * contagem ao concluir a importação). Mais números primeiro; ddd nulo = sem DDD do Brasil.
+ * Números por DDD de todo o banco, sem repetir (o mesmo número em várias listas ou
+ * pastas conta uma vez). Vem de leads_resumo, recalculado ao concluir uma importação
+ * e ao excluir ou mover uma lista. Mais números primeiro; ddd nulo = sem DDD do Brasil.
  */
 export async function contarDddsDoBanco(): Promise<ContagemDdd[]> {
   const { supabase } = await exigirEquipe()
-  const { data, error } = await supabase.from('leads_listas').select('com_whatsapp, ddds')
+  const { data, error } = await supabase.from('leads_resumo').select('whatsapp_unicos, ddds').maybeSingle()
   if (error) throw error
-  const soma = new Map<string, number>()
-  let comWhatsapp = 0
-  for (const lista of data) {
-    comWhatsapp += lista.com_whatsapp
-    for (const [ddd, numeros] of Object.entries(lista.ddds as Record<string, number>)) soma.set(ddd, (soma.get(ddd) ?? 0) + numeros)
-  }
-  const porDdd = [...soma].map(([ddd, numeros]) => ({ ddd, numeros })).sort((a, b) => b.numeros - a.numeros)
+  if (!data) return []
+  const porDdd = Object.entries(data.ddds as Record<string, number>)
+    .map(([ddd, numeros]) => ({ ddd, numeros }))
+    .sort((a, b) => b.numeros - a.numeros)
   const comDdd = porDdd.reduce((s, d) => s + d.numeros, 0)
-  return [...porDdd, { ddd: null, numeros: Math.max(0, comWhatsapp - comDdd) }]
+  return [...porDdd, { ddd: null, numeros: Math.max(0, data.whatsapp_unicos - comDdd) }]
 }
 
 export async function listarLeads(

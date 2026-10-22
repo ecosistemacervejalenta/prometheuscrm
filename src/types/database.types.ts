@@ -1179,6 +1179,8 @@ export type Database = {
           descricao: string | null
           id: string
           nome: string
+          whatsapp_unicos: number
+          whatsapp_validos: number
         }
         Insert: {
           atualizado_em?: string
@@ -1187,6 +1189,8 @@ export type Database = {
           descricao?: string | null
           id?: string
           nome: string
+          whatsapp_unicos?: number
+          whatsapp_validos?: number
         }
         Update: {
           atualizado_em?: string
@@ -1195,6 +1199,8 @@ export type Database = {
           descricao?: string | null
           id?: string
           nome?: string
+          whatsapp_unicos?: number
+          whatsapp_validos?: number
         }
         Relationships: [
           {
@@ -1205,6 +1211,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      leads_resumo: {
+        Row: {
+          atualizado_em: string
+          ddds: Json
+          id: boolean
+          whatsapp_unicos: number
+        }
+        Insert: {
+          atualizado_em?: string
+          ddds?: Json
+          id?: boolean
+          whatsapp_unicos?: number
+        }
+        Update: {
+          atualizado_em?: string
+          ddds?: Json
+          id?: boolean
+          whatsapp_unicos?: number
+        }
+        Relationships: []
       }
       notificacoes: {
         Row: {
@@ -2545,6 +2572,8 @@ export type Database = {
           listas: number | null
           nome: string | null
           ultima_lista_em: string | null
+          whatsapp_unicos: number | null
+          whatsapp_validos: number | null
         }
         Relationships: [
           {
@@ -2771,6 +2800,10 @@ export type Database = {
         Returns: number
       }
       assumir_atendimento: { Args: { p_id: string }; Returns: undefined }
+      atualizar_resumo_leads: {
+        Args: { p_pastas?: string[] }
+        Returns: undefined
+      }
       atualizar_status_envios_campanha: {
         Args: { p_status: Json }
         Returns: undefined

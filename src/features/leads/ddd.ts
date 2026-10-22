@@ -166,3 +166,24 @@ export function opcoesDdd(porDdd: Array<{ ddd: string; numeros: number }>) {
     rotulo: `DDD ${d.ddd} · ${REGIAO_DO_DDD[d.ddd] ?? ''} · ${d.numeros.toLocaleString('pt-BR')}`,
   }))
 }
+
+export const REGIOES = ['Sudeste', 'Sul', 'Nordeste', 'Centro-Oeste', 'Norte'] as const
+export type Regiao = (typeof REGIOES)[number]
+
+const REGIAO_DA_UF: Record<string, Regiao> = {
+  SP: 'Sudeste', RJ: 'Sudeste', MG: 'Sudeste', ES: 'Sudeste',
+  PR: 'Sul', SC: 'Sul', RS: 'Sul',
+  BA: 'Nordeste', SE: 'Nordeste', AL: 'Nordeste', PE: 'Nordeste', PB: 'Nordeste', RN: 'Nordeste', CE: 'Nordeste', PI: 'Nordeste', MA: 'Nordeste',
+  DF: 'Centro-Oeste', GO: 'Centro-Oeste', MT: 'Centro-Oeste', MS: 'Centro-Oeste',
+  TO: 'Norte', PA: 'Norte', AP: 'Norte', AM: 'Norte', RR: 'Norte', AC: 'Norte', RO: 'Norte',
+}
+
+/** Números por região do Brasil (pela UF da cidade do DDD), na ordem de REGIOES. */
+export function somarRegioes(porDdd: Array<{ ddd: string; numeros: number }>) {
+  const soma = new Map<Regiao, number>(REGIOES.map((r) => [r, 0]))
+  for (const d of porDdd) {
+    const regiao = REGIAO_DA_UF[REGIAO_DO_DDD[d.ddd]?.split('/')[1] ?? '']
+    if (regiao) soma.set(regiao, (soma.get(regiao) ?? 0) + d.numeros)
+  }
+  return REGIOES.map((regiao) => ({ regiao, numeros: soma.get(regiao) ?? 0 }))
+}
