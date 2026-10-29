@@ -12,10 +12,12 @@ import { formatarHaQuanto, formatarMoeda, formatarMoedaCompacta, formatarNumero 
 import { cn } from '@/lib/utils'
 
 import { CANAIS } from '../canais'
+import { metaDoMes, type MetaMensal } from '../meta'
 import type { ChavePeriodo } from '../periodos'
 import { vendasPorCanal, type DadosVendasPorCanal, type ResumoCanal } from '../queries'
 import { GraficoEvolucao } from './grafico-evolucao'
 import { MarcaCanal } from './marca-canal'
+import { MetaDoMes } from './meta-do-mes'
 import { SeletorPeriodo } from './seletor-periodo'
 
 /** Números grandes usam algarismos proporcionais (os tabulares ficam "soltos" em tamanho grande). */
@@ -106,12 +108,29 @@ function CartaoCanal({ canal, comparacao, textoAguardando }: { canal: ResumoCana
 export async function VendasPorCanal({ periodo, comExemplo }: { periodo: ChavePeriodo; comExemplo: boolean }) {
   // Números do Olist com mais de 10 min são atualizados antes de aparecer (até 8 s de espera).
   if (!comExemplo) await garantirDadosRecentesDoOlist()
-  const dados = await vendasPorCanal(periodo, { comExemplo })
-  return <PainelVendasPorCanal dados={dados} periodo={periodo} />
+  const [dados, meta] = await Promise.all([
+    vendasPorCanal(periodo, { comExemplo }),
+    // A meta não aparece com dados de exemplo; uma falha na leitura só esconde o cartão.
+    comExemplo
+      ? null
+      : metaDoMes().catch((erro) => {
+          console.error('[vendas] falha ao ler a meta do mês', erro)
+          return null
+        }),
+  ])
+  return <PainelVendasPorCanal dados={dados} periodo={periodo} meta={meta} />
 }
 
 /** Apresentação do painel (sem buscar dados). */
-export function PainelVendasPorCanal({ dados, periodo }: { dados: DadosVendasPorCanal; periodo: ChavePeriodo }) {
+export function PainelVendasPorCanal({
+  dados,
+  periodo,
+  meta = null,
+}: {
+  dados: DadosVendasPorCanal
+  periodo: ChavePeriodo
+  meta?: MetaMensal | null
+}) {
   const { periodo: intervalos, canais, serie, total, pendentes, olist, comExemplo } = dados
   const comDados = canais.filter((c) => c.estado === 'ok' && c.atual)
   const nomesPendentes = pendentes.map((c) => c.nome)
@@ -173,6 +192,8 @@ export function PainelVendasPorCanal({ dados, periodo }: { dados: DadosVendasPor
           </Link>
         </Alert>
       )}
+
+      {meta && <MetaDoMes dados={meta} />}
 
       <Card className="grid gap-6 p-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-10 lg:p-6">
         <div className="min-w-0">

@@ -2992,7 +2992,15 @@ export type Database = {
         }
         Returns: Json
       }
-      gerar_contas_fixas: { Args: { p_competencia: string }; Returns: number }
+      faturamento_por_mes: {
+        Args: { p_fim: string; p_inicio: string }
+        Returns: {
+          mes: string
+          pedidos: number
+          valor: number
+        }[]
+      }
+      gerar_contas_fixas:{ Args: { p_competencia: string }; Returns: number }
       guardar_segredo_whatsapp_oficial: {
         Args: { p_descricao: string; p_nome: string; p_valor: string }
         Returns: undefined
