@@ -27,5 +27,7 @@ export const config: VercelConfig = {
     // Campanhas do WhatsApp oficial: confere análises da Meta, libera agendadas e envia a fila.
     // A cada 5 min (plano Pro); cada rodada envia por até 4 min.
     { path: '/api/cron/campanhas', schedule: '*/5 * * * *' },
+    // Mercado Livre e Shopee: renova o acesso e confere as contas, 1x/dia (o refresh da Shopee vence em 30 dias).
+    { path: '/api/cron/marketplaces', schedule: '20 10 * * *' },
   ],
 }

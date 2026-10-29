@@ -1018,6 +1018,68 @@ export type Database = {
           },
         ]
       }
+      integracao_marketplace: {
+        Row: {
+          access_expira_em: string | null
+          access_token: string | null
+          atualizado_em: string
+          autorizacao_expira_em: string | null
+          canal: string
+          client_id: string | null
+          conectado_em: string | null
+          conectado_por: string | null
+          conta_id: string | null
+          conta_nome: string | null
+          notificacao_recebida_em: string | null
+          refresh_expira_em: string | null
+          refresh_token: string | null
+          ultimo_erro: string | null
+          verificado_em: string | null
+        }
+        Insert: {
+          access_expira_em?: string | null
+          access_token?: string | null
+          atualizado_em?: string
+          autorizacao_expira_em?: string | null
+          canal: string
+          client_id?: string | null
+          conectado_em?: string | null
+          conectado_por?: string | null
+          conta_id?: string | null
+          conta_nome?: string | null
+          notificacao_recebida_em?: string | null
+          refresh_expira_em?: string | null
+          refresh_token?: string | null
+          ultimo_erro?: string | null
+          verificado_em?: string | null
+        }
+        Update: {
+          access_expira_em?: string | null
+          access_token?: string | null
+          atualizado_em?: string
+          autorizacao_expira_em?: string | null
+          canal?: string
+          client_id?: string | null
+          conectado_em?: string | null
+          conectado_por?: string | null
+          conta_id?: string | null
+          conta_nome?: string | null
+          notificacao_recebida_em?: string | null
+          refresh_expira_em?: string | null
+          refresh_token?: string | null
+          ultimo_erro?: string | null
+          verificado_em?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integracao_marketplace_conectado_por_fkey"
+            columns: ["conectado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integracao_olist: {
         Row: {
           access_expira_em: string | null
@@ -2889,6 +2951,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      credenciais_marketplace: {
+        Args: { p_canal: string }
+        Returns: {
+          access_expira_em: string
+          access_token: string
+          client_id: string
+          conta_id: string
+          refresh_expira_em: string
+          refresh_token: string
+          segredo: string
+        }[]
+      }
       credenciais_whatsapp_oficial: {
         Args: never
         Returns: {
@@ -2964,6 +3038,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      desconectar_marketplace: { Args: { p_canal: string }; Returns: undefined }
       desconectar_olist: { Args: never; Returns: undefined }
       desconectar_whatsapp_oficial: { Args: never; Returns: undefined }
       destravar_rotina_campanhas: { Args: never; Returns: undefined }
@@ -3186,6 +3261,10 @@ export type Database = {
           total: number
         }[]
       }
+      salvar_credenciais_marketplace: {
+        Args: { p_canal: string; p_client_id: string; p_segredo: string }
+        Returns: undefined
+      }
       salvar_conexao_olist: {
         Args: {
           p_access_expira_em: string
@@ -3238,6 +3317,7 @@ export type Database = {
       }
       somente_digitos: { Args: { p_texto: string }; Returns: string }
       status_integracao_olist: { Args: never; Returns: Json }
+      status_marketplaces: { Args: never; Returns: Json }
       status_whatsapp_oficial: { Args: never; Returns: Json }
       substituir_ceps_frete_vip: {
         Args: { p_arquivo?: string; p_faixas: Json }
