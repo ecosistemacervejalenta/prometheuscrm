@@ -9,6 +9,8 @@ import type { Vendas } from './serie'
 const INICIO_DO_HISTORICO = '2020-01-01'
 /** Meses fechados exibidos no histórico de metas. */
 const MESES_NO_HISTORICO = 6
+/** Meta geral: a marca mensal que a equipe quer alcançar, além de superar o mês anterior. */
+export const META_GERAL = 120_000
 
 export type MesFaturado = Vendas & { mes: string }
 
@@ -20,6 +22,8 @@ export type MetaMensal = {
   meta: number
   /** Positivo = quanto falta; negativo = quanto já passou da meta. */
   falta: number
+  /** Meta geral do mês (META_GERAL). */
+  metaGeral: number
   /** Dias até o fim do mês, contando hoje (1 = hoje é o último dia). */
   diasRestantes: number
   /** Este mês já é o maior faturamento da história. */
@@ -69,6 +73,7 @@ export async function metaDoMes(): Promise<MetaMensal> {
     atual: { valor: atual.valor, pedidos: atual.pedidos },
     meta,
     falta: meta - atual.valor,
+    metaGeral: META_GERAL,
     diasRestantes: Number(ultimoDiaDoMes(mes).slice(8)) - Number(hoje.slice(8)) + 1,
     recorde: melhorMes !== null && atual.valor > melhorMes.valor,
     melhorMes,
