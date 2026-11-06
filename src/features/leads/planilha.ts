@@ -33,6 +33,8 @@ export function limparCelula(valor: unknown): string {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, MAX_TAMANHO_CELULA)
+    // "-" é o "vazio" de muitas extrações ("Nome: -"): não vira nome do lead.
+    .replace(/^-+$/, '')
 }
 
 export function pareceTelefone(valor: string): boolean {
@@ -167,6 +169,66 @@ export function primeiraLinhaEhCabecalho(linhas: string[][]): boolean {
   if (!primeira || linhas.length < 2) return false
   const temDado = primeira.some((v) => pareceTelefone(v) || pareceEmail(v) || /^\d+([.,]\d+)?$/.test(v))
   return !temDado && primeira.some((v) => /[a-zA-ZÀ-ÿ]/.test(v))
+}
+
+const preenchidas = (linha: string[]) => linha.reduce((n, v) => (v !== '' ? n + 1 : n), 0)
+
+/**
+ * Linhas de título acima do cabeçalho ("Total de contatos: 380", "Extração feita
+ * por..."): uma célula só cada, nas primeiras linhas, antes de uma linha com várias
+ * colunas que parece cabeçalho. Sem isso o título vira o cabeçalho e as colunas
+ * ficam sem nome (e o telefone não é reconhecido).
+ */
+export function pularTitulos(linhas: string[][]): string[][] {
+  const limite = Math.min(linhas.length - 1, 10)
+  for (let i = 0; i < limite; i++) {
+    if (preenchidas(linhas[i]) === 1) continue
+    return i > 0 && primeiraLinhaEhCabecalho(linhas.slice(i, i + 2)) ? linhas.slice(i) : linhas
+  }
+  return linhas
+}
+
+const soDigitos = (valor: string) => valor.replace(/\D/g, '').replace(/^0+/, '')
+const telefoneSemDdd = (valor: string) => /^[\d\s().-]+$/.test(valor) && /^\d{8,9}$/.test(soDigitos(valor))
+
+/**
+ * DDD numa coluna e o telefone (sem DDD) em outra — "11 | 91213-7799": junta os
+ * dois na coluna do telefone ("(11) 91213-7799"), que passa a ser reconhecida como
+ * WhatsApp. Precisa de cabeçalho com uma coluna "DDD". Rodar de novo não muda nada.
+ */
+export function juntarDddAoTelefone(linhas: string[][]): string[][] {
+  if (!primeiraLinhaEhCabecalho(linhas)) return linhas
+  const [cabecalho, ...dados] = linhas
+  const iDdd = cabecalho.findIndex((r) => sem(r).trim() === 'ddd')
+  if (iDdd < 0) return linhas
+
+  const amostra = dados.slice(0, 1000)
+  let iTelefone = -1
+  let melhor = 0.6
+  cabecalho.forEach((rotulo, i) => {
+    if (i === iDdd || dicaDoCabecalho(rotulo) !== 'telefone') return
+    const valores = amostra.map((l) => l[i] ?? '').filter(Boolean)
+    const fracao = valores.length ? valores.filter(telefoneSemDdd).length / valores.length : 0
+    if (fracao >= melhor) [iTelefone, melhor] = [i, fracao]
+  })
+  if (iTelefone < 0) return linhas
+
+  return [
+    cabecalho,
+    ...dados.map((linha) => {
+      const ddd = soDigitos(linha[iDdd] ?? '')
+      const telefone = linha[iTelefone] ?? ''
+      if (!/^[1-9]\d$/.test(ddd) || !telefoneSemDdd(telefone)) return linha
+      const nova = [...linha]
+      nova[iTelefone] = `(${ddd}) ${telefone}`
+      return nova
+    }),
+  ]
+}
+
+/** Ajustes ao abrir o arquivo, antes de detectar as colunas: tira os títulos do topo e junta DDD + telefone. */
+export function ajustarPlanilha(linhas: string[][]): string[][] {
+  return juntarDddAoTelefone(pularTitulos(linhas))
 }
 
 const sem = (texto: string) => texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()

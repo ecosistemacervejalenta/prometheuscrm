@@ -16,6 +16,7 @@ import { normalizarWhatsapp, whatsappValido } from '@/lib/whatsapp'
 
 import { concluirImportacao, importarLote, iniciarImportacao } from '../actions'
 import {
+  ajustarPlanilha,
   analisarColunas,
   decodificarTexto,
   FORMATOS_ACEITOS,
@@ -111,7 +112,8 @@ export function ImportadorLeads({ pastas, pastaInicial }: { pastas: Array<{ id: 
   )
   const bloqueado = envio.executando || envio.listaId !== null
 
-  function carregar(base: Arquivo, cabecalhoInicial?: boolean) {
+  function carregar(original: Arquivo, cabecalhoInicial?: boolean) {
+    const base = { ...original, linhas: ajustarPlanilha(original.linhas) }
     const comCabecalho = cabecalhoInicial ?? primeiraLinhaEhCabecalho(base.linhas)
     setArquivo(base)
     setTemCabecalho(comCabecalho)
