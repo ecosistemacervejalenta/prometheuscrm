@@ -3,7 +3,7 @@ import 'server-only'
 import { exigirEquipe } from '@/lib/auth'
 import { termoBusca } from '@/lib/utils'
 
-import type { ContagemDdd } from './ddd'
+import { contagemGuardada, type ContagemDdd } from './ddd'
 import type { ColunaPlanilha } from './planilha'
 
 export const LEADS_POR_PAGINA = 50
@@ -49,32 +49,30 @@ export async function obterLista(id: string) {
   return { ...data, colunas: (data.colunas ?? []) as ColunaPlanilha[], jaClientes: jaClientes ?? 0 }
 }
 
-/** Quantos números (sem repetir) há de cada DDD na pasta ou na lista; ddd nulo = sem DDD do Brasil. */
-export async function contarDdds(escopo: { pastaId: string } | { listaId: string }): Promise<ContagemDdd[]> {
+/**
+ * Números por DDD da lista. Lista pronta: sai do que foi guardado ao concluir a
+ * importação (na lista o número não se repete, então a contagem já é "sem repetir").
+ * Lista incompleta: conta na hora, pelo índice da lista.
+ */
+export async function contarDddsDaLista(lista: { id: string; status: string; ddds: unknown; com_whatsapp: number }): Promise<ContagemDdd[]> {
+  if (lista.status === 'pronta') return contagemGuardada(lista.ddds, lista.com_whatsapp)
   const { supabase } = await exigirEquipe()
-  const { data, error } = await supabase.rpc(
-    'ddds_dos_leads',
-    'pastaId' in escopo ? { p_pasta_id: escopo.pastaId } : { p_lista_id: escopo.listaId },
-  )
+  const { data, error } = await supabase.rpc('ddds_dos_leads', { p_lista_id: lista.id })
   if (error) throw error
   return data
 }
 
 /**
  * Números por DDD de todo o banco, sem repetir (o mesmo número em várias listas ou
- * pastas conta uma vez). Vem de leads_resumo, recalculado ao concluir uma importação
- * e ao excluir ou mover uma lista. Mais números primeiro; ddd nulo = sem DDD do Brasil.
+ * pastas conta uma vez). Vem de leads_resumo, recalculado em segundo plano (pg_cron,
+ * a cada 5 minutos) depois de importar, excluir ou mover uma lista.
  */
 export async function contarDddsDoBanco(): Promise<ContagemDdd[]> {
   const { supabase } = await exigirEquipe()
   const { data, error } = await supabase.from('leads_resumo').select('whatsapp_unicos, ddds').maybeSingle()
   if (error) throw error
   if (!data) return []
-  const porDdd = Object.entries(data.ddds as Record<string, number>)
-    .map(([ddd, numeros]) => ({ ddd, numeros }))
-    .sort((a, b) => b.numeros - a.numeros)
-  const comDdd = porDdd.reduce((s, d) => s + d.numeros, 0)
-  return [...porDdd, { ddd: null, numeros: Math.max(0, data.whatsapp_unicos - comDdd) }]
+  return contagemGuardada(data.ddds, data.whatsapp_unicos)
 }
 
 export async function listarLeads(

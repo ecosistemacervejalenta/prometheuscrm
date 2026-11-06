@@ -33,7 +33,7 @@ function baixar(arquivo: Blob, nome: string) {
 
 /**
  * Baixa os números da pasta ou da lista (todos ou só de um DDD) em Excel ou CSV.
- * Busca em páginas de 5.000 e monta o arquivo no navegador. O WhatsApp sai só com
+ * Busca em páginas de 2.500 e monta o arquivo no navegador. O WhatsApp sai só com
  * dígitos e DDI (5511987654321), como as ferramentas de disparo esperam.
  */
 export function ExportarNumeros({

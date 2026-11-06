@@ -13,8 +13,8 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { ResumoDdd } from '@/features/leads/components/resumo-ddd'
 import { ResumoLeads } from '@/features/leads/components/resumo-leads'
-import { dddValido, opcoesDdd, resumirDdds } from '@/features/leads/ddd'
-import { contarDdds, obterPasta } from '@/features/leads/queries'
+import { contagemGuardada, dddValido, opcoesDdd, resumirDdds } from '@/features/leads/ddd'
+import { obterPasta } from '@/features/leads/queries'
 import { formatarDataCurta, formatarNumero } from '@/lib/format'
 import { param } from '@/lib/utils'
 
@@ -23,9 +23,12 @@ export const metadata: Metadata = { title: 'Pasta de leads' }
 export default async function PaginaPasta({ params, searchParams }: PageProps<'/leads/pastas/[id]'>) {
   const { id } = await params
   const ddd = dddValido(param((await searchParams).ddd))
-  const [pasta, contagem] = await Promise.all([obterPasta(id), contarDdds({ pastaId: id })])
+  const pasta = await obterPasta(id)
   if (!pasta) notFound()
   const listas = pasta.listasDaPasta
+  // Contagem guardada na pasta (recalculada em segundo plano): contar na hora passava de 8 s nas pastas grandes.
+  const contagem = contagemGuardada(pasta.ddds, pasta.whatsapp_unicos ?? 0)
+  const atualizando = pasta.contagem_pendente === true
 
   return (
     <>
@@ -63,7 +66,11 @@ export default async function PaginaPasta({ params, searchParams }: PageProps<'/
         <Card className="mb-5 lg:mb-6">
           <CardHeader
             titulo="Números por DDD"
-            descricao={`${formatarNumero(resumirDdds(contagem).porDdd.length)} DDDs diferentes · escolha um para ver quantos números a pasta tem dele e baixar só esses.`}
+            descricao={
+              atualizando
+                ? 'Atualizando a contagem depois da última mudança nas listas — leva até 5 minutos. Recarregue a página para ver os números novos.'
+                : `${formatarNumero(resumirDdds(contagem).porDdd.length)} DDDs diferentes · escolha um para ver quantos números a pasta tem dele e baixar só esses.`
+            }
             acoes={
               <FilterBar caminho={`/leads/pastas/${id}`}>
                 <FilterSelect name="ddd" valor={ddd} rotulo="Todos os DDDs" opcoes={opcoesDdd(resumirDdds(contagem).porDdd)} />

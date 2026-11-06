@@ -15,7 +15,7 @@ import { finalizarListaIncompleta } from '@/features/leads/actions'
 import { ResumoDdd } from '@/features/leads/components/resumo-ddd'
 import { TabelaLeads } from '@/features/leads/components/tabela-leads'
 import { dddValido, opcoesDdd, resumirDdds } from '@/features/leads/ddd'
-import { contarDdds, LEADS_POR_PAGINA, listarLeads, obterLista, type FiltroLeads } from '@/features/leads/queries'
+import { contarDddsDaLista, LEADS_POR_PAGINA, listarLeads, obterLista, type FiltroLeads } from '@/features/leads/queries'
 import { formatarDataCurta, formatarNumero } from '@/lib/format'
 import { param } from '@/lib/utils'
 
@@ -39,7 +39,7 @@ export default async function PaginaListaLeads({ params, searchParams }: PagePro
 
   const lista = await obterLista(id)
   if (!lista) notFound()
-  const [{ leads, total }, contagem] = await Promise.all([listarLeads(id, { busca: q, filtro, ddd, pagina }), contarDdds({ listaId: id })])
+  const [{ leads, total }, contagem] = await Promise.all([listarLeads(id, { busca: q, filtro, ddd, pagina }), contarDddsDaLista(lista)])
   const filtrando = Boolean(q || filtro || ddd)
   const pasta = lista.leads_pastas
 

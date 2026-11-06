@@ -1268,8 +1268,10 @@ export type Database = {
       leads_pastas: {
         Row: {
           atualizado_em: string
+          contagem_pendente: boolean
           criado_em: string
           criado_por: string | null
+          ddds: Json
           descricao: string | null
           id: string
           nome: string
@@ -1278,8 +1280,10 @@ export type Database = {
         }
         Insert: {
           atualizado_em?: string
+          contagem_pendente?: boolean
           criado_em?: string
           criado_por?: string | null
+          ddds?: Json
           descricao?: string | null
           id?: string
           nome: string
@@ -1288,8 +1292,10 @@ export type Database = {
         }
         Update: {
           atualizado_em?: string
+          contagem_pendente?: boolean
           criado_em?: string
           criado_por?: string | null
+          ddds?: Json
           descricao?: string | null
           id?: string
           nome?: string
@@ -1311,18 +1317,21 @@ export type Database = {
           atualizado_em: string
           ddds: Json
           id: boolean
+          pendente: boolean
           whatsapp_unicos: number
         }
         Insert: {
           atualizado_em?: string
           ddds?: Json
           id?: boolean
+          pendente?: boolean
           whatsapp_unicos?: number
         }
         Update: {
           atualizado_em?: string
           ddds?: Json
           id?: boolean
+          pendente?: boolean
           whatsapp_unicos?: number
         }
         Relationships: []
@@ -2658,8 +2667,10 @@ export type Database = {
           atualizado_em: string | null
           com_email: number | null
           com_whatsapp: number | null
+          contagem_pendente: boolean | null
           criado_em: string | null
           criado_por: string | null
+          ddds: Json | null
           descricao: string | null
           id: string | null
           leads: number | null
@@ -3098,6 +3109,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      marcar_resumo_leads_pendente: {
+        Args: { p_pastas: string[] }
+        Returns: undefined
+      }
       metricas_painel: {
         Args: { p_fim: string; p_inicio: string }
         Returns: Json
@@ -3118,6 +3133,7 @@ export type Database = {
         Args: { p_texto: string; p_tipo: string }
         Returns: string
       }
+      processar_resumo_leads: { Args: never; Returns: undefined }
       receita_semanal: {
         Args: { p_semanas?: number }
         Returns: {

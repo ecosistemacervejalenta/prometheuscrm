@@ -31,7 +31,7 @@ export function ResumoLeads({
   listas: number
   pastas?: number
   incompletas: number
-  /** Números diferentes por DDD (da pasta: `ddds_dos_leads`; do banco: `leads_resumo`). */
+  /** Números diferentes por DDD (guardados na lista, na pasta e em `leads_resumo`). */
   contagem: ContagemDdd[]
 }) {
   const { total: diferentes, semDdd } = resumirDdds(contagem)

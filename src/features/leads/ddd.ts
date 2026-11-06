@@ -151,6 +151,21 @@ export function dddValido(valor: string | undefined): string | undefined {
 
 export type ContagemDdd = { ddd: string | null; numeros: number }
 
+/**
+ * Contagem a partir do que o banco guarda ({"11": 1234, ...} na lista, na pasta e
+ * no resumo do banco) — sem contar na hora. `total` são os números diferentes; o
+ * que não está em nenhum DDD é "sem DDD do Brasil". Mais números primeiro.
+ */
+export function contagemGuardada(ddds: unknown, total: number): ContagemDdd[] {
+  const mapa = ddds && typeof ddds === 'object' && !Array.isArray(ddds) ? (ddds as Record<string, unknown>) : {}
+  const porDdd = Object.entries(mapa)
+    .map(([ddd, numeros]) => ({ ddd, numeros: Number(numeros) || 0 }))
+    .filter((d) => d.numeros > 0)
+    .sort((a, b) => b.numeros - a.numeros)
+  const comDdd = porDdd.reduce((s, d) => s + d.numeros, 0)
+  return [...porDdd, { ddd: null, numeros: Math.max(0, total - comDdd) }]
+}
+
 /** Resumo da contagem: total de números (sem repetir) e quantos não têm DDD do Brasil. */
 export function resumirDdds(contagem: ContagemDdd[]) {
   const total = contagem.reduce((s, c) => s + c.numeros, 0)

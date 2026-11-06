@@ -57,6 +57,11 @@ export default async function PaginaBancoDeLeads() {
         </Card>
       ) : (
         <>
+          {pastas.some((p) => p.contagem_pendente) && (
+            <p className="mb-3 text-[13px] text-suave" aria-live="polite">
+              Atualizando a contagem de números depois da última mudança nas listas — leva até 5 minutos. Recarregue a página para ver os números novos.
+            </p>
+          )}
           <Card className="mb-5 lg:mb-6">
             <ResumoLeads
               onde="banco"

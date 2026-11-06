@@ -50,8 +50,11 @@ export const esquemaLote = z
   .min(1)
   .max(2000)
 
-/** Números por página na exportação (o banco devolve no máximo 5.000 por vez). */
-export const NUMEROS_POR_PAGINA = 5000
+/**
+ * Números por página na exportação (o banco aceita até 5.000). 2.500 deixa a página
+ * de uma pasta grande (Projeto Apolo) bem abaixo dos 8 s mesmo com o disco frio.
+ */
+export const NUMEROS_POR_PAGINA = 2500
 /** Uma linha exportada: [whatsapp, nome, e-mail, DDD, lista]. */
 export type LinhaExportacao = [whatsapp: string, nome: string | null, email: string | null, ddd: string | null, lista: string]
 
