@@ -3,21 +3,25 @@ import 'server-only'
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
 /**
- * Chamadas à API do Mercado Pago (Checkout Transparente · PIX).
- * Docs: https://www.mercadopago.com.br/developers/pt/docs/checkout-api-payments/integration-configuration/integrate-pix
+ * Chamadas à API do Mercado Pago — Checkout Transparente pela API de Orders (a de Payments
+ * será descontinuada). Um PIX = uma order com um pagamento pix (bank_transfer).
+ * Docs: https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/payment-integration/pix
  */
 
 const API = 'https://api.mercadopago.com'
 
 export type ContaMercadoPago = { id: string; nome: string | null; email: string | null }
 
-export type PagamentoMercadoPago = {
+/**
+ * Order já traduzida para o vocabulário que o banco entende (registrar_status_pix):
+ * approved | pending | cancelled | rejected | refunded | charged_back.
+ */
+export type PixMercadoPago = {
   id: string
   status: string
   statusDetalhe: string | null
   valor: number
   aprovadoEm: string | null
-  expiraEm: string | null
   referencia: string | null
   copiaECola: string | null
   qrCodeBase64: string | null
@@ -33,16 +37,26 @@ export class ErroMercadoPago extends Error {
   }
 }
 
-type CorpoPagamento = {
-  id: number | string
+type CorpoOrder = {
+  id: string
   status?: string
   status_detail?: string | null
-  transaction_amount?: number
-  date_approved?: string | null
-  date_of_expiration?: string | null
+  total_amount?: string
+  total_paid_amount?: string | null
   external_reference?: string | null
-  point_of_interaction?: { transaction_data?: { qr_code?: string; qr_code_base64?: string; ticket_url?: string } }
+  last_updated_date?: string | null
+  transactions?: {
+    payments?: Array<{
+      id?: string
+      status?: string
+      status_detail?: string
+      paid_amount?: string | null
+      payment_method?: { qr_code?: string; qr_code_base64?: string; ticket_url?: string }
+    }>
+  }
 }
+
+type CorpoErro = { message?: string; errors?: Array<{ message?: string; details?: string[] }>; cause?: Array<{ description?: string }> }
 
 async function chamar<T>(token: string, caminho: string, init?: RequestInit & { idempotencia?: string }): Promise<T> {
   const resposta = await fetch(`${API}${caminho}`, {
@@ -50,14 +64,16 @@ async function chamar<T>(token: string, caminho: string, init?: RequestInit & { 
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
+      Accept: 'application/json',
       ...(init?.idempotencia ? { 'X-Idempotency-Key': init.idempotencia } : {}),
     },
     cache: 'no-store',
     signal: AbortSignal.timeout(15_000),
   })
-  const corpo = (await resposta.json().catch(() => null)) as (T & { message?: string; cause?: Array<{ description?: string }> }) | null
+  const corpo = (await resposta.json().catch(() => null)) as (T & CorpoErro) | null
   if (!resposta.ok || !corpo) {
-    const motivo = corpo?.cause?.[0]?.description || corpo?.message || `HTTP ${resposta.status}`
+    const motivo =
+      corpo?.errors?.[0]?.details?.[0] || corpo?.errors?.[0]?.message || corpo?.cause?.[0]?.description || corpo?.message || `HTTP ${resposta.status}`
     throw new ErroMercadoPago(traduzirErro(resposta.status, motivo), resposta.status)
   }
   return corpo
@@ -69,19 +85,39 @@ function traduzirErro(status: number, motivo: string): string {
   return `Mercado Pago: ${motivo}`
 }
 
-function converterPagamento(p: CorpoPagamento): PagamentoMercadoPago {
-  const dados = p.point_of_interaction?.transaction_data
+/** Status da order → vocabulário do banco (ver tabela "Status da order" na documentação). */
+function statusDoBanco(status: string, detalhe: string | null): string {
+  switch (status) {
+    case 'processed':
+      return 'approved' // accredited (ou partially_refunded: o PIX entrou)
+    case 'refunded':
+      return 'refunded'
+    case 'charged_back':
+      return 'charged_back'
+    case 'canceled':
+      return 'cancelled' // canceled | expired
+    case 'failed':
+      return detalhe === 'expired' ? 'cancelled' : 'rejected'
+    default:
+      return 'pending' // created | processing | action_required (waiting_transfer...)
+  }
+}
+
+function converterOrder(o: CorpoOrder): PixMercadoPago {
+  const pagamento = o.transactions?.payments?.[0]
+  const metodo = pagamento?.payment_method
+  const status = o.status ?? 'created'
+  const detalhe = o.status_detail ?? pagamento?.status_detail ?? null
   return {
-    id: String(p.id),
-    status: p.status ?? 'pending',
-    statusDetalhe: p.status_detail ?? null,
-    valor: Number(p.transaction_amount ?? 0),
-    aprovadoEm: p.date_approved ?? null,
-    expiraEm: p.date_of_expiration ?? null,
-    referencia: p.external_reference ?? null,
-    copiaECola: dados?.qr_code ?? null,
-    qrCodeBase64: dados?.qr_code_base64 ?? null,
-    linkMp: dados?.ticket_url ?? null,
+    id: o.id,
+    status: statusDoBanco(status, detalhe),
+    statusDetalhe: [status, detalhe].filter(Boolean).join('/'),
+    valor: Number(o.total_paid_amount || pagamento?.paid_amount || o.total_amount || 0),
+    aprovadoEm: status === 'processed' ? (o.last_updated_date ?? null) : null,
+    referencia: o.external_reference ?? null,
+    copiaECola: metodo?.qr_code ?? null,
+    qrCodeBase64: metodo?.qr_code_base64 ?? null,
+    linkMp: metodo?.ticket_url ?? null,
   }
 }
 
@@ -92,43 +128,35 @@ export async function consultarConta(token: string): Promise<ContaMercadoPago> {
   return { id: String(eu.id), nome: eu.nickname || nomePessoa || null, email: eu.email ?? null }
 }
 
-/** "2026-11-13T19:48:31.000-03:00" — o formato que o Mercado Pago aceita em date_of_expiration. */
-function dataMercadoPago(data: Date): string {
-  const brasilia = new Date(data.getTime() - 3 * 60 * 60 * 1000)
-  return `${brasilia.toISOString().slice(0, 23)}-03:00`
-}
+const valorMercadoPago = (valor: number) => (Math.round(valor * 100) / 100).toFixed(2)
 
-export async function criarPagamentoPix(
+/**
+ * Cria a order PIX. Sem expiration_time: o PIX vale o padrão do Mercado Pago (24 h),
+ * igual à validade gravada na cobrança.
+ */
+export async function criarOrderPix(
   token: string,
-  dados: {
-    cobrancaId: string
-    valor: number
-    descricao: string
-    expiraEm: Date
-    urlNotificacao: string | null
-    pagador: { email: string; nome: string }
-  },
-): Promise<PagamentoMercadoPago> {
-  const [primeiro, ...resto] = dados.pagador.nome.trim().split(/\s+/)
-  const corpo = await chamar<CorpoPagamento>(token, '/v1/payments', {
+  dados: { cobrancaId: string; valor: number; email: string },
+): Promise<PixMercadoPago> {
+  const valor = valorMercadoPago(dados.valor)
+  const corpo = await chamar<CorpoOrder>(token, '/v1/orders', {
     method: 'POST',
-    // Mesma chave = mesmo pagamento: repetir a chamada nunca cria um 2º PIX.
+    // Mesma chave = mesma order: repetir a chamada nunca cria um 2º PIX.
     idempotencia: dados.cobrancaId,
     body: JSON.stringify({
-      transaction_amount: Math.round(dados.valor * 100) / 100,
-      description: dados.descricao.slice(0, 250),
-      payment_method_id: 'pix',
+      type: 'online',
+      processing_mode: 'automatic',
+      total_amount: valor,
       external_reference: dados.cobrancaId,
-      date_of_expiration: dataMercadoPago(dados.expiraEm),
-      ...(dados.urlNotificacao ? { notification_url: dados.urlNotificacao } : {}),
-      payer: { email: dados.pagador.email, first_name: primeiro || 'Cliente', last_name: resto.join(' ') || undefined },
+      payer: { email: dados.email },
+      transactions: { payments: [{ amount: valor, payment_method: { id: 'pix', type: 'bank_transfer' } }] },
     }),
   })
-  return converterPagamento(corpo)
+  return converterOrder(corpo)
 }
 
-export async function consultarPagamento(token: string, id: string): Promise<PagamentoMercadoPago> {
-  return converterPagamento(await chamar<CorpoPagamento>(token, `/v1/payments/${encodeURIComponent(id)}`))
+export async function consultarOrder(token: string, id: string): Promise<PixMercadoPago> {
+  return converterOrder(await chamar<CorpoOrder>(token, `/v1/orders/${encodeURIComponent(id)}`))
 }
 
 /**
@@ -148,10 +176,12 @@ export function assinaturaValida(
   const { ts, v1 } = partes as { ts?: string; v1?: string }
   if (!ts || !v1) return false
 
-  const id = dataId && /^[a-z0-9]+$/i.test(dataId) ? dataId.toLowerCase() : dataId
-  const manifesto = `${id ? `id:${id};` : ''}${requestId ? `request-id:${requestId};` : ''}ts:${ts};`
-  const esperado = createHmac('sha256', segredo).update(manifesto).digest('hex')
-  const a = Buffer.from(esperado)
-  const b = Buffer.from(v1)
-  return a.length === b.length && timingSafeEqual(a, b)
+  // A documentação manda o data.id em minúsculas; o SDK oficial usa como veio. Aceita os dois.
+  const formas = new Set([dataId?.toLowerCase() ?? null, dataId])
+  const recebida = Buffer.from(v1)
+  return [...formas].some((id) => {
+    const manifesto = `${id ? `id:${id};` : ''}${requestId ? `request-id:${requestId};` : ''}ts:${ts};`
+    const esperada = Buffer.from(createHmac('sha256', segredo).update(manifesto).digest('hex'))
+    return esperada.length === recebida.length && timingSafeEqual(esperada, recebida)
+  })
 }

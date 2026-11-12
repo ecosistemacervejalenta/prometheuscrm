@@ -2,10 +2,9 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-import { numeroPedido } from '@/lib/format'
 import type { Database } from '@/types/database.types'
 
-import { consultarConta, consultarPagamento, criarPagamentoPix, ErroMercadoPago, type PagamentoMercadoPago } from './api'
+import { consultarConta, consultarOrder, criarOrderPix, ErroMercadoPago, type PixMercadoPago } from './api'
 
 /**
  * PIX dos pedidos pelo Mercado Pago. Roda SÓ com a chave secreta do Supabase
@@ -49,7 +48,7 @@ type Preparo = {
   }
 }
 
-/** Validade do PIX gerado no link. */
+/** Validade do PIX: o padrão do Mercado Pago para orders PIX (24 h). */
 const VALIDADE_MINUTOS = 24 * 60
 /** Intervalo mínimo entre duas conferências diretas no Mercado Pago para a mesma cobrança. */
 const CONSULTA_MINIMA_MS = 8_000
@@ -106,17 +105,12 @@ export async function obterPixDoPedido(db: Banco, pedidoId: string, site: string
   if (preparo.situacao !== 'criar' || !preparo.cobranca) return respostaDoPreparo(preparo)
 
   const cobranca = preparo.cobranca
-  const titulo = preparo.pre_venda_titulo ? ` · ${preparo.pre_venda_titulo}` : ''
-  const local = /^http:\/\/|localhost|127\.0\.0\.1/.test(site)
   try {
-    const pagamento = await criarPagamentoPix(acesso.token, {
+    // Avisos de pagamento chegam pelo webhook configurado no painel (tópico Order); a tela e a rotina também conferem.
+    const pagamento = await criarOrderPix(acesso.token, {
       cobrancaId: cobranca.id,
       valor: Number(cobranca.valor),
-      descricao: `Pedido ${numeroPedido(preparo.numero)}${titulo}`,
-      expiraEm: cobranca.expira_em ? new Date(cobranca.expira_em) : new Date(Date.now() + VALIDADE_MINUTOS * 60_000),
-      // O Mercado Pago só avisa endereços públicos (https); em desenvolvimento a tela confere sozinha.
-      urlNotificacao: local ? null : `${site}/api/webhooks/mercado-pago?source_news=webhooks`,
-      pagador: { email: emailDoPagador(preparo, site), nome: preparo.cliente_nome ?? 'Cliente' },
+      email: emailDoPagador(preparo, site),
     })
     if (!pagamento.copiaECola) throw new ErroMercadoPago('O Mercado Pago não devolveu o código PIX.', 502)
 
@@ -127,7 +121,6 @@ export async function obterPixDoPedido(db: Banco, pedidoId: string, site: string
         copia_e_cola: pagamento.copiaECola,
         qr_code_base64: pagamento.qrCodeBase64,
         link_mp: pagamento.linkMp,
-        expira_em: pagamento.expiraEm,
       },
     })
     return {
@@ -138,7 +131,7 @@ export async function obterPixDoPedido(db: Banco, pedidoId: string, site: string
       valor: Number(cobranca.valor),
       copiaECola: pagamento.copiaECola,
       qrCodeBase64: pagamento.qrCodeBase64,
-      expiraEm: pagamento.expiraEm ?? cobranca.expira_em,
+      expiraEm: cobranca.expira_em,
     }
   } catch (e) {
     const mensagem = e instanceof Error ? e.message : 'erro'
@@ -151,8 +144,8 @@ export async function obterPixDoPedido(db: Banco, pedidoId: string, site: string
   }
 }
 
-/** Grava no CRM a situação de um pagamento conferida na API (fonte da verdade). */
-async function registrar(db: Banco, pagamento: PagamentoMercadoPago, cobrancaId: string | null) {
+/** Grava no CRM a situação de uma order conferida na API (fonte da verdade). */
+async function registrar(db: Banco, pagamento: PixMercadoPago, cobrancaId: string | null) {
   const { data, error } = await db.rpc('registrar_status_pix', {
     p_cobranca_id: cobrancaId ?? pagamento.referencia,
     p_mp_pagamento_id: pagamento.id,
@@ -165,11 +158,11 @@ async function registrar(db: Banco, pagamento: PagamentoMercadoPago, cobrancaId:
   return data as { pedido_id: string; numero: number; status: string; quitou: boolean } | null
 }
 
-/** Webhook: busca o pagamento no Mercado Pago e dá baixa se for de um pedido do CRM. */
-export async function sincronizarPagamento(db: Banco, mpPagamentoId: string) {
+/** Webhook: busca a order no Mercado Pago e dá baixa se for de um pedido do CRM. */
+export async function sincronizarOrder(db: Banco, orderId: string) {
   const acesso = await credenciais(db)
   if (!acesso) return null
-  const pagamento = await consultarPagamento(acesso.token, mpPagamentoId)
+  const pagamento = await consultarOrder(acesso.token, orderId)
   if (pagamento.referencia && !/^[0-9a-f-]{36}$/i.test(pagamento.referencia)) return null // venda de outra origem
   return registrar(db, pagamento, null)
 }
@@ -202,7 +195,7 @@ export async function conferirPixDoPedido(db: Banco, pedidoId: string): Promise<
   if (!acesso) return 'pendente'
   await db.from('cobrancas_pix').update({ consultado_em: new Date().toISOString() }).eq('id', cobranca.id)
   try {
-    const resultado = await registrar(db, await consultarPagamento(acesso.token, cobranca.mp_pagamento_id), cobranca.id)
+    const resultado = await registrar(db, await consultarOrder(acesso.token, cobranca.mp_pagamento_id), cobranca.id)
     if (resultado?.status === 'pago') return resultado.quitou ? 'pago' : pedido.frete === 'a_cotar' ? 'aguardando_frete' : 'pendente'
     if (resultado?.status === 'expirado' || resultado?.status === 'cancelado') return 'expirado'
   } catch (e) {
@@ -229,7 +222,7 @@ export async function reconciliarPendentes(db: Banco): Promise<{ conferidos: num
   let erros = 0
   for (const c of pendentes ?? []) {
     try {
-      const r = await registrar(db, await consultarPagamento(acesso.token, c.mp_pagamento_id!), c.id)
+      const r = await registrar(db, await consultarOrder(acesso.token, c.mp_pagamento_id!), c.id)
       if (r?.status === 'pago') pagos++
     } catch (e) {
       erros++

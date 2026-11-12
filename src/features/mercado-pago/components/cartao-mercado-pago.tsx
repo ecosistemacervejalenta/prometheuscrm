@@ -37,7 +37,7 @@ function Formulario({ status }: { status: StatusMercadoPago }) {
         <Field
           label="Assinatura secreta do webhook"
           name="segredo_webhook"
-          dica={status.assinatura_webhook ? 'Já salva. Deixe vazio para manter a atual.' : 'Opcional, mas recomendado (passo 4 do guia).'}
+          dica={status.assinatura_webhook ? 'Já salva. Deixe vazio para manter a atual.' : 'Passo 4 do guia (pode colar depois).'}
         >
           <Input
             name="segredo_webhook"
@@ -147,8 +147,8 @@ export function GuiaMercadoPago({ urlWebhook }: { urlWebhook: string }) {
       titulo: 'Crie a aplicação e copie o Access Token de produção',
       conteudo: (
         <>
-          Em <b>Suas integrações</b>, clique em <b>Criar aplicação</b> (nome: “Prometheus CRM”; tipo: <b>Pagamentos online</b> ›{' '}
-          <b>Checkout Transparente</b>). Dentro dela, abra <b>Credenciais de produção</b>, ative-as se pedir (ramo: bebidas; site:
+          Em <b>Suas integrações</b>, clique em <b>Criar aplicação</b>: solução <b>Checkout Transparente</b>, tipo de API{' '}
+          <b>API de Orders</b>, nome “Prometheus CRM”. Dentro dela, abra <b>Credenciais de produção</b>, ative-as se pedir (ramo: bebidas; site:
           prometheuscrm.com.br) e copie o <b>Access Token</b> (começa com <code>APP_USR-</code>).
         </>
       ),
@@ -158,18 +158,18 @@ export function GuiaMercadoPago({ urlWebhook }: { urlWebhook: string }) {
       conteudo: <>O CRM confere o token na hora e mostra o nome da conta. A partir daí o link da pré-venda já gera o PIX automático.</>,
     },
     {
-      titulo: 'Configure o webhook (recomendado)',
+      titulo: 'Configure o webhook',
       conteudo: (
         <>
           Na mesma aplicação, abra <b>Webhooks › Configurar notificações</b>, escolha <b>Modo produção</b>, cole a URL abaixo, marque o
-          evento <b>Pagamentos</b> e salve. Depois clique para revelar a <b>Assinatura secreta</b> e cole no campo acima.
+          evento <b>Order (Mercado Pago)</b> e salve. Depois clique para revelar a <b>Assinatura secreta</b> e cole no campo acima.
           <span className="mt-2 flex flex-wrap items-center gap-2 rounded-xl bg-papel p-3">
             <code className="tipo-dado min-w-0 flex-1 truncate text-[13px]">{urlWebhook}</code>
             <CopyButton texto={urlWebhook} rotulo="Copiar URL" />
           </span>
           <span className="mt-2 block text-[13px] text-suave">
-            Cada PIX já avisa essa URL sozinho; a configuração no painel serve para validar a assinatura. Se um aviso se perder, o CRM
-            confere os PIX pendentes a cada 10 minutos.
+            É o aviso que dá a baixa na hora. Mesmo sem ele, a tela do cliente confere o pagamento sozinha e o CRM confere os PIX
+            pendentes a cada 10 minutos. Use o botão “Testar” do painel: o “Último aviso recebido” aqui em cima passa a mostrar a hora.
           </span>
         </>
       ),

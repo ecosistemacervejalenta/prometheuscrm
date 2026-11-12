@@ -1,16 +1,16 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-import { assinaturaValida } from '@/features/mercado-pago/api'
-import { credenciais, sincronizarPagamento } from '@/features/mercado-pago/cobranca'
+import { assinaturaValida, ErroMercadoPago } from '@/features/mercado-pago/api'
+import { credenciais, sincronizarOrder } from '@/features/mercado-pago/cobranca'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export const maxDuration = 30
 
 /**
- * Avisos do Mercado Pago (Webhooks, tópico Pagamentos — também chega pela notification_url
- * de cada PIX). O aviso só diz QUAL pagamento mudou: a situação é sempre conferida na API
+ * Avisos do Mercado Pago (Webhooks › evento "Order (Mercado Pago)").
+ * Formato: ?data.id=ORD...&type=order, corpo { type: 'order', action, data: { id, status... } }.
+ * O aviso só diz QUAL order mudou: a situação é sempre conferida em GET /v1/orders/{id}
  * com o nosso Access Token, então um aviso falso não dá baixa em nada.
- * Formatos aceitos: ?data.id=123&type=payment (Webhooks) e ?id=123&topic=payment (IPN antigo).
  */
 export async function POST(request: NextRequest) {
   const url = request.nextUrl
@@ -18,8 +18,8 @@ export async function POST(request: NextRequest) {
   const tipo = corpo?.type ?? corpo?.topic ?? url.searchParams.get('type') ?? url.searchParams.get('topic')
   const id = String(url.searchParams.get('data.id') ?? corpo?.data?.id ?? url.searchParams.get('id') ?? '').trim()
 
-  // Só pagamentos interessam; o resto (merchant_order, testes de outros tópicos) recebe 200 e fim.
-  if (tipo !== 'payment' || !/^\d+$/.test(id)) return NextResponse.json({ ok: true, ignorado: true })
+  // Só orders interessam; outros tópicos (e o "Testar" de outros eventos) recebem 200 e fim.
+  if (tipo !== 'order' || !/^[A-Za-z0-9]+$/.test(id)) return NextResponse.json({ ok: true, ignorado: true })
 
   const db = createAdminClient()
   const acesso = await credenciais(db)
@@ -42,11 +42,14 @@ export async function POST(request: NextRequest) {
   await db.from('integracao_mercado_pago').update({ notificacao_recebida_em: new Date().toISOString() }).eq('id', 1)
 
   try {
-    const resultado = await sincronizarPagamento(db, id)
+    const resultado = await sincronizarOrder(db, id)
     return NextResponse.json({ ok: true, resultado })
   } catch (e) {
-    // 500 → o Mercado Pago tenta de novo (a cada 15 min); a rotina também confere os pendentes.
-    console.error('[mercado-pago] webhook', id, e instanceof Error ? e.message : e)
+    // Order de teste do painel ("Testar") não existe na conta: responde 200 para o teste passar.
+    if (e instanceof ErroMercadoPago && e.status === 404) return NextResponse.json({ ok: true, ignorado: 'order inexistente' })
+    const mensagem = e instanceof Error ? e.message : String(e)
+    // 500 → o Mercado Pago tenta de novo; a rotina também confere os pendentes.
+    console.error('[mercado-pago] webhook', id, mensagem)
     return NextResponse.json({ ok: false }, { status: 500 })
   }
 }
