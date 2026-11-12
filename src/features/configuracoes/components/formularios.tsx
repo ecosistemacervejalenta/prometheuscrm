@@ -167,6 +167,14 @@ export function FormularioMeuPerfil({ perfil }: { perfil: Perfil }) {
         <Field label="Cargo" name="cargo" className="sm:col-span-3">
           <Input name="cargo" defaultValue={perfil.cargo ?? ''} />
         </Field>
+        <Field
+          label="WhatsApp pessoal"
+          name="whatsapp"
+          className="sm:col-span-6"
+          dica="Recebe o aviso de cliente novo do rodízio (pelo n8n). Conversas deste número com a loja não entram no Atendimento."
+        >
+          <Input name="whatsapp" inputMode="tel" placeholder="(11) 98765-4321" defaultValue={perfil.whatsapp ? formatarWhatsapp(perfil.whatsapp) : ''} />
+        </Field>
       </div>
       <div className="mt-4 flex justify-end">
         <SubmitButton variante="secundario">Salvar meu perfil</SubmitButton>

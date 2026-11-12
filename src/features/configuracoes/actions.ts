@@ -216,7 +216,7 @@ export async function atualizarAcessoMembro(
   return sucesso('Acesso atualizado.')
 }
 
-const esquemaMeuPerfil = z.object({ nome: texto('Informe seu nome.'), cargo: textoOpcional })
+const esquemaMeuPerfil = z.object({ nome: texto('Informe seu nome.'), cargo: textoOpcional, whatsapp: whatsappOpcional })
 
 export async function salvarMeuPerfil(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
   const { supabase, perfil } = await exigirEquipe()

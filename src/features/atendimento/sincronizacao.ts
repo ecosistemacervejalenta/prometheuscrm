@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+import { whatsappCanonico } from '@/lib/whatsapp'
 import type { Database, Json } from '@/types'
 
 import { mensagemParaCrm, TIPOS_COM_MIDIA, type ResultadoRegistro } from './normalizacao'
@@ -39,7 +40,23 @@ function extensao(mime: string, nome?: string | null) {
   return doNome?.toLowerCase() ?? 'bin'
 }
 
-export async function registrarMensagem(db: Db, registro: NonNullable<ReturnType<typeof mensagemParaCrm>>) {
+/**
+ * Número pessoal de alguém da equipe (perfis.whatsapp)? O n8n avisa os atendentes
+ * pelo número da loja: essas conversas não podem virar cliente nem entrar no rodízio.
+ */
+async function ehDaEquipe(db: Db, whatsapp: string | null) {
+  const numero = whatsappCanonico(whatsapp)
+  if (!numero) return false
+  const { data, error } = await db.from('perfis').select('id').eq('whatsapp', numero).limit(1)
+  if (error) throw error
+  return data.length > 0
+}
+
+export async function registrarMensagem(
+  db: Db,
+  registro: NonNullable<ReturnType<typeof mensagemParaCrm>>,
+): Promise<ResultadoRegistro> {
+  if (await ehDaEquipe(db, registro.whatsapp)) return { mensagem_id: '', duplicada: true, ignorada: true }
   const { data, error } = await db.rpc('registrar_mensagem_whatsapp', { p: registro as unknown as Json })
   if (error) throw error
   return data as unknown as ResultadoRegistro

@@ -913,6 +913,8 @@ await db.exec(`reset role;`)
     await novoMembro('c.rodizio@prometheus.beer', 'Atendente C'),
   ]
   await q(`update perfis set ativo = true where id = any ($1::uuid[])`, [[a, b, c]])
+  await q(`update perfis set whatsapp = '553199998888' where id = $1`, [a])
+  expectEq('WhatsApp da equipe fica canônico (com o 9)', (await um(`select whatsapp from perfis where id = $1`, [a])).whatsapp, '5531999998888')
   await q(`update configuracoes set whatsapp_leads_automatico = false, whatsapp_rodizio = true, whatsapp_rodizio_participantes = $1::uuid[]`, [[a, b, c]])
 
   let seq = 0
@@ -951,6 +953,7 @@ await db.exec(`reset role;`)
     { n: 1, q: 2, ultima: true })
   expectEq('n8n recebe um evento por conversa com mensagem nova', await um(`select count(*)::int n, max(payload #>> '{responsavel,nome}') resp, max(payload #>> '{atendimento,motivo}') motivo
     from eventos_integracao where tipo = 'whatsapp.mensagem_recebida' and entidade_id = $1`, [r1.atendimento_id]), { n: 1, resp: 'Atendente A', motivo: 'rodizio' })
+  expectEq('evento leva o WhatsApp pessoal do responsável', (await um(`select payload #>> '{responsavel,whatsapp}' w from eventos_integracao where tipo = 'whatsapp.mensagem_recebida' and entidade_id = $1`, [r1.atendimento_id])).w, '5531999998888')
 
   await mensagem('01', { direcao: 'saida', texto: 'Tem sim!' })
   expectEq('resposta da equipe marca o aviso como lido', (await um(`select lida_em is not null lido from notificacoes where atendimento_id = $1`, [r1.atendimento_id])).lido, true)

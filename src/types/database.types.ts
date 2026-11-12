@@ -1649,6 +1649,7 @@ export type Database = {
           papel: Database["public"]["Enums"]["papel_usuario"]
           participa_tarefas: boolean
           trocar_senha: boolean
+          whatsapp: string | null
         }
         Insert: {
           ativo?: boolean
@@ -1662,6 +1663,7 @@ export type Database = {
           papel?: Database["public"]["Enums"]["papel_usuario"]
           participa_tarefas?: boolean
           trocar_senha?: boolean
+          whatsapp?: string | null
         }
         Update: {
           ativo?: boolean
@@ -1675,6 +1677,7 @@ export type Database = {
           papel?: Database["public"]["Enums"]["papel_usuario"]
           participa_tarefas?: boolean
           trocar_senha?: boolean
+          whatsapp?: string | null
         }
         Relationships: []
       }

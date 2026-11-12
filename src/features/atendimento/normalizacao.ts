@@ -45,6 +45,8 @@ export type ResultadoRegistro = {
   atendimento_aberto?: boolean
   midia_pendente?: boolean
   duplicada: boolean
+  /** Conversa com o WhatsApp pessoal de alguém da equipe: não entra no Atendimento. */
+  ignorada?: boolean
 }
 
 export const TIPOS_COM_MIDIA: TipoMensagem[] = ['imagem', 'audio', 'video', 'documento', 'figurinha']

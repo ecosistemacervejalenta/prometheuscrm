@@ -447,12 +447,12 @@ Toda mudança relevante gera um evento na tabela `eventos_integracao` (padrão *
 
 **Eventos do Atendimento (WhatsApp):**
 
-- `whatsapp.mensagem_recebida`: o cliente mandou mensagem e a conversa não tinha aviso pendente. Mensagens seguidas antes de alguém abrir ou responder a conversa não geram outro evento. `responsavel` é quem está com a conversa (nulo = na fila). No primeiro contato de um atendimento (`novo: true`), `atendimento.motivo` diz como ele foi distribuído: `rodizio`, `retorno` (voltou para quem atendeu da última vez) ou `fila` (rodízio desligado). Nas mensagens seguintes, `motivo` vem nulo.
+- `whatsapp.mensagem_recebida`: o cliente mandou mensagem e a conversa não tinha aviso pendente. Mensagens seguidas antes de alguém abrir ou responder a conversa não geram outro evento. `responsavel` é quem está com a conversa (nulo = na fila). No primeiro contato de um atendimento (`novo: true`), `atendimento.motivo` diz como ele foi distribuído: `rodizio`, `retorno` (voltou para quem atendeu da última vez) ou `fila` (rodízio desligado). Nas mensagens seguintes, `motivo` vem nulo. `responsavel.whatsapp` é o WhatsApp pessoal do perfil (Configurações › Equipe › Meu perfil); conversas da loja com esses números não entram no Atendimento. Fluxo pronto no n8n: *Prometheus CRM - Aviso de Cliente Novo (rodízio do WhatsApp)*.
 
   ```json
   { "atendimento": { "id": "…", "numero": 812, "novo": true, "motivo": "rodizio", "caminho": "/atendimento?aba=abertos&id=…" },
     "contato": { "nome": "João Silva", "whatsapp": "5511987654321" },
-    "responsavel": { "id": "…", "nome": "Renan Rodrigues", "email": "…" },
+    "responsavel": { "id": "…", "nome": "Renan Rodrigues", "email": "…", "whatsapp": "5511…" },
     "mensagem": { "previa": "Oi, tem a IPA de 500 ml?", "tipo": "texto", "enviada_em": "2026-11-12T17:32:05Z", "hora": "14:32", "data": "12/11/2026" } }
   ```
 
