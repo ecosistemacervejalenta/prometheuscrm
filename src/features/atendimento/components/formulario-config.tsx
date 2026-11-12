@@ -26,7 +26,7 @@ export function FormularioConfigAtendimento({ config }: { config: ConfigAtendime
         />
         {/* Sem "disabled": desligar o rodízio não apaga a lista (ela também define quem é avisado da fila). */}
         <fieldset className={cn('space-y-2 pl-[30px] transition-opacity', !rodizio && 'opacity-50')}>
-          <legend className="tipo-rotulo mb-2 text-suave">Quem participa (desmarque para pausar: folga, almoço…)</legend>
+          <legend className="tipo-rotulo mb-2 text-suave">Quem participa, na ordem da vez (desmarque para pausar: folga, almoço…)</legend>
           {config.membros.map((m) => (
             <Checkbox
               key={m.id}

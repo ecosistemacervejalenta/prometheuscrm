@@ -251,8 +251,12 @@ export async function configAtendimento() {
     supabase.from('leads_pastas').select('id, nome').order('nome'),
     supabase.from('perfis').select('id, nome, email').eq('ativo', true).order('nome'),
   ])
-  const membros = (equipe.data ?? []).map((p) => ({ id: p.id, nome: p.nome || p.email || 'Equipe' }))
   const participantes = config.data?.whatsapp_rodizio_participantes ?? []
+  // Participantes primeiro, na ordem da vez (o formulário salva na ordem em que aparecem); depois os demais.
+  const posicao = (id: string) => (participantes.includes(id) ? participantes.indexOf(id) : participantes.length)
+  const membros = (equipe.data ?? [])
+    .map((p) => ({ id: p.id, nome: p.nome || p.email || 'Equipe' }))
+    .sort((a, b) => posicao(a.id) - posicao(b.id))
   const proximo = proximoDoRodizio(participantes, new Set(membros.map((m) => m.id)), config.data?.whatsapp_rodizio_ultimo_id ?? null)
   return {
     rodizio: config.data?.whatsapp_rodizio ?? false,
