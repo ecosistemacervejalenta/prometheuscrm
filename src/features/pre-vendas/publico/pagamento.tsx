@@ -9,9 +9,14 @@ import { linkWhatsapp } from '@/lib/whatsapp'
 
 import type { PedidoFeito } from './armazenamento'
 import { classeBotaoGrande, copiarTexto } from './estilos'
+import { PixMercadoPago } from './pix-mercado-pago'
 import type { PreVendaPublica } from './queries'
 
-/** Última tela do link: pedido confirmado, PIX para copiar e envio do comprovante. */
+/**
+ * Última tela do link: pedido confirmado e pagamento.
+ * Com o Mercado Pago conectado: PIX copia e cola + QR Code do valor exato, com baixa automática.
+ * Sem ele: chave PIX da loja para copiar e envio do comprovante pelo WhatsApp.
+ */
 export function TelaPagamento({
   pedido,
   loja,
@@ -27,7 +32,22 @@ export function TelaPagamento({
   // Frete a cotar: paga agora as cervejas; o frete vai à parte, junto com a cotação.
   const valor = aCotar ? pedido.subtotal : pedido.total
   const primeiroNome = pedido.nome.split(' ')[0]
-  const mensagemComprovante = `Olá! Segue o comprovante do PIX do pedido ${numeroPedido(pedido.numero)} (${pedido.nome}) — ${formatarMoeda(valor)}.`
+
+  const pixManual = (
+    <PixChaveLoja
+      loja={loja}
+      valor={valor}
+      rotuloValor={aCotar ? 'Valor do pedido (sem frete)' : 'Valor a pagar'}
+      detalhe={
+        aCotar
+          ? 'O frete é pago à parte, quando enviarmos a cotação.'
+          : pedido.taxaEntrega > 0
+            ? `Já inclui o frete fixo de ${formatarMoeda(pedido.taxaEntrega)}.`
+            : 'Sem frete.'
+      }
+      mensagemComprovante={`Olá! Segue o comprovante do PIX do pedido ${numeroPedido(pedido.numero)} (${pedido.nome}) — ${formatarMoeda(valor)}.`}
+    />
+  )
 
   return (
     <div className="animar-passo space-y-4">
@@ -50,20 +70,66 @@ export function TelaPagamento({
         </section>
       )}
 
+      {loja.mercadoPago && pedido.pedidoId ? (
+        <PixMercadoPago pedidoId={pedido.pedidoId} reserva={pixManual} />
+      ) : (
+        pixManual
+      )}
+
+      <section className="rounded-[24px] border border-linha bg-superficie p-5">
+        <h2 className="tipo-h3">Seu pedido</h2>
+        <ul className="mt-3 space-y-2 text-[15px]">
+          {pedido.itens.map((i) => (
+            <li key={i.nome} className="flex justify-between gap-3">
+              <span>
+                <span className="tipo-dado font-semibold">{i.quantidade}×</span> {i.nome}
+              </span>
+              <span className="tipo-dado shrink-0">{formatarMoeda(i.total)}</span>
+            </li>
+          ))}
+          <li className="flex justify-between gap-3 text-suave">
+            <span>Frete</span>
+            <span className="tipo-dado shrink-0">{aCotar ? 'a cotar' : formatarMoeda(pedido.taxaEntrega)}</span>
+          </li>
+          <li className="flex justify-between gap-3 border-t border-linha pt-2 font-semibold">
+            <span>Total{aCotar ? ' (sem frete)' : ''}</span>
+            <span className="tipo-dado shrink-0">{formatarMoeda(valor)}</span>
+          </li>
+        </ul>
+        {previsaoEntrega && <p className="mt-3 text-[14px] text-suave">Previsão de entrega: {formatarData(previsaoEntrega)}.</p>}
+      </section>
+
+      <button type="button" onClick={aoFazerOutro} className="mx-auto block py-3 text-[15px] font-semibold text-suave hover:text-ink">
+        Fazer outro pedido
+      </button>
+    </div>
+  )
+}
+
+/** Chave PIX da loja para copiar + envio do comprovante no WhatsApp (sem o Mercado Pago, ou se ele falhar). */
+export function PixChaveLoja({
+  loja,
+  valor,
+  rotuloValor,
+  detalhe,
+  mensagemComprovante,
+}: {
+  loja: { pix: { chave: string; favorecido: string | null } | null; whatsappComprovante: string | null }
+  valor: number
+  rotuloValor: string
+  detalhe?: string
+  mensagemComprovante: string
+}) {
+  return (
+    <>
       <section className="rounded-[24px] border border-linha bg-superficie p-5">
         <h2 className="tipo-h2">Pague com PIX</h2>
         {loja.pix ? (
           <>
             <div className="mt-4 rounded-2xl bg-papel p-4">
-              <p className="tipo-rotulo text-suave">{aCotar ? 'Valor do pedido (sem frete)' : 'Valor a pagar'}</p>
+              <p className="tipo-rotulo text-suave">{rotuloValor}</p>
               <p className="tipo-numero mt-1 text-[40px] leading-none">{formatarMoeda(valor)}</p>
-              <p className="mt-2 text-[14px] text-suave">
-                {aCotar
-                  ? 'O frete é pago à parte, quando enviarmos a cotação.'
-                  : pedido.taxaEntrega > 0
-                    ? `Já inclui o frete fixo de ${formatarMoeda(pedido.taxaEntrega)}.`
-                    : 'Sem frete.'}
-              </p>
+              {detalhe && <p className="mt-2 text-[14px] text-suave">{detalhe}</p>}
             </div>
 
             <div className="mt-3 rounded-2xl border-2 border-dashed border-linha-forte p-4">
@@ -113,34 +179,7 @@ export function TelaPagamento({
           </a>
         </section>
       )}
-
-      <section className="rounded-[24px] border border-linha bg-superficie p-5">
-        <h2 className="tipo-h3">Seu pedido</h2>
-        <ul className="mt-3 space-y-2 text-[15px]">
-          {pedido.itens.map((i) => (
-            <li key={i.nome} className="flex justify-between gap-3">
-              <span>
-                <span className="tipo-dado font-semibold">{i.quantidade}×</span> {i.nome}
-              </span>
-              <span className="tipo-dado shrink-0">{formatarMoeda(i.total)}</span>
-            </li>
-          ))}
-          <li className="flex justify-between gap-3 text-suave">
-            <span>Frete</span>
-            <span className="tipo-dado shrink-0">{aCotar ? 'a cotar' : formatarMoeda(pedido.taxaEntrega)}</span>
-          </li>
-          <li className="flex justify-between gap-3 border-t border-linha pt-2 font-semibold">
-            <span>Total{aCotar ? ' (sem frete)' : ''}</span>
-            <span className="tipo-dado shrink-0">{formatarMoeda(valor)}</span>
-          </li>
-        </ul>
-        {previsaoEntrega && <p className="mt-3 text-[14px] text-suave">Previsão de entrega: {formatarData(previsaoEntrega)}.</p>}
-      </section>
-
-      <button type="button" onClick={aoFazerOutro} className="mx-auto block py-3 text-[15px] font-semibold text-suave hover:text-ink">
-        Fazer outro pedido
-      </button>
-    </div>
+    </>
   )
 }
 

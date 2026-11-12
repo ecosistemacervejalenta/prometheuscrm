@@ -16,7 +16,7 @@ import { FreteBadge, PagamentoBadge } from './selos'
 const cepDo = (p: PedidoComItens) => formatarCep((p.endereco_entrega as Endereco | null)?.cep)
 
 /** Frete "a cotar": campo para lançar o valor. Frete cotado: atalho para enviar ao cliente. */
-function AcoesFrete({ pedido, config }: { pedido: PedidoComItens; config: Configuracoes }) {
+function AcoesFrete({ pedido, config, basePix }: { pedido: PedidoComItens; config: Configuracoes; basePix: string | null }) {
   if (pedido.frete === 'a_cotar') {
     return (
       <div className="rounded-xl bg-alerta-50 p-2.5 print:hidden">
@@ -32,7 +32,7 @@ function AcoesFrete({ pedido, config }: { pedido: PedidoComItens; config: Config
       taxa_entrega: pedido.taxa_entrega,
       cliente: pedido.clientes,
       pre_venda_titulo: pedido.pre_vendas?.titulo,
-    })
+    }, basePix && basePix + pedido.id)
     return (
       <div className="flex flex-wrap items-center gap-1.5 print:hidden">
         <span className="tipo-dado text-[12px] text-suave">Frete {formatarMoeda(pedido.taxa_entrega)}</span>
@@ -62,7 +62,18 @@ function BotaoExcluirVenda({ pedido, className }: { pedido: PedidoComItens; clas
  * Pedidos com itens + ações de cobrança (WhatsApp), frete e pagamento.
  * Usada no Grupo VIP e no detalhe da pré-venda. Na impressão vira um romaneio.
  */
-export function TabelaCobrancas({ pedidos, config, podeExcluir = false }: { pedidos: PedidoComItens[]; config: Configuracoes; podeExcluir?: boolean }) {
+export function TabelaCobrancas({
+  pedidos,
+  config,
+  podeExcluir = false,
+  basePix = null,
+}: {
+  pedidos: PedidoComItens[]
+  config: Configuracoes
+  podeExcluir?: boolean
+  /** Início do link /pagar/ (Mercado Pago conectado): a cobrança leva o link do PIX em vez da chave. */
+  basePix?: string | null
+}) {
   const linkPara = (p: PedidoComItens) =>
     linkDeCobranca(config, {
       numero: p.numero,
@@ -71,7 +82,7 @@ export function TabelaCobrancas({ pedidos, config, podeExcluir = false }: { pedi
       cliente: p.clientes,
       pre_venda_titulo: p.pre_vendas?.titulo,
       itens: p.pedido_itens,
-    })
+    }, basePix && basePix + p.id)
 
   return (
     <>
@@ -110,7 +121,7 @@ export function TabelaCobrancas({ pedidos, config, podeExcluir = false }: { pedi
             )}
             {p.frete && p.frete !== 'vip' && (
               <div className="mt-3">
-                <AcoesFrete pedido={p} config={config} />
+                <AcoesFrete pedido={p} config={config} basePix={basePix} />
               </div>
             )}
             {emAberto && (
@@ -189,7 +200,7 @@ export function TabelaCobrancas({ pedidos, config, podeExcluir = false }: { pedi
                       <BotaoPago pedidoId={p.id} />
                     </div>
                   )}
-                  {p.frete && p.frete !== 'vip' && <AcoesFrete pedido={p} config={config} />}
+                  {p.frete && p.frete !== 'vip' && <AcoesFrete pedido={p} config={config} basePix={basePix} />}
                   {podeExcluir && <BotaoExcluirVenda pedido={p} />}
                 </div>
               </TD>

@@ -1027,6 +1027,122 @@ export type Database = {
           },
         ]
       }
+      cobrancas_pix: {
+        Row: {
+          atualizado_em: string
+          consultado_em: string | null
+          copia_e_cola: string | null
+          criado_em: string
+          detalhe: string | null
+          expira_em: string | null
+          id: string
+          link_mp: string | null
+          mp_pagamento_id: string | null
+          pago_em: string | null
+          pedido_id: string
+          qr_code_base64: string | null
+          status: string
+          valor: number
+          valor_pago: number | null
+        }
+        Insert: {
+          atualizado_em?: string
+          consultado_em?: string | null
+          copia_e_cola?: string | null
+          criado_em?: string
+          detalhe?: string | null
+          expira_em?: string | null
+          id?: string
+          link_mp?: string | null
+          mp_pagamento_id?: string | null
+          pago_em?: string | null
+          pedido_id: string
+          qr_code_base64?: string | null
+          status?: string
+          valor: number
+          valor_pago?: number | null
+        }
+        Update: {
+          atualizado_em?: string
+          consultado_em?: string | null
+          copia_e_cola?: string | null
+          criado_em?: string
+          detalhe?: string | null
+          expira_em?: string | null
+          id?: string
+          link_mp?: string | null
+          mp_pagamento_id?: string | null
+          pago_em?: string | null
+          pedido_id?: string
+          qr_code_base64?: string | null
+          status?: string
+          valor?: number
+          valor_pago?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cobrancas_pix_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cobrancas_pix_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "vw_pedidos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      integracao_mercado_pago: {
+        Row: {
+          atualizado_em: string
+          conectado_em: string | null
+          conectado_por: string | null
+          conta_email: string | null
+          conta_id: string | null
+          conta_nome: string | null
+          id: number
+          notificacao_recebida_em: string | null
+          ultimo_erro: string | null
+          verificado_em: string | null
+        }
+        Insert: {
+          atualizado_em?: string
+          conectado_em?: string | null
+          conectado_por?: string | null
+          conta_email?: string | null
+          conta_id?: string | null
+          conta_nome?: string | null
+          id?: number
+          notificacao_recebida_em?: string | null
+          ultimo_erro?: string | null
+          verificado_em?: string | null
+        }
+        Update: {
+          atualizado_em?: string
+          conectado_em?: string | null
+          conectado_por?: string | null
+          conta_email?: string | null
+          conta_id?: string | null
+          conta_nome?: string | null
+          id?: number
+          notificacao_recebida_em?: string | null
+          ultimo_erro?: string | null
+          verificado_em?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integracao_mercado_pago_conectado_por_fkey"
+            columns: ["conectado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integracao_marketplace: {
         Row: {
           access_expira_em: string | null
@@ -1352,6 +1468,7 @@ export type Database = {
           criado_em: string
           id: string
           lida_em: string | null
+          pedido_id: string | null
           perfil_id: string
           quantidade: number
           tarefa_id: string | null
@@ -1365,6 +1482,7 @@ export type Database = {
           criado_em?: string
           id?: string
           lida_em?: string | null
+          pedido_id?: string | null
           perfil_id: string
           quantidade?: number
           tarefa_id?: string | null
@@ -1378,6 +1496,7 @@ export type Database = {
           criado_em?: string
           id?: string
           lida_em?: string | null
+          pedido_id?: string | null
           perfil_id?: string
           quantidade?: number
           tarefa_id?: string | null
@@ -1386,6 +1505,20 @@ export type Database = {
           titulo?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "notificacoes_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificacoes_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "vw_pedidos"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "notificacoes_atendimento_id_fkey"
             columns: ["atendimento_id"]
@@ -2994,6 +3127,40 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      concluir_cobranca_pix: {
+        Args: { p_cobranca_id: string; p_dados: Json }
+        Returns: undefined
+      }
+      credenciais_mercado_pago: {
+        Args: never
+        Returns: {
+          access_token: string
+          conta_id: string
+          segredo_webhook: string
+        }[]
+      }
+      desconectar_mercado_pago: { Args: never; Returns: undefined }
+      preparar_cobranca_pix: {
+        Args: { p_pedido_id: string; p_validade_minutos?: number }
+        Returns: Json
+      }
+      quitar_pedido_pix: { Args: { p_pedido_id: string }; Returns: boolean }
+      registrar_status_pix: {
+        Args: {
+          p_cobranca_id: string | null
+          p_detalhe?: string | null
+          p_mp_pagamento_id: string
+          p_pago_em?: string | null
+          p_status_mp: string
+          p_valor_pago?: number | null
+        }
+        Returns: Json
+      }
+      salvar_conexao_mercado_pago: {
+        Args: { p_conta: Json; p_segredo_webhook: string; p_token: string }
+        Returns: undefined
+      }
+      status_mercado_pago: { Args: never; Returns: Json }
       credenciais_marketplace: {
         Args: { p_canal: string }
         Returns: {

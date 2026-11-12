@@ -17,6 +17,7 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
 import { resumoCepsVip } from '@/features/frete/queries'
 import { resumirPorCerveja, totaisDosPedidos } from '@/features/grupo-vip/resumo'
+import { basePagamentoPix } from '@/features/mercado-pago/queries'
 import { TabelaCobrancas } from '@/features/pedidos/components/tabela-cobrancas'
 import { pedidosComItens, type FiltroPagamento } from '@/features/pedidos/queries'
 import { opcoesPreVendas } from '@/features/pre-vendas/queries'
@@ -52,7 +53,7 @@ export default async function PaginaGrupoVip({ searchParams }: PageProps<'/grupo
   const frete = (Object.keys(FILTROS_FRETE) as SituacaoFrete[]).find((f) => f === param(busca.frete))
 
   const { supabase, perfil } = await exigirEquipe()
-  const [config, preVendas, membros, pedidos, ceps] = await Promise.all([
+  const [config, preVendas, membros, pedidos, ceps, basePix] = await Promise.all([
     obterConfiguracoes(),
     opcoesPreVendas('grupo_vip'),
     supabase.from('clientes').select('id', { count: 'exact', head: true }).eq('vip', true),
@@ -65,6 +66,7 @@ export default async function PaginaGrupoVip({ searchParams }: PageProps<'/grupo
       frete,
     }),
     resumoCepsVip(),
+    basePagamentoPix(),
   ])
 
   const resumo = resumirPorCerveja(pedidos)
@@ -286,7 +288,7 @@ export default async function PaginaGrupoVip({ searchParams }: PageProps<'/grupo
               titulo="Vendas e cobranças"
               descricao="Cobre pelo WhatsApp com a mensagem pronta. Na impressão, vira a lista de separação por cliente."
             />
-            <TabelaCobrancas pedidos={pedidos} config={config} podeExcluir={perfil.papel === 'admin'} />
+            <TabelaCobrancas pedidos={pedidos} config={config} podeExcluir={perfil.papel === 'admin'} basePix={basePix} />
           </Card>
         </div>
       )}

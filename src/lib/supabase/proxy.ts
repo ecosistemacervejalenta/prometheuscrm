@@ -5,7 +5,7 @@ import { envPublico } from '@/lib/env'
 import type { Database } from '@/types/database.types'
 
 /** Rotas acessíveis sem login. */
-const ROTAS_PUBLICAS = ['/login', '/redefinir-senha', '/p/', '/auth/', '/api/']
+const ROTAS_PUBLICAS = ['/login', '/redefinir-senha', '/p/', '/pagar/', '/auth/', '/api/']
 
 function ehPublica(pathname: string) {
   return ROTAS_PUBLICAS.some((rota) => pathname === rota.replace(/\/$/, '') || pathname.startsWith(rota))

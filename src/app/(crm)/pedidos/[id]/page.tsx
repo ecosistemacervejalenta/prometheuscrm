@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { ListaMobile } from '@/components/ui/lista-mobile'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
+import { CobrancasPix } from '@/features/mercado-pago/components/cobrancas-pix'
+import { basePagamentoPix, cobrancasPixDoPedido } from '@/features/mercado-pago/queries'
 import { excluirPedido } from '@/features/pedidos/actions'
 import { linkDeCobranca, linkDeFrete } from '@/features/pedidos/cobranca'
 import { BotaoCobrar, ControlePagamento, SeletorStatus } from '@/features/pedidos/components/controles'
@@ -28,10 +30,18 @@ export async function generateMetadata({ params }: PageProps<'/pedidos/[id]'>): 
 
 export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'>) {
   const { id } = await params
-  const [{ perfil }, pedido, atividades, config] = await Promise.all([exigirEquipe(), obterPedido(id), atividadesDoPedido(id), obterConfiguracoes()])
+  const [{ perfil }, pedido, atividades, config, basePix, cobrancasPix] = await Promise.all([
+    exigirEquipe(),
+    obterPedido(id),
+    atividadesDoPedido(id),
+    obterConfiguracoes(),
+    basePagamentoPix(),
+    cobrancasPixDoPedido(id),
+  ])
   if (!pedido) notFound()
 
   const cliente = pedido.clientes
+  const linkPix = basePix && basePix + pedido.id
   const endereco = pedido.endereco_entrega as Endereco | null
   const linkCobranca = linkDeCobranca(config, {
     numero: pedido.numero,
@@ -40,7 +50,7 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
     cliente,
     pre_venda_titulo: pedido.pre_vendas?.titulo,
     itens: pedido.pedido_itens,
-  })
+  }, linkPix)
   const emAberto = pedido.status !== 'cancelado' && ['pendente', 'cobrado'].includes(pedido.status_pagamento)
   const linkFrete =
     pedido.frete === 'cotado'
@@ -50,7 +60,7 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
           taxa_entrega: pedido.taxa_entrega,
           cliente,
           pre_venda_titulo: pedido.pre_vendas?.titulo,
-        })
+        }, linkPix)
       : null
 
   return (
@@ -162,6 +172,7 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
             />
             <CardContent>
               <ControlePagamento pedidoId={pedido.id} status={pedido.status_pagamento} />
+              <CobrancasPix cobrancas={cobrancasPix} linkPagamento={emAberto ? linkPix : null} />
             </CardContent>
           </Card>
         </div>

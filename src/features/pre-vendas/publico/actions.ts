@@ -42,6 +42,7 @@ const esquemaConfirmacao = z.object({
   armadilha: z.string().max(0, 'Envio inválido.').optional(), // campo invisível anti-robô
   cliente: z.object({
     nome: z.string().trim().min(2, 'Informe seu nome e sobrenome.').max(120),
+    email: z.preprocess((v) => (typeof v === 'string' ? v.trim().toLowerCase() : v), z.email('Confira o seu e-mail.').max(120)),
     cep: z.string().refine((v) => v.replace(/\D/g, '').length === 8, 'Informe o CEP.'),
     logradouro: z.string().trim().min(1, 'Informe a rua.').max(160),
     numero: z.string().trim().min(1, 'Informe o número.').max(20),
@@ -53,7 +54,7 @@ const esquemaConfirmacao = z.object({
 })
 
 export type ResultadoConfirmacao =
-  | { ok: true; numero: number; total: number; subtotal: number; taxaEntrega: number; frete: 'vip' | 'a_cotar' }
+  | { ok: true; pedidoId: string; numero: number; total: number; subtotal: number; taxaEntrega: number; frete: 'vip' | 'a_cotar' }
   | { ok: false; mensagem: string }
 
 export async function confirmarPedidoPreVenda(entrada: z.input<typeof esquemaConfirmacao>): Promise<ResultadoConfirmacao> {
@@ -61,20 +62,26 @@ export async function confirmarPedidoPreVenda(entrada: z.input<typeof esquemaCon
   if (!dados.success) return { ok: false, mensagem: dados.error.issues[0]?.message ?? 'Dados inválidos.' }
 
   const { slug, whatsapp, itens, observacoes, cliente } = dados.data
+  const { email, ...endereco } = cliente
   const db = createAdminClient()
   const { data, error } = await db.rpc('registrar_pedido_pre_venda', {
     p_slug: slug,
-    p_cliente: { ...cliente, uf: cliente.uf.toUpperCase(), whatsapp: normalizarWhatsapp(whatsapp) },
+    p_cliente: { ...endereco, uf: endereco.uf.toUpperCase(), whatsapp: normalizarWhatsapp(whatsapp) },
     p_itens: itens,
     p_atualizar_endereco: true,
     p_observacoes: observacoes?.trim() || undefined,
   })
   if (error) return { ok: false, mensagem: traduzirErro(error) }
 
+  // E-mail no cadastro: o Mercado Pago usa no PIX (preparar_cobranca_pix lê clientes.email).
+  const { error: erroEmail } = await db.from('clientes').update({ email }).eq('id', data.cliente_id)
+  if (erroEmail) console.error('[pre-venda] e-mail do cliente', erroEmail.message)
+
   agendarProcessamentoDeEventos()
   revalidatePath(`/p/${slug}`)
   return {
     ok: true,
+    pedidoId: data.id,
     numero: data.numero,
     total: Number(data.total),
     subtotal: Number(data.subtotal),

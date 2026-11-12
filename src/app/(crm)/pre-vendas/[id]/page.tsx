@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
 import { CanalBadge, StatusPreVendaBadge } from '@/features/pedidos/components/selos'
+import { basePagamentoPix } from '@/features/mercado-pago/queries'
 import { TabelaCobrancas } from '@/features/pedidos/components/tabela-cobrancas'
 import { pedidosComItens } from '@/features/pedidos/queries'
 import { alterarStatusPreVenda, excluirPreVenda } from '@/features/pre-vendas/actions'
@@ -30,12 +31,13 @@ export async function generateMetadata({ params }: PageProps<'/pre-vendas/[id]'>
 
 export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/[id]'>) {
   const { id } = await params
-  const [{ perfil }, pv, itens, pedidos, config] = await Promise.all([
+  const [{ perfil }, pv, itens, pedidos, config, basePix] = await Promise.all([
     exigirEquipe(),
     obterPreVenda(id),
     itensDaPreVenda(id),
     pedidosComItens({ preVendaId: id }),
     obterConfiguracoes(),
+    basePagamentoPix(),
   ])
   if (!pv?.id) notFound()
 
@@ -202,7 +204,7 @@ export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/
             descricao="Dispare o link no WhatsApp. Os pedidos aparecem aqui assim que os clientes confirmarem."
           />
         ) : (
-          <TabelaCobrancas pedidos={pedidos} config={config} podeExcluir={admin} />
+          <TabelaCobrancas pedidos={pedidos} config={config} podeExcluir={admin} basePix={basePix} />
         )}
       </Card>
 

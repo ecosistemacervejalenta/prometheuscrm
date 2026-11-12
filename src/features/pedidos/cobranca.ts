@@ -12,6 +12,7 @@ export function linkDeCobranca(
     pre_venda_titulo?: string | null
     itens: Array<{ descricao: string; quantidade: number; total: number }>
   },
+  linkPix?: string | null,
 ): string | null {
   if (!pedido.cliente?.whatsapp) return null
   const texto = mensagemCobranca(config, {
@@ -21,6 +22,7 @@ export function linkDeCobranca(
     cliente_nome: pedido.cliente.nome,
     pre_venda_titulo: pedido.pre_venda_titulo,
     itens: pedido.itens,
+    link_pix: linkPix,
   })
   return linkWhatsapp(pedido.cliente.whatsapp, texto)
 }
@@ -35,6 +37,7 @@ export function linkDeFrete(
     cliente: { nome: string; whatsapp: string | null } | null
     pre_venda_titulo?: string | null
   },
+  linkPix?: string | null,
 ): string | null {
   if (!pedido.cliente?.whatsapp) return null
   const texto = mensagemFrete(config, {
@@ -43,6 +46,7 @@ export function linkDeFrete(
     taxa_entrega: pedido.taxa_entrega,
     cliente_nome: pedido.cliente.nome,
     pre_venda_titulo: pedido.pre_venda_titulo,
+    link_pix: linkPix,
   })
   return linkWhatsapp(pedido.cliente.whatsapp, texto)
 }

@@ -7,6 +7,7 @@ import {
   CircleAlert,
   LoaderCircle,
   Lock,
+  Mail,
   MapPin,
   MessageCircle,
   Pencil,
@@ -25,6 +26,7 @@ import { linkWhatsapp, mascararWhatsapp, whatsappValido } from '@/lib/whatsapp'
 import { confirmarPedidoPreVenda, consultarFreteLink } from './actions'
 import {
   CLIENTE_VAZIO,
+  emailValido,
   esquecerCliente,
   esquecerPedido,
   lembrarCliente,
@@ -39,16 +41,16 @@ import { AberturaPreVenda, PerfilDaLoja } from './abertura'
 import { CartaoCervejaLink, textosDaEscolha } from './cartao-cerveja'
 import type { PreVendaPublica } from './queries'
 
-type Etapa = 'inicio' | 'cervejas' | 'conferir' | 'nome' | 'sobrenome' | 'whatsapp' | 'cep' | 'numero' | 'revisao' | 'pago'
+type Etapa = 'inicio' | 'cervejas' | 'conferir' | 'nome' | 'sobrenome' | 'email' | 'whatsapp' | 'cep' | 'numero' | 'revisao' | 'pago'
 type Item = PreVendaPublica['itens'][number]
 type ConsultaCep = { cep: string; buscando: boolean; naoEncontrado: boolean; vip: boolean | null }
 
 /** Etapas que entram no histórico do navegador (#passo-nome...): o "voltar" do Android e o gesto do iPhone voltam uma pergunta. */
-const NO_HISTORICO: Etapa[] = ['cervejas', 'conferir', 'nome', 'sobrenome', 'whatsapp', 'cep', 'numero', 'revisao']
+const NO_HISTORICO: Etapa[] = ['cervejas', 'conferir', 'nome', 'sobrenome', 'email', 'whatsapp', 'cep', 'numero', 'revisao']
 
 /** Etapas que contam na barra de progresso. */
-const PROGRESSO: Etapa[] = ['cervejas', 'nome', 'sobrenome', 'whatsapp', 'cep', 'numero', 'revisao']
-const TOTAL_PERGUNTAS = 5
+const PROGRESSO: Etapa[] = ['cervejas', 'nome', 'sobrenome', 'email', 'whatsapp', 'cep', 'numero', 'revisao']
+const TOTAL_PERGUNTAS = 6
 const UFS = 'AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ')
 const BUSCA_CEP_CORREIOS = 'https://buscacepinter.correios.com.br/app/endereco/index.php'
 
@@ -66,7 +68,7 @@ const linhasDoEndereco = (c: DadosCliente) => [
 
 /**
  * Link público da pré-venda, no estilo Typeform (mobile first):
- * boas-vindas → cervejas → nome → sobrenome → WhatsApp → CEP (endereço automático
+ * boas-vindas → cervejas → nome → sobrenome → e-mail → WhatsApp → CEP (endereço automático
  * + frete) → número/complemento → revisão → PIX e comprovante.
  * Quem já comprou neste aparelho só confere os dados.
  */
@@ -113,6 +115,7 @@ function Fluxo({
   const [enviando, iniciar] = useTransition()
   const ultimoCep = useRef('')
   const armadilha = useRef<HTMLInputElement>(null)
+  const soFaltaEmail = useRef(false)
 
   const selecionados = itens.filter((i) => (quantidades[i.produto_id] ?? 0) > 0)
   const unidades = selecionados.reduce((s, i) => s + quantidades[i.produto_id], 0)
@@ -222,6 +225,17 @@ function Fluxo({
     ir(proxima)
   }
 
+  function aposEmail(evento: FormEvent) {
+    evento.preventDefault()
+    if (!emailValido(cliente.email)) return setErro('Confira o e-mail, ex.: voce@gmail.com.')
+    // Cliente que voltou e só faltava o e-mail (cadastro de antes desta pergunta): segue para a revisão.
+    if (soFaltaEmail.current) {
+      soFaltaEmail.current = false
+      return continuarConferido()
+    }
+    ir('whatsapp')
+  }
+
   function aposWhatsapp(evento: FormEvent) {
     evento.preventDefault()
     if (!whatsappValido(cliente.whatsapp)) return setErro('Confira o número: DDD + celular, ex.: (11) 98765-4321.')
@@ -245,15 +259,21 @@ function Fluxo({
   }
 
   function continuarConferido() {
+    if (!emailValido(cliente.email)) {
+      soFaltaEmail.current = true
+      return ir('email')
+    }
     if (cepDigitos.length === 8 && consulta?.cep !== cepDigitos) consultarCep(cepDigitos, false)
     ir('revisao')
   }
 
   function corrigirDados() {
+    soFaltaEmail.current = false
     ir('nome')
   }
 
   function naoSouEu() {
+    soFaltaEmail.current = false
     esquecerCliente()
     setCliente(CLIENTE_VAZIO)
     setLembrado(false)
@@ -274,6 +294,7 @@ function Fluxo({
           armadilha: armadilha.current?.value || undefined,
           cliente: {
             nome: nomeCompleto,
+            email: cliente.email,
             cep: cliente.cep,
             logradouro: cliente.logradouro,
             numero: cliente.numero,
@@ -286,6 +307,7 @@ function Fluxo({
         if (!r.ok) return setErro(r.mensagem)
 
         const feito: PedidoFeito = {
+          pedidoId: r.pedidoId,
           numero: r.numero,
           total: r.total,
           subtotal: r.subtotal,
@@ -377,6 +399,11 @@ function Fluxo({
               <p className="flex items-center gap-3">
                 <Phone className="size-5 shrink-0 text-suave" aria-hidden /> <span className="tipo-dado text-[16px]">{cliente.whatsapp}</span>
               </p>
+              {cliente.email && (
+                <p className="flex items-center gap-3">
+                  <Mail className="size-5 shrink-0 text-suave" aria-hidden /> <span className="min-w-0 break-all">{cliente.email}</span>
+                </p>
+              )}
               <p className="flex items-start gap-3">
                 <MapPin className="mt-0.5 size-5 shrink-0 text-suave" aria-hidden />
                 <span>
@@ -434,7 +461,7 @@ function Fluxo({
             htmlFor="sobrenome"
             titulo={`Prazer, ${primeiroNome}! E o seu sobrenome?`}
             erro={erro}
-            aoEnviar={(e) => aposPergunta(e, /[a-zA-ZÀ-ÿ]{2,}/.test(cliente.sobrenome), 'Digite seu sobrenome.', 'whatsapp')}
+            aoEnviar={(e) => aposPergunta(e, /[a-zA-ZÀ-ÿ]{2,}/.test(cliente.sobrenome), 'Digite seu sobrenome.', 'email')}
           >
             <input
               id="sobrenome"
@@ -454,10 +481,40 @@ function Fluxo({
           </Pergunta>
         )}
 
-        {/* 3 · WhatsApp ------------------------------------------------------- */}
-        {etapa === 'whatsapp' && (
+        {/* 3 · E-mail --------------------------------------------------------- */}
+        {etapa === 'email' && (
           <Pergunta
             numero={3}
+            htmlFor="email"
+            titulo="Qual é o seu e-mail?"
+            descricao="O Mercado Pago pede o e-mail para gerar o seu PIX e manda o recibo por lá."
+            erro={erro}
+            aoEnviar={aposEmail}
+          >
+            <input
+              id="email"
+              type="email"
+              inputMode="email"
+              autoFocus
+              data-foco
+              autoComplete="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="next"
+              maxLength={120}
+              placeholder="voce@email.com"
+              value={cliente.email}
+              onChange={(e) => alterar('email')(e.target.value.trim())}
+              className={cn(CLASSE_RESPOSTA, 'text-[24px] sm:text-[30px]')}
+            />
+          </Pergunta>
+        )}
+
+        {/* 4 · WhatsApp ------------------------------------------------------- */}
+        {etapa === 'whatsapp' && (
+          <Pergunta
+            numero={4}
             htmlFor="whatsapp"
             titulo="Qual é o seu WhatsApp?"
             descricao="Com DDD. É por ele que a gente fala sobre o seu pedido."
@@ -480,10 +537,10 @@ function Fluxo({
           </Pergunta>
         )}
 
-        {/* 4 · CEP → endereço automático + frete ---------------------------------- */}
+        {/* 5 · CEP → endereço automático + frete ---------------------------------- */}
         {etapa === 'cep' && (
           <Pergunta
-            numero={4}
+            numero={5}
             htmlFor="cep"
             titulo="Qual é o CEP de entrega?"
             descricao="A gente preenche o endereço pra você."
@@ -540,10 +597,10 @@ function Fluxo({
           </Pergunta>
         )}
 
-        {/* 5 · Número e complemento --------------------------------------------- */}
+        {/* 6 · Número e complemento --------------------------------------------- */}
         {etapa === 'numero' && (
           <Pergunta
-            numero={5}
+            numero={6}
             htmlFor="numero"
             titulo="E o número?"
             descricao={`${cliente.logradouro} · ${cliente.bairro}`}
@@ -638,6 +695,7 @@ function Fluxo({
               </div>
               <p className="mt-2 text-[16px] font-semibold">{nomeCompleto}</p>
               <p className="tipo-dado text-[14px] text-suave">{cliente.whatsapp}</p>
+              {cliente.email && <p className="text-[14px] break-all text-suave">{cliente.email}</p>}
               {linhasDoEndereco(cliente).map((linha) => (
                 <p key={linha} className="text-[15px] text-suave">
                   {linha}

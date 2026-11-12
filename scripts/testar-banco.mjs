@@ -1014,6 +1014,95 @@ await db.exec(`set role service_role;`)
 show('service_role identifica cliente', (await q(`select identificar_cliente_pre_venda('11987654321') r`))[0].r)
 await db.exec(`reset role;`)
 
+// -----------------------------------------------------------------------------
+// PIX pelo Mercado Pago: cobrança, baixa automática, frete a cotar e estorno
+// -----------------------------------------------------------------------------
+{
+  const como = (id) => `reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${id}', false);`
+  await db.exec(`reset role; update perfis set ativo = true, papel = 'admin' where id = '${uid}';`)
+
+  // Conexão: só admin salva; o token vai para o Vault e só a service role lê.
+  await db.exec(`reset role; update perfis set papel = 'equipe', ativo = true where id = '${uid2}';`)
+  await db.exec(como(uid2))
+  await expectError('equipe não conecta o Mercado Pago', `select salvar_conexao_mercado_pago('APP_USR-x', '{"id":"1"}'::jsonb, null)`)
+  await expectError('equipe não lê as credenciais', `select * from credenciais_mercado_pago()`)
+  await expectError('equipe não gera PIX direto', `select preparar_cobranca_pix(gen_random_uuid())`)
+  await db.exec(como(uid))
+  expectEq('Mercado Pago começa desconectado', (await um(`select status_mercado_pago() s`)).s.conectado, false)
+  await q(`select salvar_conexao_mercado_pago('APP_USR-123', '{"id":"987","nome":"CERVEJALENTA","email":"loja@x.com"}'::jsonb, 'assinatura')`)
+  const st = (await um(`select status_mercado_pago() s`)).s
+  expectEq('admin conecta o Mercado Pago', { c: st.conectado, n: st.conta_nome, a: st.assinatura_webhook }, { c: true, n: 'CERVEJALENTA', a: true })
+  await db.exec(`reset role; set role service_role;`)
+  expectEq('servidor lê o token do Vault', await um(`select access_token, segredo_webhook from credenciais_mercado_pago()`), { access_token: 'APP_USR-123', segredo_webhook: 'assinatura' })
+  await db.exec(`reset role;`)
+
+  const itensPix = await q(`select produto_id from vw_pre_venda_itens where pre_venda_id = (select id from pre_vendas where slug='drop-outubro') order by ordem`)
+  const novoPedido = async (whatsapp) => um(`select * from registrar_pedido_pre_venda('drop-outubro', $1::jsonb, $2::jsonb, true)`, [
+    JSON.stringify({ whatsapp, nome: 'Cliente Pix', cep: '13010-000', logradouro: 'Rua A', numero: '1', bairro: 'Centro', cidade: 'Campinas', uf: 'SP' }),
+    JSON.stringify([{ produto_id: itensPix[2].produto_id, quantidade: 1 }]),
+  ])
+  const ped = await novoPedido('(11) 95555-7001')
+  const sub = Number(ped.subtotal)
+
+  await db.exec(`set role service_role;`)
+  const p1 = (await um(`select preparar_cobranca_pix($1) r`, [ped.id])).r
+  expectEq('frete a cotar: 1º PIX cobra só as cervejas', { s: p1.situacao, v: Number(p1.cobranca.valor) }, { s: 'criar', v: sub })
+  const p2 = (await um(`select preparar_cobranca_pix($1) r`, [ped.id])).r
+  expectEq('dois cliques não criam dois PIX', p2.cobranca.id, p1.cobranca.id)
+  await q(`select concluir_cobranca_pix($1, $2::jsonb)`, [p1.cobranca.id, JSON.stringify({ mp_pagamento_id: '111', copia_e_cola: '000201...', qr_code_base64: 'iVBOR', link_mp: 'https://mp' })])
+  const p3 = (await um(`select preparar_cobranca_pix($1) r`, [ped.id])).r
+  expectEq('PIX válido é reaproveitado', { s: p3.situacao, id: p3.cobranca.id, cc: p3.cobranca.copia_e_cola }, { s: 'pendente', id: p1.cobranca.id, cc: '000201...' })
+
+  const r1 = (await um(`select registrar_status_pix(null, '111', 'approved', $1, now(), 'accredited') r`, [sub])).r
+  expectEq('PIX das cervejas pago, mas pedido espera o frete', { s: r1.status, q: r1.quitou }, { s: 'pago', q: false })
+  await q(`select registrar_status_pix($1, '111', 'approved', $2, now(), 'accredited')`, [p1.cobranca.id, sub])
+  expectEq('aviso repetido não duplica a linha do tempo', (await um(`select count(*)::int n from atividades where pedido_id = $1 and tipo = 'pix_recebido'`, [ped.id])).n, 1)
+  expectEq('admin recebe o aviso de PIX no sino', (await um(`select count(*)::int n, max(titulo) t from notificacoes where pedido_id = $1 and tipo = 'pix_recebido'`, [ped.id])),
+    { n: 1, t: `PIX recebido · #PRM-${ped.numero}` })
+  expectEq('nada a cobrar até cotar o frete', (await um(`select preparar_cobranca_pix($1) r`, [ped.id])).r.situacao, 'aguardando_frete')
+  await db.exec(`reset role;`)
+
+  await q(`select cotar_frete_pedido($1, 20)`, [ped.id])
+  await db.exec(`set role service_role;`)
+  const p4 = (await um(`select preparar_cobranca_pix($1) r`, [ped.id])).r
+  expectEq('depois da cotação, o PIX cobra só o frete', { s: p4.situacao, v: Number(p4.cobranca.valor), novo: p4.cobranca.id !== p1.cobranca.id }, { s: 'criar', v: 20, novo: true })
+  await q(`select concluir_cobranca_pix($1, $2::jsonb)`, [p4.cobranca.id, JSON.stringify({ mp_pagamento_id: '222', copia_e_cola: 'x' })])
+  const r2 = (await um(`select registrar_status_pix(null, '222', 'approved', 20, now(), null) r`)).r
+  expectEq('frete pago dá baixa no pedido', r2.quitou, true)
+  await q(`select registrar_status_pix(null, '222', 'pending', null, null, null)`)
+  expectEq('aviso fora de ordem não desfaz o pagamento', (await um(`select status from cobrancas_pix where mp_pagamento_id = '222'`)).status, 'pago')
+  await db.exec(`reset role;`)
+  expectEq('pedido pago pelo Mercado Pago', await um(`select status_pagamento, forma_pagamento, pago_em is not null tem from pedidos where id = $1`, [ped.id]),
+    { status_pagamento: 'pago', forma_pagamento: 'PIX · Mercado Pago', tem: true })
+  expectEq('baixa vira evento pedido.pago (n8n)', (await um(`select count(*)::int n from eventos_integracao where tipo = 'pedido.pago' and entidade_id = $1`, [ped.id])).n, 1)
+
+  await db.exec(`set role service_role;`)
+  expectEq('pedido pago não gera PIX', (await um(`select preparar_cobranca_pix($1) r`, [ped.id])).r.situacao, 'pago')
+  await q(`select registrar_status_pix(null, '111', 'refunded', null, null, null)`)
+  await db.exec(`reset role;`)
+  expectEq('estorno marca o pedido como estornado', (await um(`select status_pagamento from pedidos where id = $1`, [ped.id])).status_pagamento, 'estornado')
+
+  // Frete cotado em R$ 0 depois do PIX das cervejas: a baixa sai sozinha.
+  const ped2 = await novoPedido('(11) 95555-7002')
+  await db.exec(`set role service_role;`)
+  const c2 = (await um(`select preparar_cobranca_pix($1) r`, [ped2.id])).r.cobranca
+  await q(`select concluir_cobranca_pix($1, '{"mp_pagamento_id":"333"}'::jsonb)`, [c2.id])
+  await q(`select registrar_status_pix(null, '333', 'approved', $1, now(), null)`, [Number(ped2.subtotal)])
+  await db.exec(`reset role;`)
+  await q(`select cotar_frete_pedido($1, 0)`, [ped2.id])
+  expectEq('frete grátis depois do PIX quita o pedido', (await um(`select status_pagamento from pedidos where id = $1`, [ped2.id])).status_pagamento, 'pago')
+
+  await db.exec(`set role service_role;`)
+  expectEq('pagamento de outra origem é ignorado', (await um(`select registrar_status_pix(null, '999', 'approved', 10, now(), null) r`)).r, null)
+  await db.exec(`reset role;`)
+
+  await db.exec(como(uid2))
+  expectEq('equipe vê as cobranças PIX', (await um(`select count(*)::int n from cobrancas_pix where pedido_id = $1`, [ped.id])).n, 2)
+  await db.exec(`reset role; set role anon; select set_config('request.jwt.claim.sub', '', false);`)
+  await expectError('visitante não vê as cobranças', `select count(*) from cobrancas_pix`)
+  await db.exec(`reset role;`)
+}
+
 if (falhas > 0) {
   console.error(`\n✗ ${falhas} verificação(ões) falharam`)
   process.exit(1)

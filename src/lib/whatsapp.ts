@@ -81,7 +81,12 @@ export function mensagemPreVenda(
   })
 }
 
-export function textoPagamento(config: Pick<ConfigMensagens, 'chave_pix' | 'nome_recebedor_pix'>): string {
+/**
+ * Bloco {pagamento} das mensagens. Com o Mercado Pago conectado vai o link /pagar/{pedido}
+ * (QR Code + copia e cola do valor exato, baixa automática); sem ele, a chave PIX da loja.
+ */
+export function textoPagamento(config: Pick<ConfigMensagens, 'chave_pix' | 'nome_recebedor_pix'>, linkPix?: string | null): string {
+  if (linkPix) return `💸 *Pague com PIX por este link* (copia e cola ou QR Code — a confirmação é automática):\n${linkPix}`
   if (!config.chave_pix) return ''
   const recebedor = config.nome_recebedor_pix ? `\nFavorecido: ${config.nome_recebedor_pix}` : ''
   return `💸 *PIX:* ${config.chave_pix}${recebedor}`
@@ -96,6 +101,7 @@ export function mensagemCobranca(
     cliente_nome: string
     pre_venda_titulo?: string | null
     itens: Array<{ descricao: string; quantidade: number; total: number }>
+    link_pix?: string | null
   },
 ): string {
   const itens = pedido.itens.map((i) => `• ${i.quantidade}× ${i.descricao} — ${formatarMoeda(i.total)}`)
@@ -107,7 +113,7 @@ export function mensagemCobranca(
     pre_venda: pedido.pre_venda_titulo ? ` (${pedido.pre_venda_titulo})` : '',
     itens: itens.join('\n'),
     total: formatarMoeda(pedido.total),
-    pagamento: textoPagamento(config),
+    pagamento: textoPagamento(config, pedido.link_pix),
     pix: config.chave_pix ?? '',
   })
 }
@@ -115,7 +121,14 @@ export function mensagemCobranca(
 /** Frete cotado de um pedido do link (CEP fora da lista VIP), com os dados do PIX. */
 export function mensagemFrete(
   config: Pick<ConfigMensagens, 'chave_pix' | 'nome_recebedor_pix'>,
-  pedido: { numero: number; total: number; taxa_entrega: number; cliente_nome: string; pre_venda_titulo?: string | null },
+  pedido: {
+    numero: number
+    total: number
+    taxa_entrega: number
+    cliente_nome: string
+    pre_venda_titulo?: string | null
+    link_pix?: string | null
+  },
 ): string {
   const titulo = pedido.pre_venda_titulo ? ` (${pedido.pre_venda_titulo})` : ''
   return preencherModelo(
@@ -127,8 +140,10 @@ export function mensagemFrete(
       '',
       '{pagamento}',
       '',
-      'Se você já pagou as cervejas, é só pagar o frete e mandar o comprovante por aqui. Obrigado! 🙌',
+      pedido.link_pix
+        ? 'Se você já pagou as cervejas, o link mostra só o que falta (o frete). Obrigado! 🙌'
+        : 'Se você já pagou as cervejas, é só pagar o frete e mandar o comprovante por aqui. Obrigado! 🙌',
     ].join('\n'),
-    { pagamento: textoPagamento(config) },
+    { pagamento: textoPagamento(config, pedido.link_pix) },
   )
 }

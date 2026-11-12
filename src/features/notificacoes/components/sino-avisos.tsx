@@ -1,6 +1,6 @@
 'use client'
 
-import { Bell, CheckCheck, ListTodo, MessageCircle, MessagesSquare } from 'lucide-react'
+import { BadgeDollarSign, Bell, CheckCheck, ListTodo, MessageCircle, MessagesSquare } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState, useTransition } from 'react'
 
@@ -17,6 +17,7 @@ export type PropsAvisos = { itens: Aviso[]; naoLidos: number }
 function destinoDoAviso(a: Aviso) {
   if (a.tarefa) return `/tarefas?id=${a.tarefa.id}`
   if (a.atendimento_id) return `/atendimento?aba=abertos&id=${a.atendimento_id}`
+  if (a.pedido_id) return `/pedidos/${a.pedido_id}`
   return null
 }
 
@@ -114,12 +115,17 @@ export function SinoAvisos({ itens, naoLidos, variante }: PropsAvisos & { varian
               <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                 {itens.map((a) => {
                   const mensagem = a.tipo === 'whatsapp_mensagem'
+                  const pix = a.tipo === 'pix_recebido'
                   const destino = destinoDoAviso(a)
                   const conteudo = (
                     <>
                       {mensagem ? (
                         <span className="grid size-8 shrink-0 place-items-center rounded-full bg-volt-50 text-volt-700" aria-hidden>
                           <MessageCircle className="size-4" />
+                        </span>
+                      ) : pix ? (
+                        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-sucesso-50 text-sucesso" aria-hidden>
+                          <BadgeDollarSign className="size-4" />
                         </span>
                       ) : (
                         <Avatar nome={a.autor_nome} tamanho="sm" />
@@ -128,8 +134,8 @@ export function SinoAvisos({ itens, naoLidos, variante }: PropsAvisos & { varian
                         <span className={cn('block text-[14px] leading-5', a.lido ? 'font-medium' : 'font-semibold')}>{a.titulo}</span>
                         {a.tarefa && <span className="mt-0.5 block truncate text-[13px] text-ink/80">{a.tarefa.titulo}</span>}
                         {a.texto && (
-                          <span className={cn('mt-0.5 line-clamp-2 block text-[13px]', mensagem ? 'text-ink/80' : 'text-suave')}>
-                            {mensagem ? a.texto : `“${a.texto}”`}
+                          <span className={cn('mt-0.5 line-clamp-2 block text-[13px]', mensagem || pix ? 'text-ink/80' : 'text-suave')}>
+                            {mensagem || pix ? a.texto : `“${a.texto}”`}
                           </span>
                         )}
                         <span className="tipo-dado mt-1 block text-[11px] text-sutil">

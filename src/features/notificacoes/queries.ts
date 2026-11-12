@@ -14,6 +14,8 @@ export type Aviso = {
   tarefa: { id: string; numero: number; titulo: string } | null
   /** Conversa do WhatsApp (avisos de mensagem e de transferência). */
   atendimento_id: string | null
+  /** Pedido (aviso de PIX recebido pelo Mercado Pago). */
+  pedido_id: string | null
 }
 
 /** Últimos avisos do membro logado (sino do menu: tarefas e WhatsApp) e quantos ainda não foram lidos. */
@@ -23,7 +25,7 @@ export async function listarAvisos(): Promise<{ itens: Aviso[]; naoLidos: number
     supabase
       .from('notificacoes')
       .select(
-        'id, tipo, titulo, texto, quantidade, atendimento_id, lida_em, criado_em, tarefas(id, numero, titulo), autor:perfis!notificacoes_autor_id_fkey(nome)',
+        'id, tipo, titulo, texto, quantidade, atendimento_id, pedido_id, lida_em, criado_em, tarefas(id, numero, titulo), autor:perfis!notificacoes_autor_id_fkey(nome)',
       )
       .eq('perfil_id', perfil.id)
       .order('criado_em', { ascending: false })
@@ -52,6 +54,7 @@ export async function listarAvisos(): Promise<{ itens: Aviso[]; naoLidos: number
       autor_nome: a.autor?.nome ?? null,
       tarefa: a.tarefas,
       atendimento_id: a.atendimento_id,
+      pedido_id: a.pedido_id,
     })),
     naoLidos: naoLidos.count ?? 0,
   }
