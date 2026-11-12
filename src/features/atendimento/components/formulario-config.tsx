@@ -4,15 +4,45 @@ import { useState } from 'react'
 
 import { ActionForm, SubmitButton } from '@/components/form/action-form'
 import { Checkbox, Field, Select, Textarea } from '@/components/form/fields'
+import { cn } from '@/lib/utils'
 
 import { salvarConfigAtendimento } from '../actions'
 import type { ConfigAtendimento } from '../queries'
 
 export function FormularioConfigAtendimento({ config }: { config: ConfigAtendimento }) {
   const [automatico, setAutomatico] = useState(config.leadsAutomatico)
+  const [rodizio, setRodizio] = useState(config.rodizio)
+  const participantes = new Set(config.rodizioParticipantes)
 
   return (
     <ActionForm action={salvarConfigAtendimento} className="space-y-4">
+      <div className="space-y-3 rounded-xl border border-linha p-3">
+        <Checkbox
+          name="whatsapp_rodizio"
+          checked={rodizio}
+          onChange={(e) => setRodizio(e.target.checked)}
+          label="Distribuir os atendimentos novos em rodízio"
+          descricao="Cada cliente novo vai para o próximo da lista, um de cada, na ordem. Cliente que volta depois de “Resolvido” vai para quem atendeu da última vez (não conta como a vez dessa pessoa)."
+        />
+        {/* Sem "disabled": desligar o rodízio não apaga a lista (ela também define quem é avisado da fila). */}
+        <fieldset className={cn('space-y-2 pl-[30px] transition-opacity', !rodizio && 'opacity-50')}>
+          <legend className="tipo-rotulo mb-2 text-suave">Quem participa (desmarque para pausar: folga, almoço…)</legend>
+          {config.membros.map((m) => (
+            <Checkbox
+              key={m.id}
+              name="whatsapp_rodizio_participantes"
+              value={m.id}
+              defaultChecked={participantes.has(m.id)}
+              label={m.nome}
+            />
+          ))}
+          {config.rodizio && config.rodizioProximo && (
+            <p className="text-[13px] text-suave">
+              Próximo da vez: <strong className="text-ink">{config.rodizioProximo}</strong>
+            </p>
+          )}
+        </fieldset>
+      </div>
       <Checkbox
         name="whatsapp_assinatura"
         defaultChecked={config.assinatura}

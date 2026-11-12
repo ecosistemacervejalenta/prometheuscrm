@@ -91,7 +91,7 @@ export type MembroEquipe = Awaited<ReturnType<typeof listarEquipe>>[number]
 
 /** Conversa completa: atendimento atual + histórico do contato (todos os atendimentos). */
 export async function obterConversa(id: string) {
-  const { supabase } = await exigirEquipe()
+  const { supabase, perfil } = await exigirEquipe()
   const { data: atendimento } = await supabase.from('vw_atendimentos').select('*').eq('id', id).maybeSingle()
   if (!atendimento?.contato_id) return null
   const contatoId = atendimento.contato_id
@@ -121,7 +121,7 @@ export async function obterConversa(id: string) {
   const idsAtendimentos = atendimentos.data.map((a) => a.id)
   const caminhos = mensagens.data.flatMap((m) => (m.midia_path ? [m.midia_path] : []))
 
-  const [eventos, assinadas, cliente, lead] = await Promise.all([
+  const [eventos, assinadas, cliente, lead, avisos] = await Promise.all([
     supabase
       .from('atendimento_eventos')
       .select('id, atendimento_id, tipo, autor_id, para_id, status, texto, criado_em')
@@ -142,6 +142,13 @@ export async function obterConversa(id: string) {
           .eq('id', contato.data.lead_id)
           .maybeSingle()
       : null,
+    // Avisos do sino sobre esta conversa ainda não lidos por quem abriu (ficam lidos ao abrir).
+    supabase
+      .from('notificacoes')
+      .select('id', { count: 'exact', head: true })
+      .eq('perfil_id', perfil.id)
+      .eq('atendimento_id', id)
+      .is('lida_em', null),
   ])
   if (eventos.error) throw eventos.error
 
@@ -164,6 +171,7 @@ export async function obterConversa(id: string) {
       etiquetas: lerEtiquetas(atendimento.etiquetas),
       // "Assinar como" (a view não traz: fica na própria tabela).
       assinatura_nome: atendimentos.data.find((a) => a.id === atendimento.id)?.assinatura_nome ?? null,
+      avisos_nao_lidos: avisos.count ?? 0,
     },
     contato: contato.data,
     mensagens: mensagens.data.reverse().map((m) => ({
@@ -220,17 +228,37 @@ export async function listarEtiquetasComUso() {
 
 export type EtiquetaComUso = Awaited<ReturnType<typeof listarEtiquetasComUso>>[number]
 
+/**
+ * Próximo da vez no rodízio — mesma regra do banco (distribuir_atendimento):
+ * o primeiro participante ativo depois de quem recebeu o último; ao fim da lista, volta ao começo.
+ */
+function proximoDoRodizio(participantes: string[], ativos: Set<string>, ultimo: string | null) {
+  const vez = ultimo ? participantes.indexOf(ultimo) : -1
+  const ordem = [...participantes.slice(vez + 1), ...participantes.slice(0, vez + 1)]
+  return ordem.find((id) => ativos.has(id)) ?? null
+}
+
 export async function configAtendimento() {
   const { supabase } = await exigirEquipe()
-  const [config, pastas] = await Promise.all([
+  const [config, pastas, equipe] = await Promise.all([
     supabase
       .from('configuracoes')
-      .select('whatsapp_assinatura, whatsapp_nomes_assinatura, whatsapp_leads_automatico, whatsapp_pasta_leads_id')
+      .select(
+        'whatsapp_assinatura, whatsapp_nomes_assinatura, whatsapp_leads_automatico, whatsapp_pasta_leads_id, whatsapp_rodizio, whatsapp_rodizio_participantes, whatsapp_rodizio_ultimo_id',
+      )
       .eq('id', 1)
       .maybeSingle(),
     supabase.from('leads_pastas').select('id, nome').order('nome'),
+    supabase.from('perfis').select('id, nome, email').eq('ativo', true).order('nome'),
   ])
+  const membros = (equipe.data ?? []).map((p) => ({ id: p.id, nome: p.nome || p.email || 'Equipe' }))
+  const participantes = config.data?.whatsapp_rodizio_participantes ?? []
+  const proximo = proximoDoRodizio(participantes, new Set(membros.map((m) => m.id)), config.data?.whatsapp_rodizio_ultimo_id ?? null)
   return {
+    rodizio: config.data?.whatsapp_rodizio ?? false,
+    rodizioParticipantes: participantes,
+    rodizioProximo: membros.find((m) => m.id === proximo)?.nome ?? null,
+    membros,
     assinatura: config.data?.whatsapp_assinatura ?? true,
     nomesAssinatura: config.data?.whatsapp_nomes_assinatura ?? [],
     leadsAutomatico: config.data?.whatsapp_leads_automatico ?? true,

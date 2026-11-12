@@ -7,19 +7,24 @@ export type Aviso = {
   tipo: string
   titulo: string
   texto: string | null
+  quantidade: number
   lido: boolean
   criado_em: string
   autor_nome: string | null
   tarefa: { id: string; numero: number; titulo: string } | null
+  /** Conversa do WhatsApp (avisos de mensagem e de transferência). */
+  atendimento_id: string | null
 }
 
-/** Últimos avisos do membro logado (sino do menu) e quantos ainda não foram lidos. */
+/** Últimos avisos do membro logado (sino do menu: tarefas e WhatsApp) e quantos ainda não foram lidos. */
 export async function listarAvisos(): Promise<{ itens: Aviso[]; naoLidos: number }> {
   const { supabase, perfil } = await exigirEquipe()
   const [lista, naoLidos] = await Promise.all([
     supabase
       .from('notificacoes')
-      .select('id, tipo, titulo, texto, lida_em, criado_em, tarefas(id, numero, titulo), autor:perfis!notificacoes_autor_id_fkey(nome)')
+      .select(
+        'id, tipo, titulo, texto, quantidade, atendimento_id, lida_em, criado_em, tarefas(id, numero, titulo), autor:perfis!notificacoes_autor_id_fkey(nome)',
+      )
       .eq('perfil_id', perfil.id)
       .order('criado_em', { ascending: false })
       .limit(20),
@@ -41,10 +46,12 @@ export async function listarAvisos(): Promise<{ itens: Aviso[]; naoLidos: number
       tipo: a.tipo,
       titulo: a.titulo,
       texto: a.texto,
+      quantidade: a.quantidade,
       lido: a.lida_em !== null,
       criado_em: a.criado_em,
       autor_nome: a.autor?.nome ?? null,
       tarefa: a.tarefas,
+      atendimento_id: a.atendimento_id,
     })),
     naoLidos: naoLidos.count ?? 0,
   }

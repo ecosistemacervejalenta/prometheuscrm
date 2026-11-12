@@ -47,6 +47,8 @@ const EVENTOS_VALIDOS = [
   'cliente.atualizado',
   'pre_venda.criada',
   'pre_venda.atualizada',
+  'whatsapp.mensagem_recebida',
+  'atendimento.transferido',
 ] as const
 
 const esquemaWebhook = z.object({

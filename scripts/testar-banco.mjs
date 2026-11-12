@@ -36,13 +36,17 @@ create function vault.create_secret(new_secret text, new_name text default null,
   returns uuid language sql as $$ insert into vault.secrets (secret, name, description) values (new_secret, new_name, new_description) returning id $$;
 create function vault.update_secret(secret_id uuid, new_secret text default null, new_name text default null, new_description text default null, new_key_id uuid default null)
   returns void language sql as $$ update vault.secrets set secret = coalesce(new_secret, secret) where id = secret_id $$;
+-- pg_cron não existe no PGlite: as rotinas agendadas só são registradas.
+create schema cron;
+create function cron.schedule(job_name text, schedule text, command text) returns bigint language sql as $$ select 1::bigint $$;
 `
 await db.exec(stub)
 
 const files = readdirSync(join(ROOT, 'migrations')).filter((f) => f.endsWith('.sql')).sort()
 for (const f of files) {
   try {
-    await db.exec(readFileSync(join(ROOT, 'migrations', f), 'utf8'))
+    const sql = readFileSync(join(ROOT, 'migrations', f), 'utf8').replace(/create extension if not exists pg_cron[^;]*;/gi, '')
+    await db.exec(sql)
     console.log('✓ migration', f)
   } catch (e) {
     console.error('✗ migration', f, '\n', e.message, e.position ? `pos ${e.position}` : '', e.where ?? '')
@@ -801,7 +805,8 @@ await db.exec(`reset role;`)
 
 // Tarefas internas ----------------------------------------------------------------
 {
-  await db.exec(`reset role; update perfis set ativo = true, trocar_senha = false where id in ('${uid}', '${uid2}');`)
+  // Os testes do Atendimento já geraram avisos de WhatsApp; aqui só contam os das tarefas.
+  await db.exec(`reset role; update perfis set ativo = true, trocar_senha = false where id in ('${uid}', '${uid2}'); delete from notificacoes where atendimento_id is not null;`)
   const como = (id) => `reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${id}', false);`
   const avisos = async () => (await q(`select tipo from notificacoes order by criado_em, tipo`)).map((n) => n.tipo)
 
@@ -894,6 +899,111 @@ await db.exec(`reset role;`)
   expectEq('membro não vê o que os outros viram', (await um(`select count(*)::int n from frase_do_dia_vistas`)).n, 0)
   await db.exec(`reset role; set role anon; select set_config('request.jwt.claim.sub', '', false);`)
   await expectError('anon não lê a frase do dia', `select * from frase_do_dia_vistas`)
+  await db.exec(`reset role;`)
+}
+
+// Atendimento WhatsApp: rodízio da fila e avisos de mensagem -------------------------
+{
+  const como = (id) => `reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${id}', false);`
+  const novoMembro = async (email, nome) =>
+    (await um(`insert into auth.users (email, raw_user_meta_data) values ($1, jsonb_build_object('nome', $2::text)) returning id`, [email, nome])).id
+  const [a, b, c] = [
+    await novoMembro('a.rodizio@prometheus.beer', 'Atendente A'),
+    await novoMembro('b.rodizio@prometheus.beer', 'Atendente B'),
+    await novoMembro('c.rodizio@prometheus.beer', 'Atendente C'),
+  ]
+  await q(`update perfis set ativo = true where id = any ($1::uuid[])`, [[a, b, c]])
+  await q(`update configuracoes set whatsapp_leads_automatico = false, whatsapp_rodizio = true, whatsapp_rodizio_participantes = $1::uuid[]`, [[a, b, c]])
+
+  let seq = 0
+  const mensagem = async (numero, { direcao = 'entrada', texto = 'Oi, tem IPA?', enviada_em = new Date().toISOString(), papel = 'service_role' } = {}) => {
+    seq++
+    await db.exec(papel === 'service_role' ? `reset role; set role service_role;` : como(papel))
+    const r = await um(`select registrar_mensagem_whatsapp($1::jsonb) r`, [JSON.stringify({
+      wa_id: `teste:${seq}`, chatid: `55119000000${numero}@s.whatsapp.net`, whatsapp: `55119000000${numero}`,
+      nome_whatsapp: `Cliente ${numero}`, direcao, tipo: 'texto', texto, enviada_em,
+    })])
+    await db.exec(`reset role;`)
+    return r.r
+  }
+  const responsavel = async (atendimentoId) => (await um(`select responsavel_id, status from atendimentos where id = $1`, [atendimentoId]))
+
+  const r1 = await mensagem('01')
+  const r2 = await mensagem('02')
+  const r3 = await mensagem('03')
+  const r4 = await mensagem('04')
+  expectEq('rodízio distribui A → B → C → A', [
+    (await responsavel(r1.atendimento_id)).responsavel_id, (await responsavel(r2.atendimento_id)).responsavel_id,
+    (await responsavel(r3.atendimento_id)).responsavel_id, (await responsavel(r4.atendimento_id)).responsavel_id,
+  ], [a, b, c, a])
+  expectEq('atendimento do rodízio já entra em atendimento', (await responsavel(r1.atendimento_id)).status, 'em_atendimento')
+  expectEq('linha do tempo registra o rodízio', await um(`select autor_id, para_id, texto from atendimento_eventos where atendimento_id = $1 and tipo = 'transferido'`, [r1.atendimento_id]),
+    { autor_id: null, para_id: a, texto: 'rodizio' })
+
+  const aviso = await um(`select tipo, titulo, texto, quantidade, lida_em from notificacoes where perfil_id = $1 and atendimento_id = $2`, [a, r1.atendimento_id])
+  expectEq('aviso no sino de quem recebeu', { tipo: aviso.tipo, titulo: aviso.titulo, quantidade: aviso.quantidade },
+    { tipo: 'whatsapp_mensagem', titulo: 'Novo cliente para você: Cliente 01', quantidade: 1 })
+  expectEq('aviso traz a hora da mensagem', /^Mensagem às \d\d:\d\d · Oi, tem IPA\?$/.test(aviso.texto), true)
+  expectEq('só o responsável é avisado', (await um(`select count(*)::int n from notificacoes where atendimento_id = $1`, [r1.atendimento_id])).n, 1)
+
+  await mensagem('01', { texto: 'Pode ser a de 500 ml' })
+  expectEq('mensagens seguidas agrupam no mesmo aviso', await um(`select count(*)::int n, max(quantidade) q, max(texto) like '%500 ml' ultima from notificacoes where atendimento_id = $1`, [r1.atendimento_id]),
+    { n: 1, q: 2, ultima: true })
+  expectEq('n8n recebe um evento por conversa com mensagem nova', await um(`select count(*)::int n, max(payload #>> '{responsavel,nome}') resp, max(payload #>> '{atendimento,motivo}') motivo
+    from eventos_integracao where tipo = 'whatsapp.mensagem_recebida' and entidade_id = $1`, [r1.atendimento_id]), { n: 1, resp: 'Atendente A', motivo: 'rodizio' })
+
+  await mensagem('01', { direcao: 'saida', texto: 'Tem sim!' })
+  expectEq('resposta da equipe marca o aviso como lido', (await um(`select lida_em is not null lido from notificacoes where atendimento_id = $1`, [r1.atendimento_id])).lido, true)
+  await mensagem('01', { texto: 'Obrigado' })
+  expectEq('mensagem depois da resposta abre aviso novo', (await um(`select count(*)::int n from notificacoes where atendimento_id = $1 and lida_em is null`, [r1.atendimento_id])).n, 1)
+
+  await mensagem('02', { texto: 'mensagem antiga', enviada_em: new Date(Date.now() - 3600_000).toISOString() })
+  expectEq('mensagem antiga (histórico) não avisa', (await um(`select max(quantidade) q from notificacoes where atendimento_id = $1`, [r2.atendimento_id])).q, 1)
+
+  // Cliente que volta: vai para quem atendeu, sem gastar a vez dessa pessoa.
+  await q(`update atendimentos set status = 'resolvido' where id = $1`, [r1.atendimento_id])
+  const volta = await mensagem('01', { texto: 'Voltei!' })
+  expectEq('cliente que volta vai para quem atendeu', (await responsavel(volta.atendimento_id)).responsavel_id, a)
+  expectEq('retorno avisa com o título certo', (await um(`select titulo from notificacoes where atendimento_id = $1`, [volta.atendimento_id])).titulo, 'Cliente 01 voltou a chamar você')
+  const r5 = await mensagem('05')
+  expectEq('retorno não conta como a vez (próximo é B)', (await responsavel(r5.atendimento_id)).responsavel_id, b)
+
+  // Pausa: quem sai da lista é pulado; quem atendeu antes e saiu da lista não recebe o retorno.
+  await q(`update configuracoes set whatsapp_rodizio_participantes = $1::uuid[]`, [[a, c]])
+  const r6 = await mensagem('06')
+  expectEq('quem saiu do rodízio é pulado', (await responsavel(r6.atendimento_id)).responsavel_id, c)
+  await q(`update atendimentos set status = 'resolvido' where id = $1`, [r5.atendimento_id])
+  const volta5 = await mensagem('05', { texto: 'Oi de novo' })
+  expectEq('retorno de quem saiu do rodízio segue a vez', (await responsavel(volta5.atendimento_id)).responsavel_id, a)
+  await q(`update perfis set ativo = false where id = $1`, [c])
+  const r7 = await mensagem('07')
+  expectEq('membro sem acesso é pulado', (await responsavel(r7.atendimento_id)).responsavel_id, a)
+  await q(`update perfis set ativo = true where id = $1`, [c])
+
+  // Sincronização pela tela (usuário logado) também distribui.
+  const r8 = await mensagem('08', { papel: a })
+  expectEq('mensagem trazida pela sincronização entra no rodízio', (await responsavel(r8.atendimento_id)).responsavel_id, c)
+  await db.exec(como(a))
+  await expectError('membro não chama a função do rodízio', `select distribuir_atendimento()`)
+  await db.exec(`reset role;`)
+
+  // Transferência manual: aviso para quem recebeu e evento para o n8n.
+  await db.exec(como(a))
+  await q(`select transferir_atendimento($1, $2)`, [r4.atendimento_id, b])
+  await db.exec(`reset role;`)
+  expectEq('transferência avisa quem recebeu', await um(`select tipo, titulo, autor_id from notificacoes where perfil_id = $1 and atendimento_id = $2 and tipo = 'atendimento_transferido'`, [b, r4.atendimento_id]),
+    { tipo: 'atendimento_transferido', titulo: 'Atendente A transferiu Cliente 04 para você', autor_id: a })
+  expectEq('transferência vira evento atendimento.transferido', (await um(`select payload #>> '{responsavel,nome}' n from eventos_integracao where tipo = 'atendimento.transferido' and entidade_id = $1`, [r4.atendimento_id])).n, 'Atendente B')
+
+  // Rodízio desligado: fila como antes, todos os participantes avisados.
+  await q(`update configuracoes set whatsapp_rodizio = false, whatsapp_rodizio_participantes = $1::uuid[]`, [[a, b, c]])
+  const r9 = await mensagem('09')
+  expectEq('rodízio desligado deixa na fila', await responsavel(r9.atendimento_id), { responsavel_id: null, status: 'fila' })
+  expectEq('fila avisa todos os participantes', await um(`select count(*)::int n, max(titulo) t from notificacoes where atendimento_id = $1`, [r9.atendimento_id]),
+    { n: 3, t: 'Cliente 09 está esperando na fila' })
+
+  await db.exec(como(b))
+  expectEq('cada um vê só os próprios avisos', (await um(`select count(*)::int n from notificacoes where atendimento_id = $1`, [r9.atendimento_id])).n, 1)
   await db.exec(`reset role;`)
 }
 

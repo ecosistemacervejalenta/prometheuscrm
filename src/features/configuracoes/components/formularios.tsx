@@ -90,6 +90,8 @@ const EVENTOS = [
   { valor: 'cliente.atualizado', rotulo: 'Cliente atualizado' },
   { valor: 'pre_venda.criada', rotulo: 'Pré-venda criada' },
   { valor: 'pre_venda.atualizada', rotulo: 'Pré-venda atualizada' },
+  { valor: 'whatsapp.mensagem_recebida', rotulo: 'WhatsApp: mensagem de cliente' },
+  { valor: 'atendimento.transferido', rotulo: 'WhatsApp: atendimento transferido' },
 ]
 
 export function FormularioWebhook() {

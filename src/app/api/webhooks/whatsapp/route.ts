@@ -4,6 +4,7 @@ import { mensagemParaCrm, statusDaUazapi } from '@/features/atendimento/normaliz
 import { atualizarFoto, guardarMidia, registrarMensagem, sincronizarConversa } from '@/features/atendimento/sincronizacao'
 import type { ChatUazapi, MensagemUazapi } from '@/features/atendimento/uazapi'
 import { erroJson, segredosIguais } from '@/features/integracoes/api-auth'
+import { agendarProcessamentoDeEventos } from '@/features/integracoes/eventos'
 import { envServidor } from '@/lib/env.server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -50,6 +51,8 @@ export async function POST(request: NextRequest) {
     try {
       const r = await registrarMensagem(db, registro)
       if (!r.duplicada && r.midia_pendente) after(() => guardarMidia(db, r.mensagem_id))
+      // Mensagem de cliente pode ter gerado evento para o n8n (whatsapp.mensagem_recebida): entrega já.
+      if (!r.duplicada && registro.direcao === 'entrada') agendarProcessamentoDeEventos()
       // Primeiro contato: foto de perfil e o que a uazapi ainda guarda (até 7 dias) para dar contexto à equipe.
       if (r.contato_novo && r.contato_id) {
         const contato = { id: r.contato_id, chatid: registro.chatid }

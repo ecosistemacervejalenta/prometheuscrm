@@ -443,7 +443,20 @@ O workflow `.github/workflows/ci.yml` roda **teste do banco + lint + tipos + bui
 
 Toda mudança relevante gera um evento na tabela `eventos_integracao` (padrão *outbox*). O CRM entrega cada evento, logo após a ação, para os webhooks cadastrados em **Configurações › Integrações**. Falhas são tentadas de novo com espera crescente (1, 2, 4… min, até 8 tentativas) pela rotina `/api/cron/eventos`.
 
-**Eventos:** `pedido.criado` · `pedido.atualizado` · `pedido.pago` · `pedido.cancelado` · `cliente.criado` · `cliente.atualizado` · `pre_venda.criada` · `pre_venda.atualizada` (e `teste.ping` no botão “Testar”).
+**Eventos:** `pedido.criado` · `pedido.atualizado` · `pedido.pago` · `pedido.cancelado` · `cliente.criado` · `cliente.atualizado` · `pre_venda.criada` · `pre_venda.atualizada` · `whatsapp.mensagem_recebida` · `atendimento.transferido` (e `teste.ping` no botão “Testar”).
+
+**Eventos do Atendimento (WhatsApp):**
+
+- `whatsapp.mensagem_recebida`: o cliente mandou mensagem e a conversa não tinha aviso pendente. Mensagens seguidas antes de alguém abrir ou responder a conversa não geram outro evento. `responsavel` é quem está com a conversa (nulo = na fila). No primeiro contato de um atendimento (`novo: true`), `atendimento.motivo` diz como ele foi distribuído: `rodizio`, `retorno` (voltou para quem atendeu da última vez) ou `fila` (rodízio desligado). Nas mensagens seguintes, `motivo` vem nulo.
+
+  ```json
+  { "atendimento": { "id": "…", "numero": 812, "novo": true, "motivo": "rodizio", "caminho": "/atendimento?aba=abertos&id=…" },
+    "contato": { "nome": "João Silva", "whatsapp": "5511987654321" },
+    "responsavel": { "id": "…", "nome": "Renan Rodrigues", "email": "…" },
+    "mensagem": { "previa": "Oi, tem a IPA de 500 ml?", "tipo": "texto", "enviada_em": "2026-11-12T17:32:05Z", "hora": "14:32", "data": "12/11/2026" } }
+  ```
+
+- `atendimento.transferido`: alguém transferiu a conversa. Traz `atendimento`, `contato`, `responsavel` (quem recebeu), `transferido_por` e `ultima_mensagem`.
 
 **Requisição enviada:**
 
@@ -487,6 +500,7 @@ return $input.all()
 | `pedido.criado` | Enviar confirmação + dados do PIX pelo WhatsApp Business API / Z-API / Evolution API; depois `POST /api/v1/pedidos/{id}/cobranca`. |
 | `pedido.pago` | Mensagem de agradecimento; avisar a logística; lançar no financeiro. |
 | `pre_venda.criada` | Disparar a mensagem com o link em listas de transmissão. |
+| `whatsapp.mensagem_recebida` | Avisar o responsável no WhatsApp pessoal: “Novo cliente para você: João Silva, às 14:32”. |
 | Webhook do banco/PSP de PIX | `PATCH /api/v1/pedidos/{id}` com `{"status_pagamento":"pago","forma_pagamento":"PIX"}`. |
 | Agendamento a cada 1 min | `GET /api/cron/eventos` com `Authorization: Bearer CRON_SECRET` (reenvio rápido no plano Hobby). |
 

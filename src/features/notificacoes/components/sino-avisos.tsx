@@ -1,6 +1,6 @@
 'use client'
 
-import { Bell, CheckCheck, ListTodo } from 'lucide-react'
+import { Bell, CheckCheck, ListTodo, MessageCircle, MessagesSquare } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState, useTransition } from 'react'
 
@@ -13,8 +13,16 @@ import type { Aviso } from '../queries'
 
 export type PropsAvisos = { itens: Aviso[]; naoLidos: number }
 
+/** Para onde o aviso leva: a tarefa ou a conversa do WhatsApp. */
+function destinoDoAviso(a: Aviso) {
+  if (a.tarefa) return `/tarefas?id=${a.tarefa.id}`
+  if (a.atendimento_id) return `/atendimento?aba=abertos&id=${a.atendimento_id}`
+  return null
+}
+
 /**
- * Sino de avisos: "Fulano marcou você na tarefa #12", comentários, impedimentos…
+ * Sino de avisos: "Fulano marcou você na tarefa #12", comentários, impedimentos,
+ * "Novo cliente para você: João" e mensagens do WhatsApp (com a hora em que chegaram)…
  * menu  → barra lateral escura (desktop), abre um painel ao lado do menu.
  * topo  → barra superior do celular, abre uma folha que sobe de baixo.
  */
@@ -98,19 +106,36 @@ export function SinoAvisos({ itens, naoLidos, variante }: PropsAvisos & { varian
                   <Bell className="size-5" aria-hidden />
                 </span>
                 <p className="font-semibold">Nenhum aviso por aqui</p>
-                <p className="mt-1 text-[13px] text-suave">Quando marcarem você numa tarefa, o aviso aparece aqui.</p>
+                <p className="mt-1 text-[13px] text-suave">
+                  Quando marcarem você numa tarefa ou um cliente chamar no WhatsApp, o aviso aparece aqui.
+                </p>
               </div>
             ) : (
               <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                 {itens.map((a) => {
+                  const mensagem = a.tipo === 'whatsapp_mensagem'
+                  const destino = destinoDoAviso(a)
                   const conteudo = (
                     <>
-                      <Avatar nome={a.autor_nome} tamanho="sm" />
+                      {mensagem ? (
+                        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-volt-50 text-volt-700" aria-hidden>
+                          <MessageCircle className="size-4" />
+                        </span>
+                      ) : (
+                        <Avatar nome={a.autor_nome} tamanho="sm" />
+                      )}
                       <span className="min-w-0 flex-1">
                         <span className={cn('block text-[14px] leading-5', a.lido ? 'font-medium' : 'font-semibold')}>{a.titulo}</span>
                         {a.tarefa && <span className="mt-0.5 block truncate text-[13px] text-ink/80">{a.tarefa.titulo}</span>}
-                        {a.texto && <span className="mt-0.5 line-clamp-2 block text-[13px] text-suave">“{a.texto}”</span>}
-                        <span className="tipo-dado mt-1 block text-[11px] text-sutil">{formatarHaQuanto(a.criado_em)}</span>
+                        {a.texto && (
+                          <span className={cn('mt-0.5 line-clamp-2 block text-[13px]', mensagem ? 'text-ink/80' : 'text-suave')}>
+                            {mensagem ? a.texto : `“${a.texto}”`}
+                          </span>
+                        )}
+                        <span className="tipo-dado mt-1 block text-[11px] text-sutil">
+                          {formatarHaQuanto(a.criado_em)}
+                          {mensagem && a.quantidade > 1 && ` · ${a.quantidade} mensagens`}
+                        </span>
                       </span>
                       {!a.lido && <span className="mt-1.5 size-2 shrink-0 rounded-full bg-volt" aria-label="Não lido" />}
                     </>
@@ -118,12 +143,12 @@ export function SinoAvisos({ itens, naoLidos, variante }: PropsAvisos & { varian
                   const classes = cn(
                     'flex gap-3 border-b border-linha px-4 py-3 last:border-b-0',
                     !a.lido && 'bg-volt-50/50',
-                    a.tarefa && 'hover:bg-papel active:bg-papel',
+                    destino && 'hover:bg-papel active:bg-papel',
                   )
                   return (
                     <li key={a.id}>
-                      {a.tarefa ? (
-                        <Link href={`/tarefas?id=${a.tarefa.id}`} scroll={false} onClick={() => setAberto(false)} className={classes}>
+                      {destino ? (
+                        <Link href={destino} scroll={false} onClick={() => setAberto(false)} className={classes}>
                           {conteudo}
                         </Link>
                       ) : (
@@ -135,7 +160,14 @@ export function SinoAvisos({ itens, naoLidos, variante }: PropsAvisos & { varian
               </ul>
             )}
 
-            <footer className="border-t border-linha px-4 py-2.5">
+            <footer className="flex flex-wrap gap-x-5 gap-y-1 border-t border-linha px-4 py-2.5">
+              <Link
+                href="/atendimento?aba=meus"
+                onClick={() => setAberto(false)}
+                className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-volt-700 hover:text-ink"
+              >
+                <MessagesSquare className="size-4" aria-hidden /> Meus atendimentos
+              </Link>
               <Link
                 href="/tarefas?resp=eu"
                 onClick={() => setAberto(false)}

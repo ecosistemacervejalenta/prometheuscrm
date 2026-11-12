@@ -280,7 +280,11 @@ function Evento({ e, nomes, numeros }: { e: EventoConversa; nomes: Map<string, s
     e.tipo === 'assumido'
       ? `${autor ?? 'Alguém'} assumiu o atendimento`
       : e.tipo === 'transferido'
-        ? `${autor ?? 'Alguém'} transferiu para ${para}`
+        ? !e.autor_id && e.texto === 'rodizio'
+          ? `Rodízio: atendimento distribuído para ${para}`
+          : !e.autor_id && e.texto === 'retorno'
+            ? `Cliente voltou: atendimento com ${para}, que atendeu da última vez`
+            : `${autor ?? 'Alguém'} transferiu para ${para}`
         : e.tipo === 'resolvido'
           ? `${autor ?? 'Alguém'} resolveu o atendimento #${numeros.get(e.atendimento_id) ?? ''}`
           : e.tipo === 'etiqueta_adicionada'
@@ -345,10 +349,12 @@ export function Conversa({
   const outroAberto = atendimentos.find((a) => a.status !== 'resolvido' && a.id !== id)
   const responsavel = atendimento.responsavel_id ? (nomes.get(atendimento.responsavel_id) ?? atendimento.responsavel_nome) : null
 
-  // Abriu a conversa (ou chegou mensagem com ela aberta): marca como lida aqui e no WhatsApp.
+  // Abriu a conversa (ou chegou mensagem com ela aberta): marca como lida aqui, no WhatsApp e no sino.
   useEffect(() => {
-    if ((atendimento.nao_lidas ?? 0) > 0 && document.visibilityState === 'visible') void marcarComoLido(id)
-  }, [id, atendimento.nao_lidas])
+    if (((atendimento.nao_lidas ?? 0) > 0 || atendimento.avisos_nao_lidos > 0) && document.visibilityState === 'visible') {
+      void marcarComoLido(id)
+    }
+  }, [id, atendimento.nao_lidas, atendimento.avisos_nao_lidos])
 
   // Confere com a uazapi se faltou alguma mensagem (webhook perdido), uma vez por conversa aberta.
   useEffect(() => {

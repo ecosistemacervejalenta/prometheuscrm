@@ -78,4 +78,9 @@ export const esquemaConfigAtendimento = z.object({
   whatsapp_nomes_assinatura: listaNomesAssinatura,
   whatsapp_leads_automatico: checkbox,
   whatsapp_pasta_leads_id: z.preprocess((v) => (v ? v : null), z.uuid('Escolha uma pasta.').nullable()),
+  whatsapp_rodizio: checkbox,
+  whatsapp_rodizio_participantes: z.array(z.uuid('Membro inválido.')).max(50),
 })
+
+/** Campos de lista (vários checkboxes com o mesmo nome) do formulário de preferências. */
+export const LISTAS_CONFIG_ATENDIMENTO = ['whatsapp_rodizio_participantes']

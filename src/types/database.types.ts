@@ -597,6 +597,9 @@ export type Database = {
           whatsapp_leads_automatico: boolean
           whatsapp_loja: string | null
           whatsapp_nomes_assinatura: string[]
+          whatsapp_rodizio: boolean
+          whatsapp_rodizio_participantes: string[]
+          whatsapp_rodizio_ultimo_id: string | null
           whatsapp_pasta_leads_id: string | null
         }
         Insert: {
@@ -615,6 +618,9 @@ export type Database = {
           whatsapp_leads_automatico?: boolean
           whatsapp_loja?: string | null
           whatsapp_nomes_assinatura?: string[]
+          whatsapp_rodizio?: boolean
+          whatsapp_rodizio_participantes?: string[]
+          whatsapp_rodizio_ultimo_id?: string | null
           whatsapp_pasta_leads_id?: string | null
         }
         Update: {
@@ -633,6 +639,9 @@ export type Database = {
           whatsapp_leads_automatico?: boolean
           whatsapp_loja?: string | null
           whatsapp_nomes_assinatura?: string[]
+          whatsapp_rodizio?: boolean
+          whatsapp_rodizio_participantes?: string[]
+          whatsapp_rodizio_ultimo_id?: string | null
           whatsapp_pasta_leads_id?: string | null
         }
         Relationships: [
@@ -1338,39 +1347,59 @@ export type Database = {
       }
       notificacoes: {
         Row: {
+          atendimento_id: string | null
           autor_id: string | null
           criado_em: string
           id: string
           lida_em: string | null
           perfil_id: string
+          quantidade: number
           tarefa_id: string | null
           texto: string | null
           tipo: string
           titulo: string
         }
         Insert: {
+          atendimento_id?: string | null
           autor_id?: string | null
           criado_em?: string
           id?: string
           lida_em?: string | null
           perfil_id: string
+          quantidade?: number
           tarefa_id?: string | null
           texto?: string | null
           tipo: string
           titulo: string
         }
         Update: {
+          atendimento_id?: string | null
           autor_id?: string | null
           criado_em?: string
           id?: string
           lida_em?: string | null
           perfil_id?: string
+          quantidade?: number
           tarefa_id?: string | null
           texto?: string | null
           tipo?: string
           titulo?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "notificacoes_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificacoes_atendimento_id_fkey"
+            columns: ["atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "vw_atendimentos"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "notificacoes_autor_id_fkey"
             columns: ["autor_id"]

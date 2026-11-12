@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 
+import { agendarProcessamentoDeEventos } from '@/features/integracoes/eventos'
 import { errosDeValidacao, falha, sucesso, traduzirErro, type EstadoAcao } from '@/lib/acoes'
 import { exigirAdmin, exigirEquipe } from '@/lib/auth'
 import { urlDoSite } from '@/lib/url'
@@ -18,6 +19,7 @@ import {
   esquemaNomeAssinatura,
   esquemaNota,
   esquemaStatus,
+  LISTAS_CONFIG_ATENDIMENTO,
   type CorEtiqueta,
   type DadosMidia,
 } from './schema'
@@ -196,6 +198,7 @@ export async function transferirAtendimento(id: string, para: string): Promise<E
   const { supabase } = await exigirEquipe()
   const { error } = await supabase.rpc('transferir_atendimento', { p_id: id, p_para: para })
   if (error) return falha(traduzirErro(error))
+  agendarProcessamentoDeEventos() // atendimento.transferido → n8n
   atualizarTelas()
   return sucesso('Atendimento transferido.')
 }
@@ -303,9 +306,15 @@ export async function excluirEtiqueta(id: string): Promise<EstadoAcao> {
   return sucesso('Etiqueta excluída.')
 }
 
-/** Zera as não lidas ao abrir a conversa e avisa o WhatsApp (o cliente vê como lida). */
+/** Zera as não lidas ao abrir a conversa, avisa o WhatsApp (o cliente vê como lida) e marca os avisos do sino desta conversa. */
 export async function marcarComoLido(id: string): Promise<void> {
-  const { supabase } = await exigirEquipe()
+  const { supabase, perfil } = await exigirEquipe()
+  await supabase
+    .from('notificacoes')
+    .update({ lida_em: new Date().toISOString() })
+    .eq('perfil_id', perfil.id)
+    .eq('atendimento_id', id)
+    .is('lida_em', null)
   const { data } = await supabase
     .from('atendimentos')
     .update({ nao_lidas: 0 })
@@ -352,6 +361,8 @@ export async function sincronizarConversaAgora(contatoId: string, { silencioso =
       !silencioso || fotoPrecisaAtualizar(contato) ? atualizarFoto(supabase, contato).then((url) => url !== contato.foto_url) : false,
     ])
     if (novas > 0 || foto) atualizarTelas()
+    // Mensagem recuperada pode ter aberto atendimento ou aviso com evento para o n8n.
+    if (novas > 0) agendarProcessamentoDeEventos()
     if (silencioso) return sucesso()
     return sucesso(novas > 0 ? `${novas} mensagem(ns) recuperada(s) do WhatsApp.` : 'A conversa já estava completa.')
   } catch (e) {
@@ -386,12 +397,28 @@ export async function ativarWebhookWhatsapp(): Promise<EstadoAcao> {
 
 export async function salvarConfigAtendimento(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
   const { supabase } = await exigirAdmin()
-  const dados = esquemaConfigAtendimento.safeParse(formParaObjeto(formData))
+  const dados = esquemaConfigAtendimento.safeParse(formParaObjeto(formData, LISTAS_CONFIG_ATENDIMENTO))
   if (!dados.success) return errosDeValidacao(dados.error)
   if (dados.data.whatsapp_leads_automatico && !dados.data.whatsapp_pasta_leads_id) {
     return falha('Escolha a pasta do Banco de Leads para salvar os contatos automaticamente.')
   }
-  const { error } = await supabase.from('configuracoes').update(dados.data).eq('id', 1)
+
+  // Rodízio: só membros com acesso, na ordem do formulário.
+  const marcados = [...new Set(dados.data.whatsapp_rodizio_participantes)]
+  const { data: ativos, error: erroEquipe } = marcados.length
+    ? await supabase.from('perfis').select('id').in('id', marcados).eq('ativo', true)
+    : { data: [], error: null }
+  if (erroEquipe) return falha(traduzirErro(erroEquipe))
+  const comAcesso = new Set(ativos.map((p) => p.id))
+  const participantes = marcados.filter((id) => comAcesso.has(id))
+  if (dados.data.whatsapp_rodizio && participantes.length === 0) {
+    return falha('Marque quem participa do rodízio.')
+  }
+
+  const { error } = await supabase
+    .from('configuracoes')
+    .update({ ...dados.data, whatsapp_rodizio_participantes: participantes })
+    .eq('id', 1)
   if (error) return falha(traduzirErro(error))
   revalidatePath('/configuracoes/integracoes')
   return sucesso('Configurações do atendimento salvas.')
