@@ -25,17 +25,20 @@ export async function POST(request: NextRequest) {
   const acesso = await credenciais(db)
   if (!acesso) return NextResponse.json({ ok: true, ignorado: 'sem conexão' })
 
-  // Assinatura secreta salva + cabeçalho presente → precisa bater.
+  // Assinatura: só diagnóstico. A baixa nunca depende do aviso (a order é conferida na API
+  // com o nosso token), então um aviso sem assinatura válida não tem como marcar nada como pago.
   const assinatura = request.headers.get('x-signature')
   if (acesso.segredoWebhook && assinatura) {
-    const valida = assinaturaValida(acesso.segredoWebhook, {
-      assinatura,
-      requestId: request.headers.get('x-request-id'),
-      dataId: url.searchParams.get('data.id') ?? id,
-    })
-    if (!valida) {
-      console.warn('[mercado-pago] webhook com assinatura inválida', id)
-      return NextResponse.json({ ok: false, erro: 'Assinatura inválida.' }, { status: 401 })
+    const requestId = request.headers.get('x-request-id')
+    const dataId = url.searchParams.get('data.id') ?? id
+    if (!assinaturaValida(acesso.segredoWebhook, { assinatura, requestId, dataId })) {
+      console.warn('[mercado-pago] assinatura do webhook não confere', {
+        id,
+        dataIdNaUrl: url.searchParams.has('data.id'),
+        temRequestId: Boolean(requestId),
+        ts: assinatura.match(/ts=([^,]+)/)?.[1] ?? null,
+        tamanhoChave: acesso.segredoWebhook.length,
+      })
     }
   }
 
