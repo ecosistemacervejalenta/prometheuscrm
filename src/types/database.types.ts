@@ -1568,6 +1568,7 @@ export type Database = {
           descricao: string
           id: string
           pedido_id: string
+          pre_venda_id: string | null
           preco_unitario: number
           produto_id: string | null
           quantidade: number
@@ -1577,6 +1578,7 @@ export type Database = {
           descricao: string
           id?: string
           pedido_id: string
+          pre_venda_id?: string | null
           preco_unitario: number
           produto_id?: string | null
           quantidade: number
@@ -1586,6 +1588,7 @@ export type Database = {
           descricao?: string
           id?: string
           pedido_id?: string
+          pre_venda_id?: string | null
           preco_unitario?: number
           produto_id?: string | null
           quantidade?: number
@@ -1607,6 +1610,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "pedido_itens_pre_venda_id_fkey"
+            columns: ["pre_venda_id"]
+            isOneToOne: false
+            referencedRelation: "pre_vendas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedido_itens_pre_venda_id_fkey"
+            columns: ["pre_venda_id"]
+            isOneToOne: false
+            referencedRelation: "vw_pre_vendas"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "pedido_itens_produto_id_fkey"
             columns: ["produto_id"]
             isOneToOne: false
@@ -1618,6 +1635,8 @@ export type Database = {
       pedidos: {
         Row: {
           atualizado_em: string
+          caixa: Database["public"]["Enums"]["situacao_caixa"] | null
+          caixa_fechada_em: string | null
           canal: Database["public"]["Enums"]["canal_venda"]
           cliente_id: string
           cobrancas_enviadas: number
@@ -1631,6 +1650,7 @@ export type Database = {
           numero: number
           observacoes: string | null
           origem: Database["public"]["Enums"]["origem_pedido"]
+          pago_fora_pix: number
           pago_em: string | null
           pre_venda_id: string | null
           shopify_order_id: string | null
@@ -1643,6 +1663,8 @@ export type Database = {
         }
         Insert: {
           atualizado_em?: string
+          caixa?: Database["public"]["Enums"]["situacao_caixa"] | null
+          caixa_fechada_em?: string | null
           canal?: Database["public"]["Enums"]["canal_venda"]
           cliente_id: string
           cobrancas_enviadas?: number
@@ -1656,6 +1678,7 @@ export type Database = {
           numero?: never
           observacoes?: string | null
           origem?: Database["public"]["Enums"]["origem_pedido"]
+          pago_fora_pix?: number
           pago_em?: string | null
           pre_venda_id?: string | null
           shopify_order_id?: string | null
@@ -1668,6 +1691,8 @@ export type Database = {
         }
         Update: {
           atualizado_em?: string
+          caixa?: Database["public"]["Enums"]["situacao_caixa"] | null
+          caixa_fechada_em?: string | null
           canal?: Database["public"]["Enums"]["canal_venda"]
           cliente_id?: string
           cobrancas_enviadas?: number
@@ -1681,6 +1706,7 @@ export type Database = {
           numero?: never
           observacoes?: string | null
           origem?: Database["public"]["Enums"]["origem_pedido"]
+          pago_fora_pix?: number
           pago_em?: string | null
           pre_venda_id?: string | null
           shopify_order_id?: string | null
@@ -3127,6 +3153,13 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      adicionar_itens_pre_venda: {
+        Args: { p_itens: Json; p_pedido_id: string; p_pre_venda_id: string }
+        Returns: Json
+      }
+      caixa_do_whatsapp: { Args: { p_whatsapp: string }; Returns: Json }
+      caixa_publica: { Args: { p_pedido_id: string }; Returns: Json }
+      fechar_caixa: { Args: { p_pedido_id: string }; Returns: undefined }
       concluir_cobranca_pix: {
         Args: { p_cobranca_id: string; p_dados: Json }
         Returns: undefined
@@ -3583,6 +3616,7 @@ export type Database = {
       origem_pedido: "link" | "manual" | "shopify" | "app" | "api"
       papel_usuario: "admin" | "equipe"
       prioridade_tarefa: "baixa" | "media" | "alta" | "urgente"
+      situacao_caixa: "aberta" | "fechada"
       situacao_frete: "vip" | "a_cotar" | "cotado"
       status_atendimento:
         | "fila"
@@ -3761,6 +3795,7 @@ export const Constants = {
       origem_pedido: ["link", "manual", "shopify", "app", "api"],
       papel_usuario: ["admin", "equipe"],
       prioridade_tarefa: ["baixa", "media", "alta", "urgente"],
+      situacao_caixa: ["aberta", "fechada"],
       situacao_frete: ["vip", "a_cotar", "cotado"],
       status_atendimento: [
         "fila",

@@ -1,21 +1,26 @@
-import { CircleCheck, CircleX } from 'lucide-react'
+import { CircleX, Heart, Truck } from 'lucide-react'
 
-import { formatarMoeda, numeroPedido } from '@/lib/format'
+import { formatarData, formatarMoeda, numeroPedido } from '@/lib/format'
 
+import { CaixaIlustracao, ConteudoDaCaixa } from './caixa'
+import { caixaQuitada, gruposDaCaixa } from './caixa-dados'
 import { PixChaveLoja } from './pagamento'
 import { PixMercadoPago } from './pix-mercado-pago'
 import type { PedidoParaPagar } from './queries'
 
 /**
- * Página /pagar/{pedido}: o cliente paga o que falta (frete cotado, pedido manual,
- * cobrança da equipe). Mesmo visual do link da pré-venda, pensado para o celular.
+ * Página /pagar/{pedido}: o cliente fecha e paga a Caixa VIP (ou o que falta de um pedido:
+ * frete cotado, cobrança da equipe). Mesmo visual do link da pré-venda, pensado para o celular.
  */
 export function PaginaPagarPedido({ dados }: { dados: PedidoParaPagar }) {
-  const { pedido, loja } = dados
-  const primeiroNome = pedido.clienteNome.split(' ')[0]
+  const { caixa, loja } = dados
+  const ehCaixa = caixa.situacao !== null
+  const cancelado = caixa.status === 'cancelado'
+  const quitada = caixaQuitada(caixa)
+  const nome = caixa.cliente.primeiroNome
 
   let conteudo
-  if (pedido.cancelado) {
+  if (cancelado) {
     conteudo = (
       <section className="rounded-[24px] border border-linha bg-superficie p-6 text-center">
         <CircleX className="mx-auto size-12 text-suave" strokeWidth={1.5} aria-hidden />
@@ -23,61 +28,80 @@ export function PaginaPagarPedido({ dados }: { dados: PedidoParaPagar }) {
         <p className="mt-1.5 text-[15px] text-suave">Este pedido foi cancelado e não precisa ser pago. Qualquer dúvida, chame a gente no WhatsApp.</p>
       </section>
     )
-  } else if (pedido.pago) {
-    conteudo = (
-      <section className="rounded-[24px] border-2 border-sucesso/30 bg-sucesso-50 p-6 text-center" role="status">
-        <CircleCheck className="mx-auto size-12 text-sucesso" strokeWidth={1.75} aria-hidden />
-        <h2 className="tipo-h2 mt-3">Pedido pago</h2>
-        <p className="mt-1.5 text-[16px] text-ink/80">Já recebemos o pagamento deste pedido. Obrigado! 🍺</p>
-      </section>
-    )
-  } else {
+  } else if (!quitada) {
     const reserva = (
       <PixChaveLoja
         loja={loja}
-        valor={pedido.total}
-        rotuloValor="Total do pedido"
-        detalhe={pedido.taxaEntrega > 0 ? `Inclui o frete de ${formatarMoeda(pedido.taxaEntrega)}. Se já pagou uma parte, pague só o restante.` : undefined}
-        mensagemComprovante={`Olá! Segue o comprovante do PIX do pedido ${numeroPedido(pedido.numero)} (${pedido.clienteNome}).`}
+        valor={caixa.devido}
+        rotuloValor={caixa.pago > 0 ? 'Falta pagar' : 'Valor a pagar'}
+        detalhe={caixa.frete === 'a_cotar' ? 'O frete é pago à parte, quando enviarmos a cotação.' : undefined}
+        mensagemComprovante={`Olá! Segue o comprovante do PIX ${ehCaixa ? 'da Caixa VIP' : 'do pedido'} ${numeroPedido(caixa.numero)} — ${formatarMoeda(caixa.devido)}.`}
       />
     )
-    conteudo = loja.mercadoPago ? <PixMercadoPago pedidoId={pedido.id} reserva={reserva} /> : reserva
+    conteudo = loja.mercadoPago ? <PixMercadoPago pedidoId={caixa.pedidoId} reserva={reserva} /> : reserva
   }
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-4 px-5 pt-[max(24px,env(safe-area-inset-top))] pb-[max(24px,env(safe-area-inset-bottom))]">
-      <header className="rounded-[28px] bg-ink px-6 py-7 text-white">
-        <p className="tipo-rotulo text-white/60">{loja.nome}</p>
-        <h1 className="tipo-h1 mt-1">{numeroPedido(pedido.numero)}</h1>
-        <p className="mt-2 text-[17px] text-white/80">
-          {primeiroNome ? `Olá, ${primeiroNome}! ` : ''}
-          {pedido.preVendaTitulo ? `Pedido da pré-venda ${pedido.preVendaTitulo}.` : 'Pagamento do seu pedido.'}
+      <header className="rounded-[28px] bg-ink px-6 pt-6 pb-7 text-center text-white">
+        {ehCaixa && (
+          <CaixaIlustracao
+            estado={quitada || caixa.situacao === 'fechada' ? 'fechada' : 'aberta'}
+            quantidade={caixa.unidades}
+            movimento={quitada}
+            className="mb-3 max-w-[200px]"
+          />
+        )}
+        <p className="tipo-rotulo text-volt">
+          {loja.nome} · {ehCaixa ? 'Caixa VIP' : 'Pedido'} {numeroPedido(caixa.numero)}
+        </p>
+        <h1 className="tipo-h2 mt-1.5 text-balance">
+          {quitada
+            ? `Tudo pago${nome ? `, ${nome}` : ''}!`
+            : ehCaixa
+              ? `${nome ? `${nome}, f` : 'F'}eche e pague sua caixa`
+              : `${nome ? `Olá, ${nome}! ` : ''}Pagamento do seu pedido`}
+        </h1>
+        <p className="mt-2 text-[16px] leading-6 text-white/75">
+          {quitada
+            ? `Sua ${ehCaixa ? 'caixa' : 'encomenda'} vai ser preparada com todo o carinho e sai para entrega assim que as cervejas chegarem${caixa.previsaoEnvio ? ` (previsão ${formatarData(caixa.previsaoEnvio)})` : ''}.`
+            : ehCaixa
+              ? 'Um PIX só para a caixa inteira, com um frete só. Pagou, a caixa é fechada e enviada com todo o carinho até você.'
+              : 'Pague com PIX abaixo. A confirmação é automática.'}
         </p>
       </header>
 
       {conteudo}
 
-      <section className="rounded-[24px] border border-linha bg-superficie p-5">
-        <h2 className="tipo-h3">Seu pedido</h2>
-        <ul className="mt-3 space-y-2 text-[15px]">
-          {pedido.itens.map((i) => (
-            <li key={i.nome} className="flex justify-between gap-3">
-              <span>
-                <span className="tipo-dado font-semibold">{i.quantidade}×</span> {i.nome}
-              </span>
-              <span className="tipo-dado shrink-0">{formatarMoeda(i.total)}</span>
-            </li>
-          ))}
-          <li className="flex justify-between gap-3 text-suave">
-            <span>Frete</span>
-            <span className="tipo-dado shrink-0">{pedido.frete === 'a_cotar' ? 'a cotar' : formatarMoeda(pedido.taxaEntrega)}</span>
-          </li>
-          <li className="flex justify-between gap-3 border-t border-linha pt-2 font-semibold">
-            <span>Total</span>
-            <span className="tipo-dado shrink-0">{formatarMoeda(pedido.total)}</span>
-          </li>
-        </ul>
-      </section>
+      <ConteudoDaCaixa
+        numero={caixa.numero}
+        grupos={gruposDaCaixa(caixa.itens)}
+        frete={{
+          rotulo: ehCaixa ? 'Frete (um só para a caixa)' : 'Frete',
+          valor: caixa.frete === 'a_cotar' ? 'a cotar' : formatarMoeda(caixa.taxaEntrega),
+        }}
+        total={caixa.total}
+        rotuloTotal={caixa.frete === 'a_cotar' ? 'Total (sem frete)' : 'Total'}
+        pago={caixa.pago}
+        devido={caixa.devido}
+        previsaoEnvio={caixa.previsaoEnvio}
+      />
+
+      {caixa.frete === 'a_cotar' && !cancelado && (
+        <p className="flex items-start gap-3 rounded-[20px] border border-alerta/25 bg-alerta-50 p-4 text-[15px] leading-6 text-ink/80">
+          <Truck className="mt-0.5 size-5 shrink-0 text-alerta" aria-hidden />
+          <span>
+            <b className="text-alerta">Frete a cotar.</b> A gente cota um frete só e te manda no WhatsApp.
+          </span>
+        </p>
+      )}
+
+      {ehCaixa && (
+        <p className="pb-2 text-center text-[13px] text-balance text-suave">
+          <Heart className="mr-1 inline size-3.5 -translate-y-px fill-perigo text-perigo" aria-hidden />
+          Sua caixa é fechada e enviada com todo o carinho até você.
+        </p>
+      )}
     </div>
   )
 }

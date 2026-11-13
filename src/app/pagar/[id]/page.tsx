@@ -8,7 +8,7 @@ import { numeroPedido } from '@/lib/format'
 export async function generateMetadata({ params }: PageProps<'/pagar/[id]'>): Promise<Metadata> {
   const dados = await obterPedidoParaPagar((await params).id)
   return {
-    title: { absolute: dados ? `Pagar pedido ${numeroPedido(dados.pedido.numero)} · ${dados.loja.nome}` : 'Pagamento' },
+    title: { absolute: dados ? `${dados.caixa.situacao ? 'Caixa VIP' : 'Pedido'} ${numeroPedido(dados.caixa.numero)} · ${dados.loja.nome}` : 'Pagamento' },
     robots: { index: false, follow: false },
   }
 }

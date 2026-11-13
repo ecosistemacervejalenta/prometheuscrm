@@ -42,6 +42,7 @@ const EVENTOS_VALIDOS = [
   'pedido.criado',
   'pedido.atualizado',
   'pedido.pago',
+  'pedido.itens_adicionados',
   'pedido.cancelado',
   'cliente.criado',
   'cliente.atualizado',

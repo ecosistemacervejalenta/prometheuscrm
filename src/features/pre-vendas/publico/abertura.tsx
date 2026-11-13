@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowRight, CalendarClock, Truck } from 'lucide-react'
+import { ArrowRight, CalendarClock, PackageOpen, Truck } from 'lucide-react'
 import Image from 'next/image'
 import type { ReactNode } from 'react'
 
@@ -108,6 +108,14 @@ export function AberturaPreVenda({
         <Truck className="mt-0.5 size-5 shrink-0 text-volt-700" aria-hidden />
         <span>
           Frete fixo de <b>{formatarMoeda(freteVip)}</b> para os CEPs atendidos. Fora deles, a gente cota e te avisa no WhatsApp.
+        </span>
+      </p>
+
+      <p className="mt-3 flex items-start gap-3 rounded-[20px] border border-vip/40 bg-vip-50 p-4 text-[15px] leading-6">
+        <PackageOpen className="mt-0.5 size-5 shrink-0 text-vip-700" aria-hidden />
+        <span>
+          <b>Caixa VIP:</b> compre em quantas pré-vendas quiser. Tudo vai para a mesma caixa, chega junto e com <b>um frete só</b> — você
+          paga agora ou no fechamento.
         </span>
       </p>
 

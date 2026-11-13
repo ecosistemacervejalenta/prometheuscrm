@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { MapPin, MessageCircle, Phone, Printer, Trash2 } from 'lucide-react'
+import { MapPin, MessageCircle, PackageCheck, PackageOpen, Phone, Printer, Trash2 } from 'lucide-react'
 
 import { LinhaDoTempo } from '@/components/dominio/linha-do-tempo'
 import { ActionButton } from '@/components/ui/action-button'
@@ -13,13 +13,13 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
 import { CobrancasPix } from '@/features/mercado-pago/components/cobrancas-pix'
 import { basePagamentoPix, cobrancasPixDoPedido } from '@/features/mercado-pago/queries'
-import { excluirPedido } from '@/features/pedidos/actions'
+import { definirCaixa, excluirPedido } from '@/features/pedidos/actions'
 import { linkDeCobranca, linkDeFrete } from '@/features/pedidos/cobranca'
 import { BotaoCobrar, ControlePagamento, SeletorStatus } from '@/features/pedidos/components/controles'
 import { BotaoEnviarFrete, CotarFrete } from '@/features/pedidos/components/frete'
-import { CanalBadge, FreteBadge, PagamentoBadge } from '@/features/pedidos/components/selos'
+import { CaixaBadge, CanalBadge, FreteBadge, PagamentoBadge } from '@/features/pedidos/components/selos'
 import { atividadesDoPedido, obterPedido } from '@/features/pedidos/queries'
-import { formatarCep, formatarDataHora, formatarEndereco, formatarMoeda, formatarWhatsapp, numeroPedido, primeiroNome, type Endereco } from '@/lib/format'
+import { formatarCep, formatarData, formatarDataHora, formatarEndereco, formatarMoeda, formatarWhatsapp, numeroPedido, primeiroNome, type Endereco } from '@/lib/format'
 import { exigirEquipe } from '@/lib/auth'
 import { linkWhatsapp } from '@/lib/whatsapp'
 
@@ -42,13 +42,22 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
 
   const cliente = pedido.clientes
   const linkPix = basePix && basePix + pedido.id
+  // Caixa VIP com cervejas de várias pré-vendas: cada item mostra de onde veio.
+  const preVendasDosItens = new Set(pedido.pedido_itens.map((i) => i.pre_venda_id))
+  const variasPreVendas = preVendasDosItens.size > 1
+  const tituloCobranca = variasPreVendas ? 'Caixa VIP' : pedido.pre_vendas?.titulo
+  const previsaoCaixa = pedido.pedido_itens
+    .map((i) => i.pre_vendas?.previsao_entrega)
+    .filter((d): d is string => Boolean(d))
+    .sort()
+    .at(-1)
   const endereco = pedido.endereco_entrega as Endereco | null
   const linkCobranca = linkDeCobranca(config, {
     numero: pedido.numero,
     total: pedido.total,
     taxa_entrega: pedido.taxa_entrega,
     cliente,
-    pre_venda_titulo: pedido.pre_vendas?.titulo,
+    pre_venda_titulo: tituloCobranca,
     itens: pedido.pedido_itens,
   }, linkPix)
   const emAberto = pedido.status !== 'cancelado' && ['pendente', 'cobrado'].includes(pedido.status_pagamento)
@@ -59,7 +68,7 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
           total: pedido.total,
           taxa_entrega: pedido.taxa_entrega,
           cliente,
-          pre_venda_titulo: pedido.pre_vendas?.titulo,
+          pre_venda_titulo: tituloCobranca,
         }, linkPix)
       : null
 
@@ -73,6 +82,7 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
           <div className="mt-2 flex flex-wrap gap-1.5">
             <CanalBadge canal={pedido.canal} />
             <PagamentoBadge status={pedido.status_pagamento} />
+            <CaixaBadge caixa={pedido.caixa} />
             <FreteBadge frete={pedido.frete} />
             {pedido.pre_vendas && (
               <Link href={`/pre-vendas/${pedido.pre_vendas.id}`} className="text-[13px] font-medium text-suave underline-offset-2 hover:underline">
@@ -100,7 +110,9 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[15px] font-medium">{i.descricao}</p>
-                    <p className="tipo-dado text-[12px] text-suave">{formatarMoeda(i.preco_unitario)} cada</p>
+                    <p className="tipo-dado truncate text-[12px] text-suave">
+                      {formatarMoeda(i.preco_unitario)} cada{variasPreVendas && i.pre_vendas ? ` · ${i.pre_vendas.titulo}` : ''}
+                    </p>
                   </div>
                   <p className="tipo-dado shrink-0 text-[14px]">{formatarMoeda(i.total)}</p>
                 </li>
@@ -118,7 +130,10 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
               <TBody>
                 {pedido.pedido_itens.map((i) => (
                   <TR key={i.id}>
-                    <TD className="font-medium">{i.descricao}</TD>
+                    <TD className="font-medium">
+                      {i.descricao}
+                      {variasPreVendas && i.pre_vendas && <p className="text-[12px] font-normal text-suave">{i.pre_vendas.titulo}</p>}
+                    </TD>
                     <TD className="tipo-dado text-right">{i.quantidade}</TD>
                     <TD className="tipo-dado text-right">{formatarMoeda(i.preco_unitario)}</TD>
                     <TD className="tipo-dado text-right">{formatarMoeda(i.total)}</TD>
@@ -155,6 +170,41 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
               />
               <CardContent>
                 <CotarFrete pedidoId={pedido.id} valor={Number(pedido.taxa_entrega)} className="max-w-sm" />
+              </CardContent>
+            </Card>
+          )}
+
+          {pedido.caixa && pedido.status !== 'cancelado' && (
+            <Card className="print:hidden">
+              <CardHeader
+                titulo="Caixa VIP"
+                descricao={
+                  pedido.caixa === 'aberta'
+                    ? `O cliente ainda está montando a caixa${variasPreVendas ? ` (${preVendasDosItens.size} pré-vendas até agora)` : ''}: compras novas nas pré-vendas entram aqui, com um frete só. Ela fecha quando o cliente paga — ou feche para cobrar.`
+                    : `Fechada${pedido.caixa_fechada_em ? ` em ${formatarDataHora(pedido.caixa_fechada_em)}` : ''}. Até o pedido ser separado, compras novas do cliente ainda entram nela (sem frete novo).`
+                }
+                acoes={<CaixaBadge caixa={pedido.caixa} />}
+              />
+              <CardContent className="space-y-3">
+                {previsaoCaixa && (
+                  <p className="text-[13px] text-suave">Envio de uma vez quando a última cerveja chegar · previsão {formatarData(previsaoCaixa)}.</p>
+                )}
+                {['novo', 'confirmado'].includes(pedido.status) &&
+                  (pedido.caixa === 'aberta' ? (
+                    <ActionButton
+                      acao={definirCaixa.bind(null, pedido.id, 'fechada')}
+                      tamanho="md"
+                      confirmar="Fechar a Caixa VIP para cobrar? Se o cliente comprar de novo antes do envio, as cervejas ainda entram nela."
+                    >
+                      <PackageCheck /> Fechar caixa para cobrar
+                    </ActionButton>
+                  ) : (
+                    pedido.status_pagamento !== 'pago' && (
+                      <ActionButton acao={definirCaixa.bind(null, pedido.id, 'aberta')} tamanho="md" variante="secundario">
+                        <PackageOpen /> Reabrir caixa
+                      </ActionButton>
+                    )
+                  ))}
               </CardContent>
             </Card>
           )}

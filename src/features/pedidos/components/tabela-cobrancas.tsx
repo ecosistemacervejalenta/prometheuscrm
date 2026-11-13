@@ -11,9 +11,22 @@ import { linkDeCobranca, linkDeFrete } from '../cobranca'
 import type { PedidoComItens } from '../queries'
 import { BotaoCobrar, BotaoPago } from './controles'
 import { BotaoEnviarFrete, CotarFrete } from './frete'
-import { FreteBadge, PagamentoBadge } from './selos'
+import { CaixaBadge, FreteBadge, PagamentoBadge } from './selos'
 
 const cepDo = (p: PedidoComItens) => formatarCep((p.endereco_entrega as Endereco | null)?.cep)
+
+/** Caixa VIP com cervejas de mais de uma pré-venda: cada item mostra de onde veio. */
+const variasPreVendas = (p: PedidoComItens) => new Set(p.pedido_itens.map((i) => i.pre_venda_id)).size > 1
+const tituloDaCobranca = (p: PedidoComItens) => (variasPreVendas(p) ? 'Caixa VIP' : p.pre_vendas?.titulo)
+
+function ItemDaLista({ item, origem }: { item: PedidoComItens['pedido_itens'][number]; origem: boolean }) {
+  return (
+    <>
+      <span className="tipo-dado font-semibold">{item.quantidade}×</span> {item.descricao}
+      {origem && item.pre_vendas?.titulo && <span className="text-suave"> · {item.pre_vendas.titulo}</span>}
+    </>
+  )
+}
 
 /** Frete "a cotar": campo para lançar o valor. Frete cotado: atalho para enviar ao cliente. */
 function AcoesFrete({ pedido, config, basePix }: { pedido: PedidoComItens; config: Configuracoes; basePix: string | null }) {
@@ -31,7 +44,7 @@ function AcoesFrete({ pedido, config, basePix }: { pedido: PedidoComItens; confi
       total: pedido.total,
       taxa_entrega: pedido.taxa_entrega,
       cliente: pedido.clientes,
-      pre_venda_titulo: pedido.pre_vendas?.titulo,
+      pre_venda_titulo: tituloDaCobranca(pedido),
     }, basePix && basePix + pedido.id)
     return (
       <div className="flex flex-wrap items-center gap-1.5 print:hidden">
@@ -80,7 +93,7 @@ export function TabelaCobrancas({
       total: p.total,
       taxa_entrega: p.taxa_entrega,
       cliente: p.clientes,
-      pre_venda_titulo: p.pre_vendas?.titulo,
+      pre_venda_titulo: tituloDaCobranca(p),
       itens: p.pedido_itens,
     }, basePix && basePix + p.id)
 
@@ -102,6 +115,7 @@ export function TabelaCobrancas({
               <div className="shrink-0 text-right">
                 <p className="tipo-dado text-[15px] font-semibold">{formatarMoeda(p.total)}</p>
                 <div className="mt-1 flex flex-wrap justify-end gap-1">
+                  <CaixaBadge caixa={p.caixa} />
                   <FreteBadge frete={p.frete} />
                   <PagamentoBadge status={p.status_pagamento} />
                 </div>
@@ -110,7 +124,7 @@ export function TabelaCobrancas({
             <ul className="mt-2.5 space-y-0.5 rounded-xl bg-papel px-3 py-2 text-[13px]">
               {p.pedido_itens.map((i, indice) => (
                 <li key={indice} className="truncate">
-                  <span className="tipo-dado font-semibold">{i.quantidade}×</span> {i.descricao}
+                  <ItemDaLista item={i} origem={variasPreVendas(p)} />
                 </li>
               ))}
             </ul>
@@ -168,7 +182,7 @@ export function TabelaCobrancas({
                 <ul>
                   {p.pedido_itens.map((i, indice) => (
                     <li key={indice}>
-                      <span className="tipo-dado font-semibold">{i.quantidade}×</span> {i.descricao}
+                      <ItemDaLista item={i} origem={variasPreVendas(p)} />
                     </li>
                   ))}
                 </ul>
@@ -182,7 +196,10 @@ export function TabelaCobrancas({
                 )}
               </TD>
               <TD>
-                <PagamentoBadge status={p.status_pagamento} />
+                <div className="flex flex-wrap gap-1">
+                  <PagamentoBadge status={p.status_pagamento} />
+                  <CaixaBadge caixa={p.caixa} />
+                </div>
                 {p.cobrancas_enviadas > 0 && (
                   <p className="tipo-dado mt-1 text-[11px] text-suave">
                     {p.cobrancas_enviadas}× · {formatarRelativo(p.ultima_cobranca_em)}

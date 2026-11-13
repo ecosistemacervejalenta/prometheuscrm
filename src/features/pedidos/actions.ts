@@ -8,7 +8,7 @@ import { errosDeValidacao, falha, sucesso, traduzirErro, type EstadoAcao } from 
 import { exigirEquipe } from '@/lib/auth'
 import { STATUS_PAGAMENTO, STATUS_PEDIDO } from '@/lib/rotulos'
 import { dinheiroOpcional, textoOpcional } from '@/lib/validacao'
-import type { StatusPagamento, StatusPedido } from '@/types'
+import type { SituacaoCaixa, StatusPagamento, StatusPedido } from '@/types'
 
 import { agendarProcessamentoDeEventos } from '../integracoes/eventos'
 
@@ -92,6 +92,18 @@ export async function definirStatusPedido(id: string, status: StatusPedido): Pro
   agendarProcessamentoDeEventos()
   atualizarTelas(id)
   return sucesso(`Pedido marcado como ${STATUS_PEDIDO[status].rotulo.toLowerCase()}.`)
+}
+
+/**
+ * Caixa VIP: a equipe fecha a caixa para cobrar (o cliente deixou aberta) ou reabre.
+ * Fechada ou aberta, compras novas do cliente continuam entrando nela até o pedido ser separado.
+ */
+export async function definirCaixa(id: string, caixa: SituacaoCaixa): Promise<EstadoAcao> {
+  const { supabase } = await exigirEquipe()
+  const { error } = await supabase.from('pedidos').update({ caixa }).eq('id', id).not('caixa', 'is', null)
+  if (error) return falha(traduzirErro(error))
+  atualizarTelas(id)
+  return sucesso(caixa === 'fechada' ? 'Caixa fechada. Agora é só cobrar o cliente.' : 'Caixa reaberta: o cliente pode continuar juntando cervejas.')
 }
 
 /** Valor do frete de um pedido do link com CEP fora da lista VIP (ou correção de frete). */

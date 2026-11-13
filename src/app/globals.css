@@ -256,6 +256,39 @@
   animation: entrar-passo 0.38s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* Caixa VIP do link: garrafas caindo dentro da caixa e a caixa flutuando de leve. */
+@keyframes cair-na-caixa {
+  from {
+    opacity: 0;
+    transform: translateY(-44px);
+  }
+  55% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes flutuar {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@utility animar-cair {
+  animation: cair-na-caixa 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@utility animar-flutuar {
+  animation: flutuar 3.4s ease-in-out infinite;
+}
+
 /* Painel que entra pela direita (cartão aberto das Tarefas, no desktop). */
 @keyframes entrar-lateral {
   from {
@@ -274,6 +307,8 @@
   .animar-folha,
   .animar-fundo,
   .animar-passo,
+  .animar-cair,
+  .animar-flutuar,
   .animar-lateral,
   .lg\:animar-lateral {
     animation: none;

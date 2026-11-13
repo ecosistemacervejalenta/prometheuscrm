@@ -1096,6 +1096,90 @@ await db.exec(`reset role;`)
   expectEq('pagamento de outra origem é ignorado', (await um(`select registrar_status_pix(null, '999', 'approved', 10, now(), null) r`)).r, null)
   await db.exec(`reset role;`)
 
+  // ---------------------------------------------------------------------------
+  // Caixa VIP: compras de várias pré-vendas entram no mesmo pedido, com um frete só
+  // ---------------------------------------------------------------------------
+  const produtos = await q(`select id from produtos order by criado_em limit 2`)
+  const pv2 = await um(`insert into pre_vendas (titulo, slug, canal, previsao_entrega) values ('Drop Dezembro', 'drop-dezembro', 'grupo_vip', '2026-12-20') returning id`)
+  await q(`insert into pre_venda_itens (pre_venda_id, produto_id, preco, limite_por_cliente, quantidade_disponivel) values ($1, $2, 30, 3, 5), ($1, $3, 20, null, null)`,
+    [pv2.id, produtos[0].id, produtos[1].id])
+  await q(`select substituir_ceps_frete_vip('[["04500000","04599999"]]'::jsonb)`)
+  const enderecoVip = { cep: '04567-890', logradouro: 'Rua A', numero: '1', bairro: 'Centro', cidade: 'São Paulo', uf: 'SP' }
+  const comprar = async (slug, whatsapp, itensCompra, cliente = enderecoVip, atualizar = true) =>
+    um(`select * from registrar_pedido_pre_venda($1, $2::jsonb, $3::jsonb, $4)`, [slug,
+      JSON.stringify({ whatsapp, nome: 'Carla Caixa', email: 'carla@x.com', ...cliente }), JSON.stringify(itensCompra), atualizar])
+  const ipaOutubro = itensPix[2].produto_id
+
+  await db.exec(`set role service_role;`)
+  const cx1 = await comprar('drop-outubro', '(11) 95555-8001', [{ produto_id: ipaOutubro, quantidade: 1 }])
+  expectEq('1ª compra abre a Caixa VIP com frete VIP', { caixa: cx1.caixa, frete: cx1.frete, taxa: Number(cx1.taxa_entrega) }, { caixa: 'aberta', frete: 'vip', taxa: 15 })
+  const achou = (await um(`select caixa_do_whatsapp('11955558001') r`)).r
+  expectEq('WhatsApp encontra a caixa aberta', { cliente: achou.cliente, numero: achou.caixa?.numero, nome: achou.caixa?.cliente?.primeiro_nome, email: achou.caixa?.cliente?.tem_email },
+    { cliente: true, numero: cx1.numero, nome: 'Carla', email: true })
+
+  // 2ª compra, OUTRA pré-venda, de outro aparelho (sem endereço): entra na mesma caixa.
+  const cx2 = await comprar('drop-dezembro', '11955558001', [{ produto_id: produtos[0].id, quantidade: 2 }], {}, false)
+  expectEq('compra em outra pré-venda entra na mesma caixa', cx2.id, cx1.id)
+  expectEq('caixa soma os itens com um frete só', { subtotal: Number(cx2.subtotal), taxa: Number(cx2.taxa_entrega), total: Number(cx2.total) },
+    { subtotal: Number(cx1.subtotal) + 60, taxa: 15, total: Number(cx1.subtotal) + 60 + 15 })
+  expectEq('cada item guarda a pré-venda de origem', (await q(`select pv.slug, sum(i.quantidade)::int q from pedido_itens i join pre_vendas pv on pv.id = i.pre_venda_id where i.pedido_id = $1 group by 1 order by 1`, [cx1.id])),
+    [{ slug: 'drop-dezembro', q: 2 }, { slug: 'drop-outubro', q: 1 }])
+  await comprar('drop-dezembro', '11955558001', [{ produto_id: produtos[0].id, quantidade: 1 }], {}, false)
+  expectEq('mesmo item de novo soma na mesma linha', (await um(`select count(*)::int linhas, sum(quantidade)::int q from pedido_itens where pedido_id = $1 and pre_venda_id = $2`, [cx1.id, pv2.id])), { linhas: 1, q: 3 })
+  await expectError('limite por cliente vale na caixa inteira', `select registrar_pedido_pre_venda('drop-dezembro', '{"whatsapp":"11955558001"}'::jsonb, $1::jsonb)`,
+    [JSON.stringify([{ produto_id: produtos[0].id, quantidade: 1 }])])
+  const caixaPub = (await um(`select caixa_publica($1) r`, [cx1.id])).r
+  expectEq('caixa pública: itens por pré-venda, previsão de envio e saldo',
+    { itens: caixaPub.itens.length, envio: caixaPub.previsao_envio, devido: Number(caixaPub.devido), unidades: Number(caixaPub.unidades) },
+    { itens: 2, envio: '2026-12-20', devido: Number(caixaPub.total), unidades: 4 })
+  expectEq('linha do tempo registra os itens somados', (await um(`select count(*)::int n from atividades where pedido_id = $1 and tipo = 'caixa_itens_adicionados'`, [cx1.id])).n, 2)
+  expectEq('itens somados viram evento para o n8n', (await um(`select count(*)::int n from eventos_integracao where tipo = 'pedido.itens_adicionados' and entidade_id = $1`, [cx1.id])).n, 2)
+  await db.exec(`reset role;`)
+
+  // Estoque da pré-venda contado pelos itens (outra cliente esgota o que sobrou).
+  expectEq('estoque conta itens dentro de caixas', (await um(`select vendido, restante from vw_pre_venda_itens where pre_venda_id = $1 and produto_id = $2`, [pv2.id, produtos[0].id])), { vendido: 3, restante: 2 })
+  await db.exec(`set role service_role;`)
+  await expectError('estoque esgotado barra a compra', `select registrar_pedido_pre_venda('drop-dezembro', $1::jsonb, $2::jsonb, true)`,
+    [JSON.stringify({ whatsapp: '11955558002', nome: 'Davi', ...enderecoVip }), JSON.stringify([{ produto_id: produtos[0].id, quantidade: 3 }])])
+  await db.exec(`reset role;`)
+  expectEq('números da pré-venda contam só os itens dela', (await um(`select pedidos, unidades, total_vendido from vw_pre_vendas where id = $1`, [pv2.id])),
+    { pedidos: 1, unidades: 3, total_vendido: '90.00' })
+
+  // Cliente fecha a caixa para pagar; PIX paga; nova compra reabre e cobra só a diferença.
+  await db.exec(`set role service_role;`)
+  await q(`select fechar_caixa($1)`, [cx1.id])
+  expectEq('cliente fecha a caixa para pagar', (await um(`select caixa, caixa_fechada_em is not null f from pedidos where id = $1`, [cx1.id])), { caixa: 'fechada', f: true })
+  const pcx = (await um(`select preparar_cobranca_pix($1) r`, [cx1.id])).r
+  await q(`select concluir_cobranca_pix($1, '{"mp_pagamento_id":"ORDCAIXA1"}'::jsonb)`, [pcx.cobranca.id])
+  await q(`select registrar_status_pix(null, 'ORDCAIXA1', 'approved', $1, now(), null)`, [Number(pcx.cobranca.valor)])
+  expectEq('PIX quita a caixa inteira', (await um(`select status_pagamento, caixa from pedidos where id = $1`, [cx1.id])), { status_pagamento: 'pago', caixa: 'fechada' })
+  const cx3 = await comprar('drop-dezembro', '11955558001', [{ produto_id: produtos[1].id, quantidade: 2 }], {}, false)
+  expectEq('caixa paga e não enviada recebe a compra nova', { id: cx3.id, caixa: cx3.caixa, pag: cx3.status_pagamento, taxa: Number(cx3.taxa_entrega) }, { id: cx1.id, caixa: 'aberta', pag: 'pendente', taxa: 15 })
+  const pc2x = (await um(`select preparar_cobranca_pix($1) r`, [cx1.id])).r
+  expectEq('PIX cobra só a diferença (sem frete novo)', Number(pc2x.cobranca.valor), 40)
+
+  // Caixa separada: a próxima compra abre outra caixa.
+  await db.exec(`reset role;`)
+  await q(`update pedidos set status = 'separado' where id = $1`, [cx1.id])
+  expectEq('caixa separada fecha sozinha', (await um(`select caixa from pedidos where id = $1`, [cx1.id])).caixa, 'fechada')
+  await db.exec(`set role service_role;`)
+  const cx4 = await comprar('drop-outubro', '11955558001', [{ produto_id: ipaOutubro, quantidade: 1 }], {}, false)
+  expectEq('depois de separada, a próxima compra abre outra caixa', { nova: cx4.id !== cx1.id, caixa: cx4.caixa, taxa: Number(cx4.taxa_entrega) }, { nova: true, caixa: 'aberta', taxa: 15 })
+  await db.exec(`reset role;`)
+  await expectError('só uma caixa aberta por cliente', `update pedidos set status = 'novo', caixa = 'aberta' where id = $1`, [cx1.id])
+
+  // Excluir uma pré-venda tira só os itens dela da caixa.
+  const pv3 = await um(`insert into pre_vendas (titulo, slug, canal) values ('Drop Teste', 'drop-teste', 'grupo_vip') returning id`)
+  await q(`insert into pre_venda_itens (pre_venda_id, produto_id, preco) values ($1, $2, 10)`, [pv3.id, produtos[1].id])
+  await db.exec(`set role service_role;`)
+  await comprar('drop-teste', '11955558001', [{ produto_id: produtos[1].id, quantidade: 1 }], {}, false)
+  await db.exec(`reset role;`)
+  await db.exec(como(uid))
+  const excluidos = (await um(`select excluir_pre_venda($1, true) n`, [pv3.id])).n
+  await db.exec(`reset role;`)
+  expectEq('excluir pré-venda mantém a caixa com os outros itens', { excluidos, existe: (await um(`select count(*)::int n from pedido_itens where pedido_id = $1`, [cx4.id])).n },
+    { excluidos: 0, existe: 1 })
+
   await db.exec(como(uid2))
   expectEq('equipe vê as cobranças PIX', (await um(`select count(*)::int n from cobrancas_pix where pedido_id = $1`, [ped.id])).n, 2)
   await db.exec(`reset role; set role anon; select set_config('request.jwt.claim.sub', '', false);`)

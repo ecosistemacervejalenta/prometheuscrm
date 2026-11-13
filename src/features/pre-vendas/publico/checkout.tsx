@@ -10,6 +10,7 @@ import {
   Mail,
   MapPin,
   MessageCircle,
+  PackageOpen,
   Pencil,
   Phone,
   Truck,
@@ -23,7 +24,7 @@ import { formatarData, formatarMoeda } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { linkWhatsapp, mascararWhatsapp, whatsappValido } from '@/lib/whatsapp'
 
-import { confirmarPedidoPreVenda, consultarFreteLink } from './actions'
+import { confirmarPedidoPreVenda, consultarFreteLink, identificarCaixa } from './actions'
 import {
   CLIENTE_VAZIO,
   emailValido,
@@ -36,20 +37,22 @@ import {
   type PedidoFeito,
 } from './armazenamento'
 import { CLASSE_CAMPO, CLASSE_RESPOSTA, classeBotaoGrande } from './estilos'
-import { TelaPagamento } from './pagamento'
+import { CaixaIlustracao, ConteudoDaCaixa } from './caixa'
+import { gruposDaCaixa, type CaixaPublica, type GrupoDaCaixa } from './caixa-dados'
+import { TelaCaixa } from './final-caixa'
 import { AberturaPreVenda, PerfilDaLoja } from './abertura'
 import { CartaoCervejaLink, textosDaEscolha } from './cartao-cerveja'
 import type { PreVendaPublica } from './queries'
 
-type Etapa = 'inicio' | 'cervejas' | 'conferir' | 'nome' | 'sobrenome' | 'email' | 'whatsapp' | 'cep' | 'numero' | 'revisao' | 'pago'
+type Etapa = 'inicio' | 'cervejas' | 'whatsapp' | 'caixa' | 'conferir' | 'nome' | 'sobrenome' | 'email' | 'cep' | 'numero' | 'revisao' | 'pago'
 type Item = PreVendaPublica['itens'][number]
 type ConsultaCep = { cep: string; buscando: boolean; naoEncontrado: boolean; vip: boolean | null }
 
 /** Etapas que entram no histórico do navegador (#passo-nome...): o "voltar" do Android e o gesto do iPhone voltam uma pergunta. */
-const NO_HISTORICO: Etapa[] = ['cervejas', 'conferir', 'nome', 'sobrenome', 'email', 'whatsapp', 'cep', 'numero', 'revisao']
+const NO_HISTORICO: Etapa[] = ['cervejas', 'whatsapp', 'caixa', 'conferir', 'nome', 'sobrenome', 'email', 'cep', 'numero', 'revisao']
 
 /** Etapas que contam na barra de progresso. */
-const PROGRESSO: Etapa[] = ['cervejas', 'nome', 'sobrenome', 'email', 'whatsapp', 'cep', 'numero', 'revisao']
+const PROGRESSO: Etapa[] = ['cervejas', 'whatsapp', 'nome', 'sobrenome', 'email', 'cep', 'numero', 'revisao']
 const TOTAL_PERGUNTAS = 6
 const UFS = 'AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ')
 const BUSCA_CEP_CORREIOS = 'https://buscacepinter.correios.com.br/app/endereco/index.php'
@@ -68,8 +71,10 @@ const linhasDoEndereco = (c: DadosCliente) => [
 
 /**
  * Link público da pré-venda, no estilo Typeform (mobile first):
- * boas-vindas → cervejas → nome → sobrenome → e-mail → WhatsApp → CEP (endereço automático
- * + frete) → número/complemento → revisão → PIX e comprovante.
+ * boas-vindas → cervejas → WhatsApp → (Caixa VIP aberta? mostra a caixa) → nome → sobrenome →
+ * e-mail → CEP (endereço automático + frete) → número/complemento → revisão → Caixa VIP.
+ * O WhatsApp identifica o cliente: se ele já tem uma caixa em andamento, as cervejas de hoje
+ * entram nela (um frete só) e ele não precisa digitar os dados de novo.
  * Quem já comprou neste aparelho só confere os dados.
  */
 export function CheckoutPreVenda({ dados, whatsappInicial }: { dados: PreVendaPublica; whatsappInicial?: string }) {
@@ -116,6 +121,13 @@ function Fluxo({
   const ultimoCep = useRef('')
   const armadilha = useRef<HTMLInputElement>(null)
   const soFaltaEmail = useRef(false)
+  /** Caixa VIP em andamento do WhatsApp informado (antes desta compra). */
+  const [caixa, setCaixa] = useState<CaixaPublica | null>(null)
+  /** Caixa devolvida ao confirmar (já com as cervejas de hoje). */
+  const [caixaFinal, setCaixaFinal] = useState<CaixaPublica | null>(null)
+  const [identificando, setIdentificando] = useState(false)
+  /** Cliente com caixa em outro aparelho que pediu para trocar o endereço. */
+  const [enderecoNovo, setEnderecoNovo] = useState(false)
 
   const selecionados = itens.filter((i) => (quantidades[i.produto_id] ?? 0) > 0)
   const unidades = selecionados.reduce((s, i) => s + quantidades[i.produto_id], 0)
@@ -123,11 +135,38 @@ function Fluxo({
   const cepDigitos = cliente.cep.replace(/\D/g, '')
   const frete = consulta?.cep === cepDigitos ? consulta : null
   const freteVip = frete?.vip === true
-  const total = subtotal + (freteVip ? loja.freteVip : 0)
+  // Caixa VIP prevista: o que já está na caixa + as cervejas de hoje, com um frete só.
+  const freteNovo = !caixa || enderecoNovo // o frete sai do CEP digitado agora
+  const valorFrete = !freteNovo && caixa ? caixa.taxaEntrega : freteVip ? loja.freteVip : 0
+  const freteACotar = !freteNovo && caixa ? caixa.frete === 'a_cotar' : !freteVip
+  const totalPrevisto = (caixa ? caixa.subtotal - caixa.desconto : 0) + subtotal + valorFrete
+  const devidoPrevisto = Math.max(totalPrevisto - (caixa?.pago ?? 0), 0)
+  const previsaoEnvio = [caixa?.previsaoEnvio, preVenda.previsao_entrega].filter((d): d is string => Boolean(d)).sort().at(-1) ?? null
+  const rotuloFrete = caixa ? 'Frete (um só para a caixa)' : 'Frete'
+  const linhaDoFrete =
+    freteNovo && frete?.buscando
+      ? { rotulo: rotuloFrete, valor: '…' }
+      : { rotulo: rotuloFrete, valor: freteACotar ? 'a cotar' : formatarMoeda(valorFrete) }
+  const grupoDeHoje: GrupoDaCaixa = {
+    chave: 'hoje',
+    titulo: preVenda.titulo,
+    previsao: preVenda.previsao_entrega,
+    itens: selecionados.map((i) => ({
+      descricao: i.nome,
+      quantidade: quantidades[i.produto_id],
+      total: i.preco * quantidades[i.produto_id],
+      preVendaId: null,
+      preVendaTitulo: preVenda.titulo,
+      previsaoEntrega: preVenda.previsao_entrega,
+      imagemUrl: i.imagem_url,
+    })),
+  }
   const enderecoCompleto = [cliente.logradouro, cliente.bairro, cliente.cidade, cliente.uf].every((v) => v.trim())
   const nomeCompleto = `${cliente.nome} ${cliente.sobrenome}`.trim().replace(/\s+/g, ' ')
   const escolha = textosDaEscolha(itens)
-  const primeiroNome = cliente.nome.trim().split(/\s+/)[0] ?? ''
+  const primeiroNome = cliente.nome.trim().split(/\s+/)[0] || caixa?.cliente.primeiroNome || ''
+  /** Caixa de outro aparelho: vale o cadastro do WhatsApp (o endereço não é exibido nem redigitado). */
+  const usandoCadastro = Boolean(caixa) && !lembrado && !enderecoNovo
 
   const alterar = (campo: keyof DadosCliente) => (valor: string) => setCliente((c) => ({ ...c, [campo]: valor }))
 
@@ -149,9 +188,9 @@ function Fluxo({
   }
 
   // Botão "voltar" do Android / gesto do iPhone → etapa anterior (sem sair do link).
-  const atual = useRef({ pedido, lembrado })
+  const atual = useRef({ pedido, lembrado, caixa })
   useEffect(() => {
-    atual.current = { pedido, lembrado }
+    atual.current = { pedido, lembrado, caixa }
   })
   useEffect(() => {
     if (window.location.hash.startsWith('#passo-')) window.history.replaceState(null, '', window.location.pathname + window.location.search)
@@ -160,7 +199,9 @@ function Fluxo({
       setErro(null)
       if (atual.current.pedido) setEtapa('pago')
       else if (!NO_HISTORICO.includes(alvo)) setEtapa('inicio')
-      else setEtapa(alvo === 'conferir' && !atual.current.lembrado ? 'nome' : alvo)
+      else if (alvo === 'conferir' && !atual.current.lembrado) setEtapa('whatsapp')
+      else if (alvo === 'caixa' && !atual.current.caixa) setEtapa('whatsapp')
+      else setEtapa(alvo)
       window.scrollTo({ top: 0 })
     }
     window.addEventListener('popstate', aoNavegar)
@@ -228,18 +269,67 @@ function Fluxo({
   function aposEmail(evento: FormEvent) {
     evento.preventDefault()
     if (!emailValido(cliente.email)) return setErro('Confira o e-mail, ex.: voce@gmail.com.')
-    // Cliente que voltou e só faltava o e-mail (cadastro de antes desta pergunta): segue para a revisão.
+    // Só faltava o e-mail (cadastro de antes desta pergunta): segue para a revisão.
     if (soFaltaEmail.current) {
       soFaltaEmail.current = false
-      return continuarConferido()
+      return lembrado ? continuarConferido() : ir('revisao')
     }
+    if (cepDigitos.length === 8 && consulta?.cep !== cepDigitos) consultarCep(cepDigitos, !enderecoCompleto)
+    ir('cep')
+  }
+
+  /**
+   * WhatsApp → o cliente já tem uma Caixa VIP em andamento? Com caixa: mostra a caixa e as
+   * cervejas de hoje entram nela. Sem caixa: quem é do aparelho confere; quem não é, preenche.
+   */
+  async function identificar(whatsapp: string) {
+    setErro(null)
+    setIdentificando(true)
+    let achada: CaixaPublica | null = null
+    try {
+      const r = await identificarCaixa(preVenda.slug, whatsapp)
+      if (!r.ok) {
+        setIdentificando(false)
+        return setErro(r.mensagem)
+      }
+      achada = r.caixa
+    } catch {
+      // sem conexão: segue sem a caixa (o banco junta na caixa do mesmo jeito ao confirmar)
+    }
+    setIdentificando(false)
+    setCaixa(achada)
+    setEnderecoNovo(false)
+    if (achada) ir('caixa')
+    else if (lembrado) ir('conferir')
+    else ir('nome')
+  }
+
+  function continuarDasCervejas() {
+    if (lembrado && whatsappValido(cliente.whatsapp)) return identificar(cliente.whatsapp)
     ir('whatsapp')
   }
 
   function aposWhatsapp(evento: FormEvent) {
     evento.preventDefault()
     if (!whatsappValido(cliente.whatsapp)) return setErro('Confira o número: DDD + celular, ex.: (11) 98765-4321.')
-    if (cepDigitos.length === 8 && consulta?.cep !== cepDigitos) consultarCep(cepDigitos, !enderecoCompleto)
+    identificar(cliente.whatsapp)
+  }
+
+  /** "Colocar na minha caixa": quem é do aparelho confere os dados; de outro aparelho, só falta o e-mail (se faltar). */
+  function continuarNaCaixa() {
+    if (lembrado) return continuarConferido()
+    if (caixa && !caixa.cliente.temEmail && !emailValido(cliente.email)) {
+      soFaltaEmail.current = true
+      return ir('email')
+    }
+    ir('revisao')
+  }
+
+  function mudarEnderecoDaCaixa() {
+    setEnderecoNovo(true)
+    setCliente((c) => ({ ...c, cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '' }))
+    setConsulta(null)
+    ultimoCep.current = ''
     ir('cep')
   }
 
@@ -269,6 +359,9 @@ function Fluxo({
 
   function corrigirDados() {
     soFaltaEmail.current = false
+    if (usandoCadastro) return mudarEnderecoDaCaixa()
+    // Com caixa: o endereço pode mudar, então o frete passa a sair do CEP digitado agora.
+    if (caixa) setEnderecoNovo(true)
     ir('nome')
   }
 
@@ -277,9 +370,11 @@ function Fluxo({
     esquecerCliente()
     setCliente(CLIENTE_VAZIO)
     setLembrado(false)
+    setCaixa(null)
+    setEnderecoNovo(false)
     setConsulta(null)
     ultimoCep.current = ''
-    ir('nome')
+    ir('whatsapp')
   }
 
   function confirmar() {
@@ -292,17 +387,19 @@ function Fluxo({
           itens: selecionados.map((i) => ({ produto_id: i.produto_id, quantidade: quantidades[i.produto_id] })),
           observacoes: observacoes.trim() || undefined,
           armadilha: armadilha.current?.value || undefined,
-          cliente: {
-            nome: nomeCompleto,
-            email: cliente.email,
-            cep: cliente.cep,
-            logradouro: cliente.logradouro,
-            numero: cliente.numero,
-            complemento: cliente.complemento || undefined,
-            bairro: cliente.bairro,
-            cidade: cliente.cidade,
-            uf: cliente.uf,
-          },
+          email: emailValido(cliente.email) ? cliente.email : undefined,
+          cliente: usandoCadastro
+            ? undefined
+            : {
+                nome: nomeCompleto || primeiroNome,
+                cep: cliente.cep,
+                logradouro: cliente.logradouro,
+                numero: cliente.numero,
+                complemento: cliente.complemento || undefined,
+                bairro: cliente.bairro,
+                cidade: cliente.cidade,
+                uf: cliente.uf,
+              },
         })
         if (!r.ok) return setErro(r.mensagem)
 
@@ -313,16 +410,20 @@ function Fluxo({
           subtotal: r.subtotal,
           taxaEntrega: r.taxaEntrega,
           frete: r.frete,
-          nome: nomeCompleto,
+          nome: nomeCompleto || primeiroNome,
           itens: selecionados.map((i) => ({ nome: i.nome, quantidade: quantidades[i.produto_id], total: i.preco * quantidades[i.produto_id] })),
         }
-        lembrarCliente(cliente)
+        // Cadastro completo digitado (ou já lembrado) neste aparelho: lembra para a próxima.
+        if (!usandoCadastro && nomeCompleto) {
+          lembrarCliente(cliente)
+          setLembrado(true)
+        }
         lembrarPedido(preVenda.slug, feito)
+        setCaixaFinal(r.caixa)
         setPedido(feito)
-        setLembrado(true)
         ir('pago', { substituir: true })
       } catch {
-        setErro('Sem conexão com a internet. Confira e toque em “Confirmar pedido” de novo.')
+        setErro(`Sem conexão com a internet. Confira e toque em “${caixa ? 'Colocar na caixa' : 'Confirmar pedido'}” de novo.`)
       }
     })
   }
@@ -330,16 +431,33 @@ function Fluxo({
   function fazerOutroPedido() {
     esquecerPedido(preVenda.slug)
     setPedido(null)
+    setCaixa(null)
+    setCaixaFinal(null)
     setQuantidades({})
     setObservacoes('')
-    ir(preVenda.ativa ? 'inicio' : 'pago', { substituir: true })
+    ir(preVenda.ativa ? 'cervejas' : 'pago', { substituir: true })
+  }
+
+  function guardarEscolha(escolha: 'aberta' | 'pagar') {
+    if (!pedido) return
+    const atualizado = { ...pedido, escolha }
+    setPedido(atualizado)
+    lembrarPedido(preVenda.slug, atualizado)
   }
 
   // ---------------------------------------------------------------------------
   if (etapa === 'pago' && pedido) {
     return (
       <Moldura>
-        <TelaPagamento pedido={pedido} loja={loja} previsaoEntrega={preVenda.previsao_entrega} aoFazerOutro={fazerOutroPedido} />
+        <TelaCaixa
+          key={pedido.pedidoId ?? pedido.numero}
+          pedido={pedido}
+          caixaInicial={caixaFinal}
+          loja={loja}
+          whatsapp={cliente.whatsapp || 'informado'}
+          aoEscolher={guardarEscolha}
+          aoComprarMais={preVenda.ativa ? fazerOutroPedido : null}
+        />
       </Moldura>
     )
   }
@@ -352,6 +470,7 @@ function Fluxo({
     <Moldura
       progresso={indice >= 0 ? (indice + 1) / PROGRESSO.length : undefined}
       aoVoltar={etapa === 'inicio' ? undefined : () => window.history.back()}
+      naCaixa={caixa && etapa !== 'caixa' ? caixa.unidades + unidades : undefined}
     >
       <div key={etapa} className="animar-passo">
         {/* Boas-vindas ------------------------------------------------------ */}
@@ -381,10 +500,54 @@ function Fluxo({
                 <p className="text-[13px] text-white/60">{unidades === 0 ? escolha.vazio : escolha.contar(unidades)}</p>
                 <p className="tipo-numero text-2xl whitespace-nowrap text-white max-[360px]:text-lg">{formatarMoeda(subtotal)}</p>
               </div>
-              <button type="button" disabled={unidades === 0} onClick={() => ir(lembrado ? 'conferir' : 'nome')} className={classeBotaoGrande('volt')}>
-                Continuar <ArrowRight className="max-[360px]:hidden" aria-hidden />
+              <button type="button" disabled={unidades === 0 || identificando} onClick={continuarDasCervejas} className={classeBotaoGrande('volt')}>
+                {identificando ? <LoaderCircle className="animate-spin" aria-hidden /> : null}
+                Continuar {!identificando && <ArrowRight className="max-[360px]:hidden" aria-hidden />}
               </button>
             </BarraInferior>
+          </div>
+        )}
+
+        {/* Caixa VIP em andamento: as cervejas de hoje entram nela ---------------- */}
+        {etapa === 'caixa' && caixa && (
+          <div className="pb-6">
+            <section className="rounded-[28px] bg-ink px-6 pt-6 pb-7 text-center text-white">
+              <CaixaIlustracao estado="aberta" quantidade={caixa.unidades + unidades} animar className="max-w-[210px]" />
+              <p className="tipo-rotulo mt-3 text-volt">Sua Caixa VIP · #PRM-{caixa.numero}</p>
+              <h1 className="tipo-h2 mt-1.5 text-balance">
+                Oi, {caixa.cliente.primeiroNome}!{' '}
+                {caixa.statusPagamento === 'pago'
+                  ? 'Sua caixa já está paga'
+                  : caixa.situacao === 'aberta'
+                    ? 'Sua caixa está aberta'
+                    : 'Sua caixa está esperando o pagamento'}
+              </h1>
+              <p className="mt-2 text-[16px] leading-6 text-white/75">
+                {caixa.statusPagamento === 'pago'
+                  ? 'Ela ainda não saiu para entrega: as cervejas de hoje entram nela sem frete novo e você paga só a diferença.'
+                  : `Você já tem ${caixa.unidades} ${caixa.unidades === 1 ? 'cerveja guardada' : 'cervejas guardadas'} nela. As de hoje entram junto — e tudo chega com um frete só.`}
+              </p>
+            </section>
+
+            <ConteudoDaCaixa
+              className="mt-4"
+              numero={caixa.numero}
+              grupos={gruposDaCaixa(caixa.itens)}
+              novos={grupoDeHoje}
+              frete={linhaDoFrete}
+              total={totalPrevisto}
+              rotuloTotal={freteACotar ? 'Total da caixa (sem frete)' : 'Total da caixa'}
+              pago={caixa.pago}
+              devido={devidoPrevisto}
+              previsaoEnvio={previsaoEnvio}
+            />
+
+            <button type="button" onClick={continuarNaCaixa} className={classeBotaoGrande('volt', 'mt-6 w-full')}>
+              <PackageOpen aria-hidden /> Colocar na minha caixa
+            </button>
+            <button type="button" onClick={naoSouEu} className="mt-4 block w-full py-2 text-center text-[15px] font-semibold text-suave hover:text-ink">
+              Não sou {caixa.cliente.primeiroNome}
+            </button>
           </div>
         )}
 
@@ -427,10 +590,10 @@ function Fluxo({
           </>
         )}
 
-        {/* 1 · Nome ----------------------------------------------------------- */}
+        {/* 2 · Nome ----------------------------------------------------------- */}
         {etapa === 'nome' && (
           <Pergunta
-            numero={1}
+            numero={2}
             htmlFor="nome"
             titulo="Qual é o seu nome?"
             erro={erro}
@@ -454,10 +617,10 @@ function Fluxo({
           </Pergunta>
         )}
 
-        {/* 2 · Sobrenome ------------------------------------------------------ */}
+        {/* 3 · Sobrenome ------------------------------------------------------ */}
         {etapa === 'sobrenome' && (
           <Pergunta
-            numero={2}
+            numero={3}
             htmlFor="sobrenome"
             titulo={`Prazer, ${primeiroNome}! E o seu sobrenome?`}
             erro={erro}
@@ -481,10 +644,10 @@ function Fluxo({
           </Pergunta>
         )}
 
-        {/* 3 · E-mail --------------------------------------------------------- */}
+        {/* 4 · E-mail --------------------------------------------------------- */}
         {etapa === 'email' && (
           <Pergunta
-            numero={3}
+            numero={4}
             htmlFor="email"
             titulo="Qual é o seu e-mail?"
             descricao="O Mercado Pago pede o e-mail para gerar o seu PIX e manda o recibo por lá."
@@ -511,15 +674,16 @@ function Fluxo({
           </Pergunta>
         )}
 
-        {/* 4 · WhatsApp ------------------------------------------------------- */}
+        {/* 1 · WhatsApp: identifica o cliente e a Caixa VIP dele --------------------- */}
         {etapa === 'whatsapp' && (
           <Pergunta
-            numero={4}
+            numero={1}
             htmlFor="whatsapp"
             titulo="Qual é o seu WhatsApp?"
-            descricao="Com DDD. É por ele que a gente fala sobre o seu pedido."
+            descricao="Com DDD. Se você já tem uma Caixa VIP aberta com a gente, ela aparece na próxima tela."
             erro={erro}
             aoEnviar={aposWhatsapp}
+            ocupado={identificando}
           >
             <input
               id="whatsapp"
@@ -647,44 +811,39 @@ function Fluxo({
         {/* Revisão e confirmação ------------------------------------------------ */}
         {etapa === 'revisao' && (
           <div className="pb-32">
-            <Titulo rotulo="Quase lá" titulo="Confira seu pedido" />
+            <Titulo
+              rotulo="Quase lá"
+              titulo={caixa ? 'Confira sua Caixa VIP' : 'Confira seu pedido'}
+              descricao={
+                caixa
+                  ? 'As cervejas de hoje entram na caixa que você já tem — com o mesmo frete.'
+                  : 'Suas cervejas vão para a sua Caixa VIP. No fim você escolhe: pagar agora ou deixar a caixa aberta para as próximas pré-vendas.'
+              }
+            />
 
-            <section className="mt-6 rounded-[24px] border border-linha bg-superficie p-5">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="tipo-h3">Seu pedido</h2>
+            <ConteudoDaCaixa
+              className="mt-6"
+              numero={caixa?.numero}
+              grupos={caixa ? gruposDaCaixa(caixa.itens) : []}
+              novos={grupoDeHoje}
+              frete={linhaDoFrete}
+              total={totalPrevisto}
+              rotuloTotal={freteACotar ? 'Total da caixa (sem frete)' : 'Total da caixa'}
+              pago={caixa?.pago ?? 0}
+              devido={devidoPrevisto}
+              previsaoEnvio={previsaoEnvio}
+              acao={
                 <button type="button" onClick={() => ir('cervejas')} className="text-[14px] font-semibold text-volt-700 hover:text-ink">
                   Alterar
                 </button>
-              </div>
-              <ul className="mt-3 space-y-2 text-[16px]">
-                {selecionados.map((i) => (
-                  <li key={i.produto_id} className="flex justify-between gap-3">
-                    <span>
-                      <span className="tipo-dado font-semibold">{quantidades[i.produto_id]}×</span> {i.nome}
-                    </span>
-                    <span className="tipo-dado shrink-0">{formatarMoeda(i.preco * quantidades[i.produto_id])}</span>
-                  </li>
-                ))}
-                <li className="flex justify-between gap-3 text-suave">
-                  <span>Frete</span>
-                  <span className="tipo-dado shrink-0">
-                    {frete?.buscando ? (
-                      <LoaderCircle className="inline size-4 animate-spin" aria-label="Consultando frete" />
-                    ) : freteVip ? (
-                      formatarMoeda(loja.freteVip)
-                    ) : (
-                      'a cotar'
-                    )}
-                  </span>
-                </li>
-              </ul>
-              {!frete?.buscando && !freteVip && (
-                <p className="mt-3 rounded-2xl bg-alerta-50 p-3 text-[14px] leading-5 text-ink/80">
-                  Seu CEP está fora da área de frete fixo. Vamos cotar o frete e te mandar no WhatsApp o mais rápido possível, antes do
-                  fechamento do pedido.
-                </p>
-              )}
-            </section>
+              }
+            />
+            {freteACotar && !(freteNovo && frete?.buscando) && (
+              <p className="mt-3 rounded-2xl bg-alerta-50 p-3 text-[14px] leading-5 text-ink/80">
+                Seu CEP está fora da área de frete fixo. Vamos cotar um frete só para a caixa inteira e te mandar no WhatsApp, antes do
+                fechamento.
+              </p>
+            )}
 
             <section className="mt-4 rounded-[24px] border border-linha bg-superficie p-5">
               <div className="flex items-center justify-between gap-3">
@@ -693,14 +852,20 @@ function Fluxo({
                   Alterar
                 </button>
               </div>
-              <p className="mt-2 text-[16px] font-semibold">{nomeCompleto}</p>
+              <p className="mt-2 text-[16px] font-semibold">{nomeCompleto || primeiroNome}</p>
               <p className="tipo-dado text-[14px] text-suave">{cliente.whatsapp}</p>
               {cliente.email && <p className="text-[14px] break-all text-suave">{cliente.email}</p>}
-              {linhasDoEndereco(cliente).map((linha) => (
-                <p key={linha} className="text-[15px] text-suave">
-                  {linha}
+              {usandoCadastro && caixa ? (
+                <p className="text-[15px] text-suave">
+                  Endereço da sua caixa: {[caixa.cliente.bairro, [caixa.cliente.cidade, caixa.cliente.uf].filter(Boolean).join('/')].filter(Boolean).join(' · ')}
                 </p>
-              ))}
+              ) : (
+                linhasDoEndereco(cliente).map((linha) => (
+                  <p key={linha} className="text-[15px] text-suave">
+                    {linha}
+                  </p>
+                ))
+              )}
               {preVenda.previsao_entrega && (
                 <p className="mt-2 text-[14px] text-suave">Previsão de entrega: {formatarData(preVenda.previsao_entrega)}</p>
               )}
@@ -726,8 +891,12 @@ function Fluxo({
 
             <BarraInferior erro={erro}>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] text-white/60">{freteVip ? 'Total com frete' : 'Total sem frete'}</p>
-                <p className="tipo-numero text-2xl whitespace-nowrap text-white max-[360px]:text-lg">{formatarMoeda(total)}</p>
+                <p className="truncate text-[13px] text-white/60">
+                  {caixa && caixa.pago > 0 ? 'Falta pagar na caixa' : caixa ? 'Total da caixa' : freteACotar ? 'Total sem frete' : 'Total com frete'}
+                </p>
+                <p className="tipo-numero text-2xl whitespace-nowrap text-white max-[360px]:text-lg">
+                  {formatarMoeda(caixa && caixa.pago > 0 ? devidoPrevisto : totalPrevisto)}
+                </p>
               </div>
               <button
                 type="button"
@@ -736,7 +905,15 @@ function Fluxo({
                 className={classeBotaoGrande('volt')}
               >
                 {enviando ? <LoaderCircle className="animate-spin" aria-hidden /> : <Check className="max-[360px]:hidden" aria-hidden />}
-                Confirmar<span className="max-sm:hidden"> pedido</span>
+                {caixa ? (
+                  <>
+                    Colocar<span className="max-sm:hidden"> na caixa</span>
+                  </>
+                ) : (
+                  <>
+                    Confirmar<span className="max-sm:hidden"> pedido</span>
+                  </>
+                )}
               </button>
             </BarraInferior>
           </div>
@@ -750,7 +927,18 @@ function Fluxo({
 // Peças do fluxo
 // -----------------------------------------------------------------------------
 
-function Moldura({ progresso, aoVoltar, children }: { progresso?: number; aoVoltar?: () => void; children: ReactNode }) {
+function Moldura({
+  progresso,
+  aoVoltar,
+  naCaixa,
+  children,
+}: {
+  progresso?: number
+  aoVoltar?: () => void
+  /** Cervejas na Caixa VIP (já guardadas + as de hoje): selo no canto do cabeçalho. */
+  naCaixa?: number
+  children: ReactNode
+}) {
   const comCabecalho = Boolean(aoVoltar) || progresso !== undefined
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col px-5 pb-[max(24px,env(safe-area-inset-bottom))]">
@@ -775,7 +963,17 @@ function Moldura({ progresso, aoVoltar, children }: { progresso?: number; aoVolt
               <div className="h-full rounded-full bg-ink transition-[width] duration-500 ease-out" style={{ width: `${progresso * 100}%` }} />
             </div>
           )}
-          <span className="w-2 shrink-0" />
+          {naCaixa ? (
+            <span
+              className="tipo-dado inline-flex shrink-0 items-center gap-1.5 rounded-full bg-vip px-2.5 py-1 text-[13px] font-semibold text-ink"
+              title="Cervejas na sua Caixa VIP"
+            >
+              <PackageOpen className="size-4" aria-hidden /> {naCaixa}
+              <span className="sr-only">cervejas na sua Caixa VIP</span>
+            </span>
+          ) : (
+            <span className="w-2 shrink-0" />
+          )}
         </header>
       )}
       <main className={cn('flex-1', comCabecalho ? 'pt-4' : 'pt-[max(16px,env(safe-area-inset-top))]')}>{children}</main>

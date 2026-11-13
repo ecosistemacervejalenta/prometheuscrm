@@ -26,6 +26,8 @@ export type DadosCliente = {
 export type PedidoFeito = {
   /** Id do pedido (paga o PIX do Mercado Pago). Pedidos lembrados antes do PIX automático não têm. */
   pedidoId?: string
+  /** Escolha na tela final: deixar a Caixa VIP aberta ou fechar e pagar agora. */
+  escolha?: 'aberta' | 'pagar'
   numero: number
   total: number
   subtotal: number

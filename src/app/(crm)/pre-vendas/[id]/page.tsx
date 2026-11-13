@@ -14,6 +14,7 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
 import { CanalBadge, StatusPreVendaBadge } from '@/features/pedidos/components/selos'
 import { basePagamentoPix } from '@/features/mercado-pago/queries'
+import { totaisDosPedidos } from '@/features/grupo-vip/resumo'
 import { TabelaCobrancas } from '@/features/pedidos/components/tabela-cobrancas'
 import { pedidosComItens } from '@/features/pedidos/queries'
 import { alterarStatusPreVenda, excluirPreVenda } from '@/features/pre-vendas/actions'
@@ -47,12 +48,12 @@ export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/
     { titulo: pv.titulo ?? '', descricao: pv.descricao, encerra_em: pv.encerra_em, previsao_entrega: pv.previsao_entrega },
     link,
   )
-  const aReceber = pedidos
-    .filter((p) => p.status_pagamento === 'pendente' || p.status_pagamento === 'cobrado')
-    .reduce((s, p) => s + Number(p.total), 0)
+  // Caixa VIP junta várias pré-vendas: aqui contam só as cervejas desta.
+  const totais = totaisDosPedidos(pedidos, id)
+  const aReceber = totais.aReceber
   const ativa = pv.status_efetivo === 'ativa'
   const admin = perfil.papel === 'admin'
-  const faturado = pedidos.reduce((s, p) => s + Number(p.total), 0)
+  const faturado = totais.faturado
 
   return (
     <>
@@ -185,7 +186,7 @@ export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/
       <Card>
         <CardHeader
           titulo="Pedidos e cobranças"
-          descricao={`${pedidos.length} pedido(s)`}
+          descricao={`${pedidos.length} pedido(s)${totais.caixasAbertas ? ` · ${totais.caixasAbertas} caixa(s) VIP aberta(s)` : ''}`}
           acoes={
             <>
               <ButtonLink href={`/grupo-vip?pre_venda=${id}`} tamanho="sm">
@@ -214,7 +215,7 @@ export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/
             titulo="Excluir pré-venda"
             descricao={
               pedidos.length > 0
-                ? `Apaga a pré-venda, o link e ${pedidos.length === 1 ? 'o pedido' : `os ${pedidos.length} pedidos`} dela (${formatarMoeda(faturado)}), que saem do faturamento do Grupo VIP. Não dá para desfazer.`
+                ? `Apaga a pré-venda, o link e as cervejas dela em ${pedidos.length === 1 ? '1 pedido' : `${pedidos.length} pedidos`} (${formatarMoeda(faturado)}), que saem do faturamento do Grupo VIP. Caixas VIP com cervejas de outras pré-vendas continuam, só sem estas. Não dá para desfazer.`
                 : 'Apaga a pré-venda e o link deixa de funcionar. Não dá para desfazer.'
             }
             acoes={

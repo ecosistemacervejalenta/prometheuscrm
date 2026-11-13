@@ -57,6 +57,7 @@ export type StatusPedido = Enums<'status_pedido'>
 export type StatusPagamento = Enums<'status_pagamento'>
 export type StatusPreVenda = Enums<'status_pre_venda'>
 export type SituacaoFrete = Enums<'situacao_frete'>
+export type SituacaoCaixa = Enums<'situacao_caixa'>
 export type StatusConta = Enums<'status_conta'>
 export type TipoConta = Enums<'tipo_conta'>
 export type StatusRecebimento = Enums<'status_recebimento'>

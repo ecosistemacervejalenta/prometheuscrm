@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { Crown, Link2, Plus, Printer, Send, Truck, Users } from 'lucide-react'
+import { Crown, Link2, PackageOpen, Plus, Printer, Send, Truck, Users } from 'lucide-react'
 
 import { Logo } from '@/components/marca/marca'
 import { Alert } from '@/components/ui/alert'
@@ -51,6 +51,7 @@ export default async function PaginaGrupoVip({ searchParams }: PageProps<'/grupo
   const ate = param(busca.ate)
   const pagamento = FILTROS_PAGAMENTO[param(busca.pagamento) ?? '']?.valor
   const frete = (Object.keys(FILTROS_FRETE) as SituacaoFrete[]).find((f) => f === param(busca.frete))
+  const caixaAberta = param(busca.caixa) === 'aberta'
 
   const { supabase, perfil } = await exigirEquipe()
   const [config, preVendas, membros, pedidos, ceps, basePix] = await Promise.all([
@@ -64,13 +65,15 @@ export default async function PaginaGrupoVip({ searchParams }: PageProps<'/grupo
       fim: ate ? inicioDoDia(somarDias(ate, 1)) : undefined,
       pagamento,
       frete,
+      caixaAberta,
     }),
     resumoCepsVip(),
     basePagamentoPix(),
   ])
 
-  const resumo = resumirPorCerveja(pedidos)
-  const totais = totaisDosPedidos(pedidos)
+  // Com pré-venda escolhida, contam só as cervejas dela (uma Caixa VIP junta várias pré-vendas).
+  const resumo = resumirPorCerveja(pedidos, preVendaId)
+  const totais = totaisDosPedidos(pedidos, preVendaId)
   const aCotar = pedidos.filter((p) => p.frete === 'a_cotar').length
   const ativas = await Promise.all(
     preVendas
@@ -96,6 +99,7 @@ export default async function PaginaGrupoVip({ searchParams }: PageProps<'/grupo
     de || ate ? `Período: ${de ? formatarData(de) : 'início'} a ${ate ? formatarData(ate) : 'hoje'}` : null,
     pagamento ? `Pagamento: ${FILTROS_PAGAMENTO[pagamento].rotulo}` : null,
     frete ? FILTROS_FRETE[frete] : null,
+    caixaAberta ? 'Só Caixas VIP abertas' : null,
   ]
     .filter(Boolean)
     .join(' · ')
@@ -192,7 +196,14 @@ export default async function PaginaGrupoVip({ searchParams }: PageProps<'/grupo
               className="basis-full"
               opcoes={Object.entries(FILTROS_FRETE).map(([valor, rotulo]) => ({ valor, rotulo }))}
             />
-            {(preVendaId || de || ate || pagamento || frete) && (
+            <FilterSelect
+              name="caixa"
+              valor={caixaAberta ? 'aberta' : undefined}
+              rotulo="Qualquer caixa"
+              className="basis-full"
+              opcoes={[{ valor: 'aberta', rotulo: 'Caixas VIP abertas' }]}
+            />
+            {(preVendaId || de || ate || pagamento || frete || caixaAberta) && (
               <Link href="/grupo-vip" className="w-full py-1 text-center text-sm font-semibold text-volt-700 hover:text-ink lg:w-auto lg:py-0">
                 Limpar filtros
               </Link>
@@ -212,6 +223,16 @@ export default async function PaginaGrupoVip({ searchParams }: PageProps<'/grupo
           detalhe={totais.emAberto > 0 ? `${totais.emAberto} pedido(s) em aberto` : 'tudo recebido'}
         />
       </div>
+
+      {totais.caixasAbertas > 0 && !caixaAberta && (
+        <Alert tom="info" titulo={`${totais.caixasAbertas} Caixa(s) VIP aberta(s)`} className="mb-6 print:hidden">
+          Clientes que escolheram juntar as cervejas das próximas pré-vendas e pagar no fechamento, com um frete só. A caixa fecha quando o
+          cliente paga — ou feche e cobre pelo pedido.{' '}
+          <Link href="/grupo-vip?caixa=aberta" className="inline-flex items-center gap-1 font-semibold whitespace-nowrap underline-offset-2 hover:underline">
+            <PackageOpen className="size-3.5" aria-hidden /> Ver só as caixas abertas
+          </Link>
+        </Alert>
+      )}
 
       {aCotar > 0 && frete !== 'a_cotar' && (
         <Alert tom="alerta" titulo={`${aCotar} pedido(s) com frete a cotar`} className="mb-6 print:hidden">

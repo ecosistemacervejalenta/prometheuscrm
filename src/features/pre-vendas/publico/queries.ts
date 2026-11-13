@@ -5,6 +5,8 @@ import { cache } from 'react'
 import { lerKit } from '@/features/produtos/kit'
 import { createAdminClient } from '@/lib/supabase/admin'
 
+import { lerCaixa } from './caixa-dados'
+
 /**
  * Dados da página pública /p/{slug}. Usa a chave secreta (não há login),
  * por isso devolve SOMENTE o necessário para o cliente montar o pedido e pagar.
@@ -73,18 +75,14 @@ export const obterPreVendaPublica = cache(async (slug: string) => {
 export type PreVendaPublica = NonNullable<Awaited<ReturnType<typeof obterPreVendaPublica>>>
 
 /**
- * Página pública /pagar/{id}: o essencial para o cliente pagar um pedido (restante do frete
- * cotado, pedido manual, cobrança enviada pela equipe). Identificado só pelo UUID do pedido.
+ * Página pública /pagar/{id}: a Caixa VIP (ou o pedido) para o cliente pagar o que falta —
+ * fechamento da caixa, frete cotado, cobrança da equipe. Identificado só pelo UUID do pedido.
  */
 export const obterPedidoParaPagar = cache(async (id: string) => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null
   const db = createAdminClient()
-  const [{ data: pedido }, { data: loja }, { data: mercadoPago }] = await Promise.all([
-    db
-      .from('pedidos')
-      .select('id, numero, total, subtotal, taxa_entrega, status, status_pagamento, frete, clientes(nome), pre_vendas(titulo), pedido_itens(descricao, quantidade, total)')
-      .eq('id', id)
-      .maybeSingle(),
+  const [{ data: caixa }, { data: loja }, { data: mercadoPago }] = await Promise.all([
+    db.rpc('caixa_publica', { p_pedido_id: id }),
     db
       .from('configuracoes')
       .select('nome_loja, whatsapp_loja, chave_pix, nome_recebedor_pix, whatsapp_comprovante')
@@ -92,21 +90,11 @@ export const obterPedidoParaPagar = cache(async (id: string) => {
       .maybeSingle(),
     db.from('integracao_mercado_pago').select('conta_id').eq('id', 1).maybeSingle(),
   ])
-  if (!pedido) return null
+  const dados = lerCaixa(caixa)
+  if (!dados) return null
 
   return {
-    pedido: {
-      id: pedido.id,
-      numero: pedido.numero,
-      total: Number(pedido.total),
-      taxaEntrega: Number(pedido.taxa_entrega),
-      frete: pedido.frete,
-      cancelado: pedido.status === 'cancelado',
-      pago: pedido.status_pagamento === 'pago',
-      clienteNome: pedido.clientes?.nome ?? '',
-      preVendaTitulo: pedido.pre_vendas?.titulo ?? null,
-      itens: pedido.pedido_itens.map((i) => ({ nome: i.descricao, quantidade: i.quantidade, total: Number(i.total) })),
-    },
+    caixa: dados,
     loja: {
       nome: loja?.nome_loja ?? 'Prometheus',
       pix: loja?.chave_pix ? { chave: loja.chave_pix, favorecido: loja.nome_recebedor_pix } : null,

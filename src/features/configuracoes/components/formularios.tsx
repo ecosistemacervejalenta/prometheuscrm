@@ -84,6 +84,7 @@ const EVENTOS = [
   { valor: '*', rotulo: 'Todos os eventos' },
   { valor: 'pedido.criado', rotulo: 'Pedido criado' },
   { valor: 'pedido.pago', rotulo: 'Pedido pago' },
+  { valor: 'pedido.itens_adicionados', rotulo: 'Caixa VIP recebeu cervejas de outra pré-venda' },
   { valor: 'pedido.atualizado', rotulo: 'Pedido atualizado (status/pagamento)' },
   { valor: 'pedido.cancelado', rotulo: 'Pedido cancelado' },
   { valor: 'cliente.criado', rotulo: 'Cliente criado' },

@@ -55,7 +55,7 @@ export async function obterPedido(id: string) {
   const { supabase } = await exigirEquipe()
   const { data } = await supabase
     .from('pedidos')
-    .select('*, clientes(*), pre_vendas(id, titulo, slug), pedido_itens(*)')
+    .select('*, clientes(*), pre_vendas(id, titulo, slug), pedido_itens(*, pre_vendas(id, titulo, previsao_entrega))')
     .eq('id', id)
     .maybeSingle()
   return data
@@ -79,18 +79,23 @@ export async function pedidosComItens(filtros: {
   fim?: string
   pagamento?: FiltroPagamento
   frete?: SituacaoFrete
+  /** Só as Caixas VIP abertas (clientes ainda montando). */
+  caixaAberta?: boolean
 }) {
   const { supabase } = await exigirEquipe()
+
   let consulta = supabase
     .from('pedidos')
     .select(
-      'id, numero, criado_em, status, status_pagamento, total, subtotal, taxa_entrega, desconto, frete, cobrancas_enviadas, ultima_cobranca_em, endereco_entrega, observacoes, clientes(id, nome, whatsapp), pre_vendas(titulo), pedido_itens(produto_id, descricao, quantidade, total)',
+      'id, numero, criado_em, status, status_pagamento, total, subtotal, taxa_entrega, desconto, frete, caixa, cobrancas_enviadas, ultima_cobranca_em, endereco_entrega, observacoes, clientes(id, nome, whatsapp), pre_vendas(titulo), pedido_itens(produto_id, pre_venda_id, descricao, quantidade, total, pre_vendas(titulo)), da_pre_venda:pedido_itens!inner(pre_venda_id)',
     )
     .neq('status', 'cancelado')
     .order('criado_em', { ascending: true })
 
   if (filtros.canal) consulta = consulta.eq('canal', filtros.canal)
-  if (filtros.preVendaId) consulta = consulta.eq('pre_venda_id', filtros.preVendaId)
+  // Pré-venda: pedidos com pelo menos um item dela (uma Caixa VIP junta várias pré-vendas).
+  if (filtros.preVendaId) consulta = consulta.eq('da_pre_venda.pre_venda_id', filtros.preVendaId)
+  if (filtros.caixaAberta) consulta = consulta.eq('caixa', 'aberta')
   if (filtros.inicio) consulta = consulta.gte('criado_em', filtros.inicio)
   if (filtros.fim) consulta = consulta.lt('criado_em', filtros.fim)
   if (filtros.frete) consulta = consulta.eq('frete', filtros.frete)
