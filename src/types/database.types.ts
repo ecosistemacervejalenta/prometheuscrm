@@ -363,6 +363,8 @@ export type Database = {
           concluida_em: string | null
           criado_em: string
           criado_por: string | null
+          custo_meta: number | null
+          custo_meta_em: string | null
           id: string
           imagem_path: string | null
           iniciada_em: string | null
@@ -395,6 +397,8 @@ export type Database = {
           concluida_em?: string | null
           criado_em?: string
           criado_por?: string | null
+          custo_meta?: number | null
+          custo_meta_em?: string | null
           id?: string
           imagem_path?: string | null
           iniciada_em?: string | null
@@ -427,6 +431,8 @@ export type Database = {
           concluida_em?: string | null
           criado_em?: string
           criado_por?: string | null
+          custo_meta?: number | null
+          custo_meta_em?: string | null
           id?: string
           imagem_path?: string | null
           iniciada_em?: string | null
@@ -2497,11 +2503,15 @@ export type Database = {
           atualizado_em: string
           conectado_em: string | null
           conectado_por: string | null
+          custos_conferidos_em: string | null
           id: number
           limite_tier: string | null
           nome_verificado: string | null
           numero: string | null
           phone_number_id: string | null
+          preco_marketing: number | null
+          preco_marketing_dia: string | null
+          preco_moeda: string | null
           qualidade: string | null
           rotina_desde: string | null
           status_nome: string | null
@@ -2516,11 +2526,15 @@ export type Database = {
           atualizado_em?: string
           conectado_em?: string | null
           conectado_por?: string | null
+          custos_conferidos_em?: string | null
           id?: number
           limite_tier?: string | null
           nome_verificado?: string | null
           numero?: string | null
           phone_number_id?: string | null
+          preco_marketing?: number | null
+          preco_marketing_dia?: string | null
+          preco_moeda?: string | null
           qualidade?: string | null
           rotina_desde?: string | null
           status_nome?: string | null
@@ -2535,11 +2549,15 @@ export type Database = {
           atualizado_em?: string
           conectado_em?: string | null
           conectado_por?: string | null
+          custos_conferidos_em?: string | null
           id?: number
           limite_tier?: string | null
           nome_verificado?: string | null
           numero?: string | null
           phone_number_id?: string | null
+          preco_marketing?: number | null
+          preco_marketing_dia?: string | null
+          preco_moeda?: string | null
           qualidade?: string | null
           rotina_desde?: string | null
           status_nome?: string | null
@@ -2632,6 +2650,8 @@ export type Database = {
           concluida_em: string | null
           criado_em: string | null
           criado_por: string | null
+          custo_meta: number | null
+          custo_meta_em: string | null
           entregues: number | null
           enviadas: number | null
           falhas: number | null

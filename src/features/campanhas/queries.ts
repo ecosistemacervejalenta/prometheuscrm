@@ -21,6 +21,9 @@ const SEM_CONEXAO: ConexaoMeta = {
   verificado_em: null,
   webhook_recebido_em: null,
   ultimo_erro: null,
+  preco_marketing: null,
+  preco_moeda: null,
+  preco_marketing_dia: null,
   token_verificacao: null,
 }
 

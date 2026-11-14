@@ -51,6 +51,7 @@ import {
   VARIAVEL_NOME,
   type MensagemCampanha,
 } from '../mensagem'
+import { formatarCusto, PRECOS_META, type PrecoMensagem } from '../custo'
 import { limiteDiario, rotuloLimite } from '../meta'
 import type { ListaParaCampanha } from '../queries'
 import { CONTATOS_POR_LOTE } from '../schema'
@@ -62,7 +63,6 @@ const TAMANHO_MAXIMO = 20 * MB
 const EXCEL = ['xlsx', 'xls', 'xlsm', 'ods']
 const TEXTO = ['csv', 'txt', 'tsv']
 const NOME_EXEMPLO = 'Mariana Costa'
-const PRECOS_META = 'https://developers.facebook.com/docs/whatsapp/pricing'
 
 /**
  * Andamento do disparo. O id da campanha nasce aqui: repetir (queda de conexão) cai na mesma
@@ -221,11 +221,14 @@ export function NovaCampanha({
   listas,
   nomeLoja,
   limiteTier,
+  preco,
   bloqueio,
 }: {
   listas: ListaParaCampanha[]
   nomeLoja: string
   limiteTier: string | null
+  /** Preço por mensagem de marketing entregue (medido na conta ou da tabela da Meta). */
+  preco: PrecoMensagem
   bloqueio: string | null
 }) {
   const router = useRouter()
@@ -791,11 +794,16 @@ export function NovaCampanha({
                   </dd>
                 </div>
                 <div>
-                  <dt className="tipo-rotulo text-suave">Custo</dt>
-                  <dd className="mt-0.5 text-[13px] text-suave">
-                    A Meta cobra por mensagem de marketing entregue.{' '}
+                  <dt className="tipo-rotulo text-suave">Custo previsto</dt>
+                  <dd className="tipo-dado mt-0.5 font-semibold">
+                    {totalPublico > 0 ? `até ${formatarCusto(totalPublico * preco.valor, preco.moeda)}` : '—'}
+                  </dd>
+                  <dd className="text-[13px] text-suave">
+                    {totalPublico > 0
+                      ? `${formatarNumero(totalPublico)} × ${formatarCusto(preco.valor, preco.moeda, true)} por mensagem entregue. Quem não receber não é cobrado.`
+                      : `A Meta cobra ${formatarCusto(preco.valor, preco.moeda, true)} por mensagem de marketing entregue.`}{' '}
                     <a href={PRECOS_META} target="_blank" rel="noopener noreferrer" className="font-semibold text-volt-700 hover:text-ink">
-                      Ver tabela de preços
+                      Ver tabela da Meta
                     </a>
                   </dd>
                 </div>

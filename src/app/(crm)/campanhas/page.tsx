@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ItemMobile, ListaMobile } from '@/components/ui/lista-mobile'
 import { PageHeader } from '@/components/ui/page-header'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
+import { custoDaCampanha, formatarCusto, precoDaConexao } from '@/features/campanhas/custo'
 import { conexaoMeta, listarCampanhas } from '@/features/campanhas/queries'
 import { percentual, situacaoDaCampanha } from '@/features/campanhas/status'
 import { formatarDataCurta, formatarNumero } from '@/lib/format'
@@ -25,6 +26,12 @@ const COMO_FUNCIONA = [
 export default async function PaginaCampanhas() {
   const [conexao, campanhas] = await Promise.all([conexaoMeta(), listarCampanhas()])
   const contatos = (c: (typeof campanhas)[number]) => (c.total ?? 0) - (c.ignoradas ?? 0)
+  const preco = precoDaConexao(conexao)
+  /** Gasto até agora (entregues × preço ou o informado pela Meta); "—" antes da 1ª entrega. */
+  const custo = (c: (typeof campanhas)[number]) => {
+    const r = custoDaCampanha(c, preco)
+    return r.comecou ? formatarCusto(r.gasto, preco.moeda) : '—'
+  }
 
   return (
     <>
@@ -99,7 +106,7 @@ export default async function PaginaCampanhas() {
                     key={c.id}
                     href={`/campanhas/${c.id}`}
                     titulo={c.nome}
-                    subtitulo={`${formatarDataCurta(c.criado_em)} · ${formatarNumero(contatos(c))} contato(s) · ${formatarNumero(c.enviadas)} enviada(s)`}
+                    subtitulo={`${formatarDataCurta(c.criado_em)} · ${formatarNumero(contatos(c))} contato(s) · ${formatarNumero(c.enviadas)} enviada(s)${custoDaCampanha(c, preco).comecou ? ` · ${custo(c)}` : ''}`}
                     extra={<Badge tom={situacao.tom} ponto>{situacao.rotulo}</Badge>}
                   />
                 )
@@ -115,6 +122,7 @@ export default async function PaginaCampanhas() {
                   <TH className="text-right">Entregues</TH>
                   <TH className="text-right">Lidas</TH>
                   <TH className="text-right">Respostas</TH>
+                  <TH className="text-right">Custo</TH>
                 </TR>
               </THead>
               <TBody>
@@ -136,6 +144,7 @@ export default async function PaginaCampanhas() {
                       <TD className="tipo-dado text-right">{percentual(c.entregues, c.enviadas)}</TD>
                       <TD className="tipo-dado text-right">{percentual(c.lidas, c.enviadas)}</TD>
                       <TD className="tipo-dado text-right">{formatarNumero(c.respostas)}</TD>
+                      <TD className="tipo-dado text-right">{custo(c)}</TD>
                     </TR>
                   )
                 })}

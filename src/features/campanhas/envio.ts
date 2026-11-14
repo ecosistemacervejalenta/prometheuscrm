@@ -4,6 +4,8 @@ import { formatarWhatsapp } from '@/lib/format'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import type { Campanha } from '@/types'
 
+import { FUSO } from '@/lib/datas'
+
 import {
   appsInscritos,
   buscarModeloPorNome,
@@ -12,6 +14,8 @@ import {
   enviarModelo,
   ErroMeta,
   inscreverApp,
+  lerCobrancas,
+  lerCustoDosModelos,
   lerModelo,
   lerNumero,
   registrarNumero,
@@ -19,6 +23,7 @@ import {
   type ModeloMeta,
   type ModeloParaEnvio,
   type NumeroMeta,
+  type PontoCobranca,
 } from './api-meta'
 import type { RespostaRotina } from './disparo'
 import { bloqueioDaMeta, classeDoErro, ERRO_SAIU_DO_MARKETING, mensagemDoErro, motivoDaRecusa, type ClasseErro } from './erros-meta'
@@ -123,6 +128,7 @@ export async function verificarConexao(supabase: Admin, pin: string | null): Pro
     // Grava número, qualidade e limite antes: continuam certos mesmo se a inscrição do webhook falhar.
     await salvarNumero(supabase, numero, problema)
     await ligarWebhook(cred)
+    await conferirCustos(supabase, cred, true)
     if (problema) return { ok: false, mensagem: problema }
     return { ok: true, mensagem: `Conexão conferida: ${numero.display_phone_number ?? 'número'} · ${numero.verified_name ?? 'sem nome'}.` }
   } catch (erro) {
@@ -148,6 +154,114 @@ async function conferirNumeroSePreciso(supabase: Admin, cred: CredenciaisMeta): 
   } catch (erro) {
     await supabase.from('whatsapp_oficial').update({ ultimo_erro: erroDaConexao(erro), verificado_em: agora() }).eq('id', 1)
     return data?.limite_tier ?? null
+  }
+}
+
+// Custos ------------------------------------------------------------------------------------
+
+const CONFERIR_CUSTOS_A_CADA_MS = 20 * 60_000
+const DIA_S = 86_400
+
+/** Preço medido na conta: custo ÷ volume do último dia com marketing (regular) para o Brasil. */
+function precoMedido(pontos: PontoCobranca[]): { valor: number; dia: string } | null {
+  const ultimo = pontos
+    .filter(
+      (p) =>
+        p.pricing_category === 'MARKETING' &&
+        p.country === 'BR' &&
+        (p.pricing_type ?? 'REGULAR') === 'REGULAR' &&
+        (p.volume ?? 0) > 0 &&
+        (p.cost ?? 0) > 0,
+    )
+    .sort((a, b) => (b.start ?? 0) - (a.start ?? 0))[0]
+  if (!ultimo?.volume || !ultimo.cost) return null
+  return {
+    valor: Math.round((ultimo.cost / ultimo.volume) * 10_000) / 10_000,
+    dia: new Date((ultimo.start ?? 0) * 1000).toLocaleDateString('en-CA', { timeZone: FUSO }),
+  }
+}
+
+/**
+ * Custo que a Meta informa pelo modelo de cada campanha recente (ativa, iniciada há até 7 dias
+ * ou concluída há até 3). Modelo reaproveitado por mais de uma campanha fica sem custo da Meta
+ * (ela soma tudo junto); essas campanhas mostram só o custo em tempo real.
+ */
+async function atualizarCustoDasCampanhas(supabase: Admin, cred: CredenciaisMeta, fim: number) {
+  const diasAtras = (dias: number) => new Date(Date.now() - dias * DIA_S * 1000).toISOString()
+  const { data: campanhas } = conferir(
+    await supabase
+      .from('campanhas')
+      .select('id, modelo_id, criado_em')
+      .not('modelo_id', 'is', null)
+      .not('iniciada_em', 'is', null)
+      .or(`status.in.(enviando,pausada),iniciada_em.gt.${diasAtras(7)},concluida_em.gt.${diasAtras(3)}`)
+      .order('iniciada_em', { ascending: false })
+      .limit(50),
+  )
+  if (campanhas.length === 0) return
+
+  const modelos = [...new Set(campanhas.map((c) => c.modelo_id as string))]
+  const { data: usos } = conferir(await supabase.from('campanhas').select('modelo_id').in('modelo_id', modelos))
+  const vezes = new Map<string, number>()
+  for (const u of usos) vezes.set(u.modelo_id as string, (vezes.get(u.modelo_id as string) ?? 0) + 1)
+
+  const divididas = campanhas.filter((c) => vezes.get(c.modelo_id as string) !== 1).map((c) => c.id)
+  if (divididas.length > 0) {
+    conferir(await supabase.from('campanhas').update({ custo_meta: null, custo_meta_em: null }).in('id', divididas).not('custo_meta', 'is', null))
+  }
+
+  const exclusivas = campanhas.filter((c) => vezes.get(c.modelo_id as string) === 1)
+  for (let i = 0; i < exclusivas.length; i += 10) {
+    const lote = exclusivas.slice(i, i + 10)
+    // Desde um dia antes da criação (testes enviados antes do disparo), no máximo 89 dias.
+    const criacao = Math.min(...lote.map((c) => new Date(c.criado_em).getTime() / 1000))
+    const inicio = Math.max(Math.floor(criacao) - DIA_S, fim - 89 * DIA_S)
+    const custo = await lerCustoDosModelos(
+      cred,
+      lote.map((c) => c.modelo_id as string),
+      inicio,
+      fim,
+    )
+    for (const c of lote) {
+      const valor = custo.get(c.modelo_id as string)
+      conferir(
+        await supabase
+          .from('campanhas')
+          .update({ custo_meta: valor === undefined ? null : Math.round(valor * 100) / 100, custo_meta_em: agora() })
+          .eq('id', c.id),
+      )
+    }
+  }
+}
+
+/**
+ * Preço por mensagem e custo das campanhas na Meta, a cada 20 min (ou na hora, pelo "Atualizar
+ * status"). Falhas só vão para o log: o custo em tempo real da tela não depende disto.
+ */
+async function conferirCustos(supabase: Admin, cred: CredenciaisMeta, forcar = false) {
+  if (!forcar) {
+    const { data } = await supabase.from('whatsapp_oficial').select('custos_conferidos_em').eq('id', 1).maybeSingle()
+    if (data?.custos_conferidos_em && Date.now() - new Date(data.custos_conferidos_em).getTime() < CONFERIR_CUSTOS_A_CADA_MS) return
+  }
+  // Marca antes: com a Meta fora do ar, não insiste a cada rodada.
+  await supabase.from('whatsapp_oficial').update({ custos_conferidos_em: agora() }).eq('id', 1)
+  const fim = Math.floor(Date.now() / 1000)
+  try {
+    const { moeda, pontos } = await lerCobrancas(cred, fim - 30 * DIA_S, fim)
+    const preco = precoMedido(pontos)
+    if (preco) {
+      await supabase
+        .from('whatsapp_oficial')
+        .update({ preco_marketing: preco.valor, preco_moeda: moeda, preco_marketing_dia: preco.dia })
+        .eq('id', 1)
+    }
+  } catch (erro) {
+    console.error('[campanhas] não foi possível ler as cobranças da conta', erro)
+  }
+  try {
+    await atualizarCustoDasCampanhas(supabase, cred, fim)
+  } catch (erro) {
+    console.error('[campanhas] não foi possível ler o custo das campanhas', erro)
   }
 }
 
@@ -673,6 +787,8 @@ async function rodada(supabase: Admin, cred: CredenciaisMeta): Promise<ResumoRod
       await supabase.from('campanhas').update({ processando_desde: null }).eq('id', c.id)
     }
   }
+  // Depois dos envios, para não atrasar o disparo.
+  await conferirCustos(supabase, cred)
   return { ok: true, mensagem: `${enviados} mensagem(ns) enviada(s) nesta rodada.`, enviados }
 }
 

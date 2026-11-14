@@ -17,6 +17,7 @@ import {
   retomarCampanha,
 } from '@/features/campanhas/actions'
 import { AtualizacaoAutomatica } from '@/features/campanhas/components/atualizacao-automatica'
+import { custoDaCampanha, formatarCusto, precoDaConexao, type PrecoMensagem } from '@/features/campanhas/custo'
 import { PreviaWhatsapp } from '@/features/campanhas/components/previa-whatsapp'
 import { TesteCampanha } from '@/features/campanhas/components/teste-campanha'
 import { urlImagemCampanha } from '@/features/campanhas/mensagem'
@@ -122,6 +123,58 @@ function Aviso({ campanha, limite }: { campanha: NonNullable<Awaited<ReturnType<
     default:
       return null
   }
+}
+
+/**
+ * Custo da campanha: em tempo real (entregues × preço, pelo webhook), o confirmado pela Meta
+ * (algumas horas de atraso, inclui testes e reenvios) e o previsto para a lista toda.
+ */
+function CartaoCusto({ campanha, preco }: { campanha: NonNullable<Awaited<ReturnType<typeof obterCampanha>>>; preco: PrecoMensagem }) {
+  const custo = custoDaCampanha(campanha, preco)
+  const status = campanha.status ?? 'preparando'
+  const unitario = formatarCusto(preco.valor, preco.moeda, true)
+  const vaiEnviarMais = (campanha.pendentes ?? 0) > 0 || ['aguardando_aprovacao', 'agendada'].includes(status)
+  const metaPassou = custo.meta !== null && custo.meta > custo.tempoReal + 0.005
+
+  return (
+    <Card>
+      <CardHeader titulo="Custo" descricao={`${unitario} por mensagem entregue${preco.medidoEm ? ', como cobrado na sua conta' : ' (tabela da Meta)'}.`} />
+      <CardContent className="space-y-3">
+        <div>
+          <p className="tipo-rotulo text-suave">{custo.comecou ? 'Gasto até agora' : 'Previsto'}</p>
+          <p className="tipo-dado text-[28px] leading-tight font-semibold">
+            {formatarCusto(custo.comecou ? custo.gasto : custo.previsto, preco.moeda)}
+          </p>
+          <p className="text-[13px] text-suave">
+            {!custo.comecou
+              ? `Até ${formatarNumero(custo.contatos)} contato(s) × ${unitario}. Quem não receber não é cobrado.`
+              : metaPassou
+                ? 'Valor informado pela Meta, com testes e reenvios.'
+                : `${formatarNumero(campanha.entregues)} entregue(s) × ${unitario}.`}
+          </p>
+        </div>
+        {custo.comecou && (
+          <dl className="space-y-2 border-t border-linha pt-3 text-[13px]">
+            {vaiEnviarMais && (
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-suave">Previsto para a lista toda</dt>
+                <dd className="tipo-dado font-semibold">{formatarCusto(Math.max(custo.previsto, custo.gasto), preco.moeda)}</dd>
+              </div>
+            )}
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-suave">Confirmado pela Meta</dt>
+              <dd className="tipo-dado font-semibold">{custo.meta !== null ? formatarCusto(custo.meta, preco.moeda) : '—'}</dd>
+            </div>
+            <p className="text-[12px] text-sutil">
+              {campanha.custo_meta_em
+                ? `Conferido em ${formatarDataHora(campanha.custo_meta_em)}. A Meta informa com algumas horas de atraso.`
+                : 'A Meta informa com algumas horas de atraso; o valor acima já conta as entregas em tempo real.'}
+            </p>
+          </dl>
+        )}
+      </CardContent>
+    </Card>
+  )
 }
 
 export default async function PaginaCampanha({ params }: PageProps<'/campanhas/[id]'>) {
@@ -276,6 +329,8 @@ export default async function PaginaCampanha({ params }: PageProps<'/campanhas/[
           </div>
 
           <div className="space-y-5 lg:space-y-6">
+            {contatos > 0 && <CartaoCusto campanha={campanha} preco={precoDaConexao(conexao)} />}
+
             <Card>
               <CardHeader titulo="Mensagem" acoes={modelo && <Badge tom={modelo.tom} ponto>{modelo.rotulo}</Badge>} />
               <CardContent className="space-y-4">

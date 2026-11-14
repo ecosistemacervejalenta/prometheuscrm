@@ -145,6 +145,57 @@ export async function enviarExemploImagem(c: CredenciaisMeta, arquivo: Blob, nom
   return dados.h
 }
 
+// Custos -------------------------------------------------------------------------------
+
+export type PontoCobranca = {
+  start?: number
+  end?: number
+  country?: string
+  pricing_category?: string
+  pricing_type?: string
+  volume?: number
+  cost?: number
+}
+
+/** Cobranças da conta por dia, categoria e país (pricing_analytics), mais a moeda da conta. */
+export async function lerCobrancas(c: CredenciaisMeta, inicio: number, fim: number) {
+  const analise = `pricing_analytics.start(${inicio}).end(${fim}).granularity(DAILY).dimensions(["PRICING_CATEGORY","PRICING_TYPE","COUNTRY"])`
+  const r = await chamar<{ currency?: string; pricing_analytics?: { data?: Array<{ data_points?: PontoCobranca[] }> } }>(
+    c.token,
+    `/${c.wabaId}?fields=currency,${encodeURIComponent(analise)}`,
+  )
+  return { moeda: r.currency ?? null, pontos: (r.pricing_analytics?.data ?? []).flatMap((d) => d.data_points ?? []) }
+}
+
+type PontoModelo = { template_id?: string; cost?: Array<{ type?: string; value?: number }> }
+type PaginaModelos = { data?: Array<{ data_points?: PontoModelo[] }>; paging?: { next?: string } }
+
+/**
+ * Quanto a Meta cobrou por modelo no período (template_analytics, métrica COST → amount_spent).
+ * Até 10 modelos por chamada; dados diários, com algumas horas de atraso.
+ */
+export async function lerCustoDosModelos(c: CredenciaisMeta, ids: string[], inicio: number, fim: number): Promise<Map<string, number>> {
+  const custo = new Map<string, number>()
+  const parametros = new URLSearchParams({
+    start: String(inicio),
+    end: String(fim),
+    granularity: 'DAILY',
+    metric_types: JSON.stringify(['COST', 'DELIVERED']),
+    template_ids: JSON.stringify(ids),
+  })
+  let caminho: string | null = `/${c.wabaId}/template_analytics?${parametros}`
+  for (let pagina = 0; caminho && pagina < 10; pagina++) {
+    const r: PaginaModelos = await chamar<PaginaModelos>(c.token, caminho)
+    for (const p of (r.data ?? []).flatMap((d) => d.data_points ?? [])) {
+      const gasto = p.cost?.find((m) => m.type === 'amount_spent')?.value
+      if (p.template_id && typeof gasto === 'number') custo.set(p.template_id, (custo.get(p.template_id) ?? 0) + gasto)
+    }
+    // A próxima página vem como URL completa da Graph API: segue só o caminho.
+    caminho = r.paging?.next ? r.paging.next.replace(/^https:\/\/graph\.facebook\.com\/v[\d.]+/, '') : null
+  }
+  return custo
+}
+
 // Envio --------------------------------------------------------------------------------
 
 export type ModeloParaEnvio = { name: string; language: { code: string }; components: unknown[] }

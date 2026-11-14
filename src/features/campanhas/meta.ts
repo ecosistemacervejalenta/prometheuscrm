@@ -19,6 +19,10 @@ export type ConexaoMeta = {
   verificado_em: string | null
   webhook_recebido_em: string | null
   ultimo_erro: string | null
+  /** Preço por mensagem de marketing entregue no Brasil, medido nas cobranças da conta (null = ainda sem medição). */
+  preco_marketing: number | null
+  preco_moeda: string | null
+  preco_marketing_dia: string | null
   token_verificacao: string | null
 }
 

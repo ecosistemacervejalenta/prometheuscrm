@@ -727,6 +727,7 @@ await db.exec(`reset role;`)
   await q(`select salvar_whatsapp_oficial('111', '222', '333', ' token-123 ', 'segredo')`)
   const conexao = (await um(`select status_whatsapp_oficial() s`)).s
   expectEq('conexão salva; o admin vê a senha do webhook', [conexao.configurado, conexao.tem_app_secret, conexao.token_verificacao?.length], [true, true, 64])
+  expectEq('status traz o preço por mensagem (nulo até a 1ª medição)', [conexao.preco_marketing, conexao.preco_moeda, 'preco_marketing_dia' in conexao], [null, null, true])
   await expectError('a equipe não lê as credenciais', `select * from credenciais_whatsapp_oficial()`)
   await expectError('a equipe não lê a tabela da conexão', `select * from whatsapp_oficial`)
   await q(`select salvar_whatsapp_oficial('111', '222', '444', '', '')`)
@@ -777,6 +778,10 @@ await db.exec(`reset role;`)
   expectEq('"pare" de quem não está em campanha também descadastra', (await um(`select origem from whatsapp_descadastros where whatsapp = '5521999998888'`)).origem, 'mensagem')
   expectEq('vw_campanhas soma os números', await um(`select total, enviadas, entregues, lidas, respostas, ignoradas, sairam, pendentes from vw_campanhas where id = $1`, [campanha.id]),
     { total: 2, enviadas: 1, entregues: 1, lidas: 1, respostas: 1, ignoradas: 1, sairam: 1, pendentes: 0 })
+  await db.exec(`reset role; set role service_role;`)
+  await q(`update campanhas set custo_meta = 0.64, custo_meta_em = now() where id = $1`, [campanha.id])
+  await db.exec(comoAdmin)
+  expectEq('vw_campanhas traz o custo informado pela Meta', Number((await um(`select custo_meta from vw_campanhas where id = $1`, [campanha.id])).custo_meta), 0.64)
 
   // Fila: descadastro depois da confirmação, espera entre tentativas e reserva interrompida.
   await db.exec(comoAdmin)

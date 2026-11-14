@@ -4,9 +4,10 @@ import { ActionButton } from '@/components/ui/action-button'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { formatarDataHora, formatarNumero } from '@/lib/format'
+import { formatarData, formatarDataHora, formatarNumero } from '@/lib/format'
 
 import { desconectarMeta, verificarConexaoMeta } from '../actions'
+import { formatarCusto, precoDaConexao } from '../custo'
 import { QUALIDADE, rotuloLimite, type ConexaoMeta } from '../meta'
 import { FormularioConexao } from './formulario-conexao'
 
@@ -22,6 +23,7 @@ function Dado({ rotulo, children }: { rotulo: string; children: React.ReactNode 
 /** Conexão com a Meta: número, qualidade, limite e o formulário das credenciais. */
 export function CartaoConexao({ conexao, ehAdmin, descadastros }: { conexao: ConexaoMeta; ehAdmin: boolean; descadastros: number }) {
   const qualidade = conexao.qualidade ? QUALIDADE[conexao.qualidade] : null
+  const preco = precoDaConexao(conexao)
   const selo = !conexao.configurado ? (
     <Badge tom="alerta" ponto>Não conectado</Badge>
   ) : conexao.ultimo_erro ? (
@@ -40,13 +42,19 @@ export function CartaoConexao({ conexao, ehAdmin, descadastros }: { conexao: Con
       <CardContent className="space-y-4">
         {conexao.configurado && (
           <>
-            <dl className="grid grid-cols-2 gap-3 rounded-xl bg-papel p-4 text-[14px] sm:grid-cols-4">
+            <dl className="grid grid-cols-2 gap-3 rounded-xl bg-papel p-4 text-[14px] sm:grid-cols-3 lg:grid-cols-5">
               <Dado rotulo="Número">
                 <span className="tipo-dado">{conexao.numero ?? '—'}</span>
               </Dado>
               <Dado rotulo="Nome na Meta">{conexao.nome_verificado ?? '—'}</Dado>
               <Dado rotulo="Qualidade">{qualidade ? <Badge tom={qualidade.tom} ponto>{qualidade.rotulo}</Badge> : '—'}</Dado>
               <Dado rotulo="Limite">{rotuloLimite(conexao.limite_tier)}</Dado>
+              <Dado rotulo="Preço por mensagem">
+                <span className="tipo-dado">{formatarCusto(preco.valor, preco.moeda, true)}</span>
+                <span className="block truncate text-[12px] text-suave">
+                  {preco.medidoEm ? `cobrado na conta em ${formatarData(preco.medidoEm)}` : 'tabela da Meta (Brasil)'}
+                </span>
+              </Dado>
             </dl>
             {conexao.ultimo_erro && (
               <Alert tom="erro" titulo="A Meta recusou a conexão">

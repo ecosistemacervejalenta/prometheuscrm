@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 
 import { PageHeader } from '@/components/ui/page-header'
 import { NovaCampanha } from '@/features/campanhas/components/nova-campanha'
+import { precoDaConexao } from '@/features/campanhas/custo'
 import { conexaoMeta, listasParaCampanha } from '@/features/campanhas/queries'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
 
@@ -20,6 +21,7 @@ export default async function PaginaNovaCampanha() {
         listas={listas}
         nomeLoja={conexao.nome_verificado ?? config.nome_loja}
         limiteTier={conexao.limite_tier}
+        preco={precoDaConexao(conexao)}
         bloqueio={conexao.configurado ? null : 'Conecte o WhatsApp oficial (API da Meta) para liberar o disparo.'}
       />
     </>
