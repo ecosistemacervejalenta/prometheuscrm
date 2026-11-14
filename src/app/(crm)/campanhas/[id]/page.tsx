@@ -67,6 +67,14 @@ function Aviso({ campanha, limite }: { campanha: NonNullable<Awaited<ReturnType<
         </Alert>
       )
     case 'enviando':
+      if (campanha.pausada_motivo === 'retida' && erro) {
+        return (
+          <Alert tom="alerta" titulo="Esperando a Meta liberar">
+            {erro}
+            {campanha.aguardar_ate ? ` Próxima tentativa: ${formatarDataHora(campanha.aguardar_ate)}.` : ''}
+          </Alert>
+        )
+      }
       if (campanha.pausada_motivo === 'retida') {
         return (
           <Alert tom="alerta" titulo="A Meta está avaliando as primeiras mensagens">

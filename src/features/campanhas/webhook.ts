@@ -16,6 +16,7 @@ import { pedidoParaSair } from './status'
  *   message_template_status_update → modelo aprovado, recusado ou pausado
  *   phone_number_quality_update / business_capability_update → novo limite diário
  *   user_preferences              → contato parou (ou voltou a aceitar) marketing pelo próprio WhatsApp
+ *   account_update / account_alerts / account_review_update / security → só registrados nos logs
  * Tudo é idempotente: a Meta pode repetir o mesmo aviso. Erros do banco sobem como
  * exceção (a rota responde 500 e a Meta reenvia depois).
  */
@@ -152,6 +153,14 @@ export async function tratarAvisoMeta(supabase: Admin, aviso: AvisoMeta, conta: 
         case 'phone_number_quality_update':
         case 'business_capability_update':
           await atualizarLimite(supabase, valor)
+          break
+        case 'account_update':
+        case 'account_alerts':
+        case 'account_review_update':
+        case 'security':
+          // Restrição, bloqueio, revisão ou segurança da conta: fica nos logs da Vercel para investigar
+          // (não traz conversas de clientes). Ex.: o bloqueio temporário de 13/11/2026 não deixou rastro.
+          console.warn(`[whatsapp-oficial] aviso da conta (${mudanca.field})`, JSON.stringify(valor).slice(0, 2000))
           break
         case 'user_preferences':
           for (const p of (valor.user_preferences as Array<{ wa_id?: string; category?: string; value?: string }> | undefined) ?? []) {

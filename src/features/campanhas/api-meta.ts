@@ -87,6 +87,12 @@ export function inscreverApp(c: CredenciaisMeta) {
   return chamar<{ success: boolean }>(c.token, `/${c.wabaId}/subscribed_apps`, { metodo: 'POST' })
 }
 
+/** IDs dos apps já ligados à conta do WhatsApp. */
+export async function appsInscritos(c: CredenciaisMeta): Promise<string[]> {
+  const r = await chamar<{ data?: Array<{ whatsapp_business_api_data?: { id?: string } }> }>(c.token, `/${c.wabaId}/subscribed_apps`)
+  return (r.data ?? []).map((a) => a.whatsapp_business_api_data?.id).filter((id): id is string => Boolean(id))
+}
+
 // Modelos (templates) -----------------------------------------------------------------
 
 export type ModeloMeta = { id: string; status: string; category?: string; rejected_reason?: string }

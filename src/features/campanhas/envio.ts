@@ -5,6 +5,7 @@ import type { createAdminClient } from '@/lib/supabase/admin'
 import type { Campanha } from '@/types'
 
 import {
+  appsInscritos,
   buscarModeloPorNome,
   criarModelo,
   enviarExemploImagem,
@@ -20,7 +21,7 @@ import {
   type NumeroMeta,
 } from './api-meta'
 import type { RespostaRotina } from './disparo'
-import { classeDoErro, ERRO_SAIU_DO_MARKETING, mensagemDoErro, motivoDaRecusa, type ClasseErro } from './erros-meta'
+import { bloqueioDaMeta, classeDoErro, ERRO_SAIU_DO_MARKETING, mensagemDoErro, motivoDaRecusa, type ClasseErro } from './erros-meta'
 import { urlImagemCampanha } from './mensagem'
 import { faixaDoLimite, limiteDiario } from './meta'
 import { assinaturaDoModelo, componentesDoEnvio, corpoDoModelo, IDIOMA_MODELO, nomeDoModelo } from './modelo-meta'
@@ -99,6 +100,18 @@ async function salvarNumero(supabase: Admin, n: NumeroMeta, problema: string | n
     .eq('id', 1)
 }
 
+/** Liga o app à conta do WhatsApp. Se a Meta recusar mas o app já estiver ligado (o webhook já chega), segue. */
+async function ligarWebhook(cred: CredenciaisMeta) {
+  try {
+    await inscreverApp(cred)
+  } catch (erro) {
+    const jaLigado = await appsInscritos(cred)
+      .then((ids) => ids.includes(cred.appId))
+      .catch(() => false)
+    if (!jaLigado) throw erro
+  }
+}
+
 /** Confere token e IDs na Meta, registra o número (com PIN) e liga o webhook do app à conta. */
 export async function verificarConexao(supabase: Admin, pin: string | null): Promise<RespostaRotina> {
   const cred = completas(await lerCredenciais(supabase))
@@ -106,9 +119,10 @@ export async function verificarConexao(supabase: Admin, pin: string | null): Pro
   try {
     if (pin) await registrarNumero(cred, pin)
     const numero = await lerNumero(cred)
-    await inscreverApp(cred)
     const problema = problemaDoNumero(numero)
+    // Grava número, qualidade e limite antes: continuam certos mesmo se a inscrição do webhook falhar.
     await salvarNumero(supabase, numero, problema)
+    await ligarWebhook(cred)
     if (problema) return { ok: false, mensagem: problema }
     return { ok: true, mensagem: `Conexão conferida: ${numero.display_phone_number ?? 'número'} · ${numero.verified_name ?? 'sem nome'}.` }
   } catch (erro) {
@@ -118,10 +132,14 @@ export async function verificarConexao(supabase: Admin, pin: string | null): Pro
   }
 }
 
-/** Atualiza qualidade e limite a cada 30 min. Devolve a faixa de limite atual. */
+/**
+ * Atualiza qualidade e limite a cada 30 min — ou a cada rodada enquanto a conexão estiver com erro,
+ * para o aviso sumir da tela logo que a Meta voltar. Devolve a faixa de limite atual.
+ */
 async function conferirNumeroSePreciso(supabase: Admin, cred: CredenciaisMeta): Promise<string | null> {
-  const { data } = await supabase.from('whatsapp_oficial').select('verificado_em, limite_tier').eq('id', 1).maybeSingle()
-  const recente = data?.verificado_em && Date.now() - new Date(data.verificado_em).getTime() < CONFERIR_NUMERO_A_CADA_MS
+  const { data } = await supabase.from('whatsapp_oficial').select('verificado_em, limite_tier, ultimo_erro').eq('id', 1).maybeSingle()
+  const recente =
+    !data?.ultimo_erro && data?.verificado_em && Date.now() - new Date(data.verificado_em).getTime() < CONFERIR_NUMERO_A_CADA_MS
   if (recente) return data.limite_tier
   try {
     const numero = await lerNumero(cred)
@@ -329,6 +347,11 @@ export async function analisarCampanha(supabase: Admin, campanhaId: string): Pro
     }
   } catch (erro) {
     console.error('[campanhas] falha ao criar o modelo', erro)
+    // Bloqueio temporário da Meta: a campanha continua confirmada e sem modelo, e a rotina
+    // tenta de novo a cada rodada (ver "semModelo"), em vez de virar "Não enviada".
+    if (erro instanceof ErroMeta && bloqueioDaMeta(erro.codigo, erro.message)) {
+      return { ok: false, mensagem: `${mensagemDoErro(erro.codigo, erro.message)} A campanha vai para a análise sozinha quando a Meta liberar.` }
+    }
     return falhar(erroDaCriacao(erro))
   }
 }
@@ -355,11 +378,16 @@ async function conferirModelosPendentes(supabase: Admin, cred: CredenciaisMeta) 
 // Envio -----------------------------------------------------------------------------------------
 
 type EnvioReservado = { id: number; whatsapp: string; nome: string | null; tentativas: number }
-/** ok | falha só do contato | falha passageira | problema da conta | sem resposta da Meta (pode ter saído). */
-type ResultadoEnvio = { tipo: 'ok'; retida: boolean } | { tipo: ClasseErro | 'incerto'; codigo: number | null; mensagem: string }
+/**
+ * ok | falha só do contato | falha passageira | problema da conta | sem resposta da Meta (pode ter saído)
+ * | bloqueio temporário da Meta (nada saiu).
+ */
+type ResultadoEnvio = { tipo: 'ok'; retida: boolean } | { tipo: ClasseErro | 'incerto' | 'bloqueio'; codigo: number | null; mensagem: string }
 
 /** Mensagens retidas pela Meta para avaliar a qualidade: a campanha espera isso antes de seguir. */
 const ESPERA_RETIDA_MS = 30 * 60_000
+/** Bloqueio temporário da Meta ("API access blocked"): espera e tenta de novo, sem pausar a campanha. */
+const ESPERA_BLOQUEIO_MS = 10 * 60_000
 
 /** Erros do Supabase viram exceção (o supabase-js devolve { error } em vez de lançar). */
 export function conferir<R extends { error: unknown; data?: unknown }>(resposta: R): R & { data: NonNullable<R['data']> } {
@@ -384,14 +412,18 @@ export async function devolverPorFalhaDaConta(supabase: Admin, wamid: string, me
   await pausarPorErro(supabase, envio.campanha_id, mensagem)
 }
 
-/** Pausa a campanha por um problema da conta, do número ou da mensagem (a equipe retoma depois de resolver). */
+/**
+ * Pausa a campanha por um problema da conta, do número ou da mensagem (a equipe retoma depois de resolver).
+ * Também reabre uma campanha já concluída: a falha pode chegar pelo webhook depois do último envio,
+ * e o número devolvido à fila só sai de novo se a campanha voltar a "pausada" → "Retomar".
+ */
 export async function pausarPorErro(supabase: Admin, campanhaId: string, mensagem: string) {
   conferir(
     await supabase
       .from('campanhas')
-      .update({ status: 'pausada', pausada_motivo: 'erro', ultimo_erro: mensagem })
+      .update({ status: 'pausada', pausada_motivo: 'erro', ultimo_erro: mensagem, concluida_em: null })
       .eq('id', campanhaId)
-      .eq('status', 'enviando'),
+      .in('status', ['enviando', 'concluida']),
   )
 }
 
@@ -416,6 +448,16 @@ async function enviarUm(supabase: Admin, cred: CredenciaisMeta, c: Campanha, env
   } catch (erro) {
     if (!(erro instanceof ErroMeta)) throw erro
     const codigo = erro.codigo
+    if (bloqueioDaMeta(codigo, erro.message)) {
+      // Nada saiu: volta para a fila sem gastar a tentativa.
+      conferir(
+        await supabase
+          .from('campanha_envios')
+          .update({ status: 'pendente', reservado_em: null, tentativas: Math.max(envio.tentativas - 1, 0) })
+          .eq('id', envio.id),
+      )
+      return { tipo: 'bloqueio', codigo, mensagem: mensagemDoErro(codigo, erro.message) }
+    }
     const mensagem = erro.semResposta ? 'Sem resposta da Meta — a mensagem pode ou não ter chegado.' : mensagemDoErro(codigo, erro.message)
     const tipo = erro.semResposta ? 'incerto' : classeDoErro(codigo)
     // Passageiro ou da conta: volta para a fila (até MAX_TENTATIVAS). Do contato ou incerto: não reenvia.
@@ -452,7 +494,7 @@ async function emParalelo<T>(itens: T[], simultaneos: number, tarefa: (item: T) 
   )
 }
 
-type FimDaCampanha = 'fim' | 'tempo' | 'limite' | 'instavel' | 'retida' | 'conta' | 'parada'
+type FimDaCampanha = 'fim' | 'tempo' | 'limite' | 'instavel' | 'retida' | 'bloqueio' | 'conta' | 'parada'
 
 async function enviarCampanha(
   supabase: Admin,
@@ -479,7 +521,9 @@ async function enviarCampanha(
       }
     }
     if (atual.pausada_motivo === 'limite' || atual.pausada_motivo === 'retida') {
-      conferir(await supabase.from('campanhas').update({ pausada_motivo: null, aguardar_ate: null }).eq('id', c.id).eq('status', 'enviando'))
+      conferir(
+        await supabase.from('campanhas').update({ pausada_motivo: null, aguardar_ate: null, ultimo_erro: null }).eq('id', c.id).eq('status', 'enviando'),
+      )
     }
 
     const { data: lote } = conferir(await supabase.rpc('reservar_envios_campanha', { p_campanha_id: c.id, p_limite: tamanho }))
@@ -501,7 +545,12 @@ async function enviarCampanha(
     }
 
     // Problema da conta, limite de velocidade ou Meta sem responder interrompem o lote: o resto volta para a fila.
-    const rodada: { parar: { fim: 'conta' | 'instavel'; mensagem: string } | null; enviadosNoLote: number; retidas: number; passageiros: number } = {
+    const rodada: {
+      parar: { fim: 'conta' | 'instavel' | 'bloqueio'; mensagem: string } | null
+      enviadosNoLote: number
+      retidas: number
+      passageiros: number
+    } = {
       parar: null,
       enviadosNoLote: 0,
       retidas: 0,
@@ -523,6 +572,7 @@ async function enviarCampanha(
         rodada.enviadosNoLote++
         if (r.retida) rodada.retidas++
       }
+      else if (r.tipo === 'bloqueio') rodada.parar ??= { fim: 'bloqueio', mensagem: r.mensagem }
       else if (r.tipo === 'conta') rodada.parar ??= { fim: 'conta', mensagem: r.mensagem }
       else if (r.tipo === 'incerto' || r.codigo === 130429 || r.codigo === 80007 || r.codigo === 4) rodada.parar ??= { fim: 'instavel', mensagem: r.mensagem }
       else if (r.tipo === 'repetir') rodada.passageiros++
@@ -532,6 +582,22 @@ async function enviarCampanha(
     if (rodada.parar?.fim === 'conta') {
       await pausarPorErro(supabase, c.id, rodada.parar.mensagem)
       return { enviados, fim: 'conta' }
+    }
+    // Bloqueio temporário da Meta: a campanha segue "enviando" e espera (motivo "retida" + o aviso
+    // em ultimo_erro); a próxima rodada depois da espera limpa os dois e continua de onde parou.
+    if (rodada.parar?.fim === 'bloqueio') {
+      conferir(
+        await supabase
+          .from('campanhas')
+          .update({
+            pausada_motivo: 'retida',
+            aguardar_ate: new Date(Date.now() + ESPERA_BLOQUEIO_MS).toISOString(),
+            ultimo_erro: rodada.parar.mensagem,
+          })
+          .eq('id', c.id)
+          .eq('status', 'enviando'),
+      )
+      return { enviados, fim: 'bloqueio' }
     }
     // Meta instável (lote inteiro com falha passageira): para a rodada em vez de gastar as tentativas da lista.
     if (rodada.parar || (rodada.enviadosNoLote === 0 && rodada.passageiros > 0)) return { enviados, fim: 'instavel' }
@@ -601,8 +667,8 @@ async function rodada(supabase: Admin, cred: CredenciaisMeta): Promise<ResumoRod
     try {
       const r = await enviarCampanha(supabase, cred, c, limite, inicio)
       enviados += r.enviados
-      // Limite diário, instabilidade e retenção valem para a conta inteira: as próximas campanhas esperam também.
-      if (r.fim === 'limite' || r.fim === 'instavel' || r.fim === 'retida') break
+      // Limite diário, instabilidade, retenção e bloqueio valem para a conta inteira: as próximas campanhas esperam também.
+      if (r.fim === 'limite' || r.fim === 'instavel' || r.fim === 'retida' || r.fim === 'bloqueio') break
     } finally {
       await supabase.from('campanhas').update({ processando_desde: null }).eq('id', c.id)
     }

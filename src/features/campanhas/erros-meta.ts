@@ -75,9 +75,29 @@ export function classeDoErro(codigo: number | null): ClasseErro {
   return ERROS[codigo]?.classe ?? 'conta'
 }
 
+/**
+ * "API access blocked" (código 200, subcódigo 5258005): a Meta bloqueia por um tempo o app inteiro —
+ * toda chamada volta assim, até /me. Não é falta de permissão do token. Em 13/11/2026 aconteceu duas
+ * vezes (~2 h cada) e passou sozinho, sem aviso no painel do app. Durante o bloqueio, nem o webhook chega.
+ */
+export function bloqueioDaMeta(codigo: number | null, original?: string | null): boolean {
+  return codigo === 200 && /api access blocked/i.test(original ?? '')
+}
+
+const BLOQUEIO_DO_APP =
+  'A Meta bloqueou por um tempo o acesso do app à API ("API access blocked"). Costuma passar sozinho — o CRM tenta de novo a cada poucos minutos, sem perder nenhum envio. Se durar mais de um dia, veja a Central de Suporte para Empresas (business.facebook.com/business-support-home).'
+
+/** Erros de permissão: o texto original da Meta diz qual permissão ou ativo falta. */
+const MOSTRAR_ORIGINAL = new Set([3, 10, 200])
+
 export function mensagemDoErro(codigo: number | null, original?: string | null): string {
-  if (codigo !== null && ERROS[codigo]) return ERROS[codigo].mensagem
-  return original?.trim() ? `Meta: ${original.trim()}` : 'A Meta não informou o motivo.'
+  const texto = original?.trim()
+  if (bloqueioDaMeta(codigo, texto)) return BLOQUEIO_DO_APP
+  if (codigo !== null && ERROS[codigo]) {
+    const base = ERROS[codigo].mensagem
+    return MOSTRAR_ORIGINAL.has(codigo) && texto ? `${base} (Meta: ${texto})` : base
+  }
+  return texto ? `Meta: ${texto}` : 'A Meta não informou o motivo.'
 }
 
 /** Motivos de recusa do modelo pela Meta. */
