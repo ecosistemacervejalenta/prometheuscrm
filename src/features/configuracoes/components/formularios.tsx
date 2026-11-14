@@ -1,80 +1,160 @@
 'use client'
 
-import { ActionForm, SubmitButton, useFormulario } from '@/components/form/action-form'
-import { Checkbox, Field, FormActions, FormSection, Input, Select, Textarea } from '@/components/form/fields'
-import { Alert } from '@/components/ui/alert'
-import { Card } from '@/components/ui/card'
+import type { ReactNode } from 'react'
+
+import { ActionForm, SubmitButton, useFormulario, type AcaoFormulario } from '@/components/form/action-form'
+import { Checkbox, Field, Input, Select } from '@/components/form/fields'
+import { Card, CardHeader } from '@/components/ui/card'
 import { formatarWhatsapp } from '@/lib/format'
 import { PLACEHOLDERS } from '@/lib/whatsapp'
 import type { Configuracoes, Perfil } from '@/types'
 
-import { cadastrarMembro, criarWebhook, salvarConfiguracoes, salvarMeuPerfil } from '../actions'
+import {
+  cadastrarMembro,
+  criarWebhook,
+  salvarCaixaVip,
+  salvarDadosLoja,
+  salvarMensagens,
+  salvarMeuPerfil,
+  salvarPagamentoPix,
+} from '../actions'
+import { EditorMensagem } from './editor-mensagem'
 import { PainelCredenciais } from './senha-temporaria'
 
-function Placeholders({ lista }: { lista: readonly string[] }) {
+/**
+ * Cartão de ajuste: um assunto, os campos dele e o próprio botão de salvar no rodapé.
+ * Salvar um cartão não mexe em nenhum outro.
+ */
+function CartaoAjuste({
+  acao,
+  titulo,
+  descricao,
+  nota,
+  botao,
+  children,
+}: {
+  acao: AcaoFormulario
+  titulo: string
+  descricao?: string
+  /** Texto do rodapé: onde o ajuste aparece ou o que ele afeta. */
+  nota?: ReactNode
+  botao: string
+  children: ReactNode
+}) {
   return (
-    <span className="flex flex-wrap gap-1">
-      Variáveis:
-      {lista.map((p) => (
-        <code key={p} className="tipo-dado rounded bg-papel px-1 text-[12px] text-ink">
-          {p}
-        </code>
-      ))}
-    </span>
+    <Card>
+      <ActionForm action={acao} classeMensagem="mx-4 mt-4 lg:mx-5 lg:mt-5">
+        <CardHeader titulo={titulo} descricao={descricao} />
+        <div className="grid gap-4 px-4 pb-5 sm:grid-cols-6 lg:px-5">{children}</div>
+        <footer className="flex flex-wrap items-center justify-between gap-3 rounded-b-cartao border-t border-linha bg-papel/60 px-4 py-3 lg:px-5">
+          <p className="min-w-0 flex-1 basis-56 text-[13px] text-suave">{nota}</p>
+          <SubmitButton>{botao}</SubmitButton>
+        </footer>
+      </ActionForm>
+    </Card>
   )
 }
 
-export function FormularioLoja({ config }: { config: Configuracoes }) {
+export function FormularioDadosLoja({ config }: { config: Configuracoes }) {
   return (
-    <Card className="px-5 pt-6 sm:px-6">
-      <ActionForm action={salvarConfiguracoes}>
-        <FormSection titulo="Loja" descricao="Usado nas mensagens e na página pública da pré-venda.">
-          <Field label="Nome da loja" name="nome_loja" obrigatorio className="sm:col-span-3">
-            <Input name="nome_loja" defaultValue={config.nome_loja} />
-          </Field>
-          <Field label="WhatsApp da loja" name="whatsapp_loja" className="sm:col-span-3" dica="Botão “falar com a loja” no link público.">
-            <Input name="whatsapp_loja" type="tel" defaultValue={config.whatsapp_loja ? formatarWhatsapp(config.whatsapp_loja) : ''} />
-          </Field>
-        </FormSection>
+    <CartaoAjuste
+      acao={salvarDadosLoja}
+      titulo="Identidade da loja"
+      nota="Aparece nas mensagens de WhatsApp e na página pública da pré-venda."
+      botao="Salvar dados da loja"
+    >
+      <Field label="Nome da loja" name="nome_loja" obrigatorio className="sm:col-span-3">
+        <Input name="nome_loja" defaultValue={config.nome_loja} />
+      </Field>
+      <Field label="WhatsApp da loja" name="whatsapp_loja" className="sm:col-span-3" dica="Botão “falar com a loja” no link público.">
+        <Input name="whatsapp_loja" type="tel" defaultValue={config.whatsapp_loja ? formatarWhatsapp(config.whatsapp_loja) : ''} />
+      </Field>
+    </CartaoAjuste>
+  )
+}
 
-        <FormSection titulo="Pagamento (PIX)" descricao="Aparece no fim do link da pré-venda e vai na mensagem de cobrança.">
-          {!config.chave_pix && (
-            <Alert tom="alerta" className="sm:col-span-6">
-              Sem chave PIX, o link da pré-venda não consegue mostrar os dados de pagamento ao cliente.
-            </Alert>
-          )}
-          <Field label="Chave PIX" name="chave_pix" className="sm:col-span-3">
-            <Input name="chave_pix" defaultValue={config.chave_pix ?? ''} placeholder="CNPJ, e-mail, telefone ou chave aleatória" />
-          </Field>
-          <Field label="Favorecido" name="nome_recebedor_pix" className="sm:col-span-3">
-            <Input name="nome_recebedor_pix" defaultValue={config.nome_recebedor_pix ?? ''} />
-          </Field>
-          <Field
-            label="WhatsApp para comprovantes"
-            name="whatsapp_comprovante"
-            className="sm:col-span-3"
-            dica="O cliente envia o comprovante do PIX para este número."
-          >
-            <Input
-              name="whatsapp_comprovante"
-              type="tel"
-              defaultValue={config.whatsapp_comprovante ? formatarWhatsapp(config.whatsapp_comprovante) : ''}
-            />
-          </Field>
-        </FormSection>
+export function FormularioPagamentoPix({ config }: { config: Configuracoes }) {
+  return (
+    <CartaoAjuste
+      acao={salvarPagamentoPix}
+      titulo="Chave PIX da loja"
+      descricao="Mostrada no fim do link da pré-venda e enviada na mensagem de cobrança."
+      nota="Com o Mercado Pago conectado, o link mostra o PIX automático e esta chave fica de reserva."
+      botao="Salvar pagamento"
+    >
+      <Field label="Chave PIX" name="chave_pix" className="sm:col-span-3">
+        <Input name="chave_pix" defaultValue={config.chave_pix ?? ''} placeholder="CNPJ, e-mail, telefone ou chave aleatória" />
+      </Field>
+      <Field label="Favorecido" name="nome_recebedor_pix" className="sm:col-span-3" dica="Nome que o cliente vê ao pagar.">
+        <Input name="nome_recebedor_pix" defaultValue={config.nome_recebedor_pix ?? ''} />
+      </Field>
+      <Field
+        label="WhatsApp para comprovantes"
+        name="whatsapp_comprovante"
+        className="sm:col-span-3"
+        dica="O cliente envia o comprovante do PIX para este número."
+      >
+        <Input
+          name="whatsapp_comprovante"
+          type="tel"
+          defaultValue={config.whatsapp_comprovante ? formatarWhatsapp(config.whatsapp_comprovante) : ''}
+        />
+      </Field>
+    </CartaoAjuste>
+  )
+}
 
-        <FormSection titulo="Mensagens de WhatsApp" descricao="Use *negrito* e as variáveis entre chaves.">
-          <Field label="Divulgação da pré-venda" name="mensagem_pre_venda" className="sm:col-span-6" dica={<Placeholders lista={PLACEHOLDERS.pre_venda} />}>
-            <Textarea name="mensagem_pre_venda" rows={6} defaultValue={config.mensagem_pre_venda} className="tipo-dado text-[13px]" />
-          </Field>
-          <Field label="Cobrança" name="mensagem_cobranca" className="sm:col-span-6" dica={<Placeholders lista={PLACEHOLDERS.cobranca} />}>
-            <Textarea name="mensagem_cobranca" rows={10} defaultValue={config.mensagem_cobranca} className="tipo-dado text-[13px]" />
-          </Field>
-        </FormSection>
+export function FormularioCaixaVip({ config }: { config: Configuracoes }) {
+  return (
+    <CartaoAjuste
+      acao={salvarCaixaVip}
+      titulo="Caixa sem pagamento"
+      descricao="A caixa que não recebe nenhum pagamento é cancelada sozinha e as cervejas voltam ao estoque (inclusive na Olist)."
+      nota="Você é avisado no sino quando alguma caixa vencer."
+      botao="Salvar prazo"
+    >
+      <Field
+        label="Cancelar depois de (dias)"
+        name="caixa_prazo_pagamento_dias"
+        className="sm:col-span-2"
+        dica="De 0 a 60. Use 0 para nunca cancelar."
+      >
+        <Input name="caixa_prazo_pagamento_dias" type="number" min={0} max={60} inputMode="numeric" defaultValue={config.caixa_prazo_pagamento_dias} />
+      </Field>
+    </CartaoAjuste>
+  )
+}
 
-        <FormActions>
-          <SubmitButton>Salvar configurações</SubmitButton>
-        </FormActions>
+export type ExemplosMensagens = { pre_venda: Record<string, string>; cobranca: Record<string, string> }
+
+export function FormularioMensagens({ config, exemplos }: { config: Configuracoes; exemplos: ExemplosMensagens }) {
+  return (
+    <Card>
+      <ActionForm action={salvarMensagens} classeMensagem="mx-4 mt-4 lg:mx-5 lg:mt-5">
+        <EditorMensagem
+          name="mensagem_pre_venda"
+          titulo="Divulgação da pré-venda"
+          descricao="Texto para divulgar cada pré-venda no WhatsApp, já com o link público."
+          valorInicial={config.mensagem_pre_venda}
+          variaveis={PLACEHOLDERS.pre_venda}
+          exemplo={exemplos.pre_venda}
+          linhas={7}
+        />
+        <EditorMensagem
+          name="mensagem_cobranca"
+          titulo="Cobrança"
+          descricao="Enviada ao cliente com os itens do pedido, o total e a forma de pagamento."
+          valorInicial={config.mensagem_cobranca}
+          variaveis={PLACEHOLDERS.cobranca}
+          exemplo={exemplos.cobranca}
+          linhas={10}
+        />
+        <footer className="flex flex-wrap items-center justify-between gap-3 rounded-b-cartao border-t border-linha bg-papel/60 px-4 py-3 lg:px-5">
+          <p className="min-w-0 flex-1 basis-56 text-[13px] text-suave">
+            Use <code className="tipo-dado text-[12px]">*negrito*</code> como no WhatsApp. Linhas que ficarem vazias somem da mensagem.
+          </p>
+          <SubmitButton>Salvar mensagens</SubmitButton>
+        </footer>
       </ActionForm>
     </Card>
   )
@@ -152,7 +232,7 @@ export function FormularioCadastroMembro() {
         </Field>
       </div>
       <div className="mt-4 flex justify-end">
-        <SubmitButton>Cadastrar e gerar senha</SubmitButton>
+        <SubmitButton variante="escuro">Cadastrar e gerar senha</SubmitButton>
       </div>
     </ActionForm>
   )
@@ -178,7 +258,7 @@ export function FormularioMeuPerfil({ perfil }: { perfil: Perfil }) {
         </Field>
       </div>
       <div className="mt-4 flex justify-end">
-        <SubmitButton variante="secundario">Salvar meu perfil</SubmitButton>
+        <SubmitButton>Salvar meu perfil</SubmitButton>
       </div>
     </ActionForm>
   )

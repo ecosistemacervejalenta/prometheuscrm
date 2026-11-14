@@ -24,7 +24,7 @@ const esquemaConexao = z.object({
 })
 
 function atualizarTela() {
-  revalidatePath('/configuracoes/mercado-pago')
+  revalidatePath('/configuracoes', 'layout')
 }
 
 export async function salvarConexaoMercadoPago(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {

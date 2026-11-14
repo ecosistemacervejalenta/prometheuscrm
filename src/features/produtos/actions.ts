@@ -12,7 +12,7 @@ import { esquemaKit, lerKit, MAX_FOTOS, type CervejaDoKit } from './kit'
 import { esquemaCerveja, esquemaCervejaNova, esquemaProduto, TAMANHO_MAXIMO_IMAGEM, TIPOS_IMAGEM } from './schema'
 
 const BUCKET = 'produtos'
-const CAMPOS_CERVEJA = 'id, nome, estilo, cervejaria, volume_ml, teor_alcoolico, descricao, preco, imagem_url, fotos, cervejas_do_kit'
+const CAMPOS_CERVEJA = 'id, nome, estilo, cervejaria, volume_ml, teor_alcoolico, descricao, preco, imagem_url, fotos, cervejas_do_kit, olist_id'
 
 type Supabase = Awaited<ReturnType<typeof exigirEquipe>>['supabase']
 
@@ -80,6 +80,10 @@ export type CervejaSalva = {
   imagem_url: string | null
   fotos: string[]
   cervejas_do_kit: CervejaDoKit[]
+  /** Produto vinculado na Olist: o estoque de lá vale na pré-venda. */
+  olist_id: number | null
+  /** Unidades que ainda dá para vender pela Olist (já descontado o que o CRM vendeu). */
+  estoque_olist?: number | null
 }
 
 export type ResultadoCerveja =

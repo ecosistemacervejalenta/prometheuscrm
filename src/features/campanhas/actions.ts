@@ -14,7 +14,7 @@ import { STATUS_ATIVOS, STATUS_EXCLUIVEIS } from './status'
 
 function atualizarTelas(campanhaId?: string) {
   revalidatePath('/campanhas')
-  revalidatePath('/configuracoes/whatsapp-oficial')
+  revalidatePath('/configuracoes', 'layout')
   if (campanhaId) revalidatePath(`/campanhas/${campanhaId}`)
 }
 

@@ -16,11 +16,11 @@ export async function GET(request: NextRequest, contexto: RouteContext<'/api/mar
   const { canal: slug } = await contexto.params
   const canal = marketplaceDoSlug(slug)
   const voltar = (status: string) => {
-    const resposta = NextResponse.redirect(`${site}/configuracoes/marketplaces?marketplace=${slug}&status=${status}`)
+    const resposta = NextResponse.redirect(`${site}/configuracoes/${slug}?status=${status}`)
     resposta.cookies.set(cookieAutorizacao(slug), '', { path: '/api/marketplaces', maxAge: 0 })
     return resposta
   }
-  if (!canal) return NextResponse.redirect(`${site}/configuracoes/marketplaces`)
+  if (!canal) return NextResponse.redirect(`${site}/configuracoes`)
 
   const { searchParams } = request.nextUrl
   if (searchParams.get('error')) return voltar('cancelado')

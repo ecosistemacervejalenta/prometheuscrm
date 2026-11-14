@@ -31,5 +31,8 @@ export const config: VercelConfig = {
     { path: '/api/cron/marketplaces', schedule: '20 10 * * *' },
     // Mercado Pago: confere os PIX pendentes caso algum aviso do webhook se perca (a cada 10 min).
     { path: '/api/cron/mercado-pago', schedule: '*/10 * * * *' },
+    // Estoque da Olist nas pré-vendas: envia as baixas/devoluções que ficaram na fila, cancela
+    // Caixas VIP vencidas sem pagamento e atualiza o estoque das pré-vendas ativas (a cada 5 min).
+    { path: '/api/cron/olist-estoque', schedule: '*/5 * * * *' },
   ],
 }

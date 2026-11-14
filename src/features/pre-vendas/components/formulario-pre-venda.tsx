@@ -1,6 +1,6 @@
 'use client'
 
-import { Beer, ImagePlus, Pencil, Plus } from 'lucide-react'
+import { Beer, ImagePlus, PackageSearch, Pencil, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { useRef, useState } from 'react'
 
@@ -8,11 +8,12 @@ import { ActionForm, SubmitButton, type AcaoFormulario } from '@/components/form
 import { Field, FormActions, FormSection, Input, Select, Textarea } from '@/components/form/fields'
 import { Button, ButtonLink } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { JanelaOlist } from '@/features/olist/components/janela-olist'
 import type { CervejaSalva } from '@/features/produtos/actions'
 import { FotoProduto } from '@/features/produtos/components/foto-produto'
 import { JanelaCerveja, type ContextoDoLink } from '@/features/produtos/components/janela-cerveja'
 import { detalhesDa } from '@/features/pre-vendas/publico/cartao-cerveja'
-import { formatarMoeda, lerDinheiro, valorParaInput } from '@/lib/format'
+import { formatarMoeda, formatarNumero, lerDinheiro, valorParaInput } from '@/lib/format'
 import { CANAIS } from '@/lib/rotulos'
 import { cn } from '@/lib/utils'
 import type { CanalVenda, PreVenda } from '@/types'
@@ -37,6 +38,7 @@ export function FormularioPreVenda({
   encerraEmLocal,
   nomeLoja = 'Prometheus',
   freteVip = 15,
+  olistConectado = false,
 }: {
   acao: AcaoFormulario
   produtos: Produto[]
@@ -45,6 +47,8 @@ export function FormularioPreVenda({
   encerraEmLocal?: string
   nomeLoja?: string
   freteVip?: number
+  /** Olist conectado: mostra "Buscar na Olist" (produto com foto e estoque de lá). */
+  olistConectado?: boolean
 }) {
   // Estado inicial calculado uma única vez: linhas por produto + ordem de exibição
   // (incluídos primeiro, na ordem salva). A ordem não muda enquanto o usuário marca itens.
@@ -75,6 +79,7 @@ export function FormularioPreVenda({
   const [linhas, setLinhas] = useState(inicial.linhasIniciais)
   const [ordem, setOrdem] = useState(() => inicial.ordem.map((p) => p.id))
   const [janela, setJanela] = useState<{ cerveja?: Produto; contexto: ContextoDoLink } | null>(null)
+  const [buscaOlist, setBuscaOlist] = useState(false)
   const raiz = useRef<HTMLDivElement>(null)
   const porId = new Map(catalogo.map((p) => [p.id, p]))
   const ordenados = ordem.flatMap((id) => porId.get(id) ?? [])
@@ -85,7 +90,8 @@ export function FormularioPreVenda({
       produto_id: p.id,
       preco: lerDinheiro(linhas[p.id].preco || '0'),
       limite_por_cliente: linhas[p.id].limite || null,
-      quantidade_disponivel: linhas[p.id].estoque || null,
+      // Vinculada à Olist: vale o estoque de lá (sem quantidade fixa na pré-venda).
+      quantidade_disponivel: p.olist_id ? null : linhas[p.id].estoque || null,
     })),
   )
 
@@ -114,10 +120,19 @@ export function FormularioPreVenda({
     })
   }
 
-  /** Cerveja cadastrada na janela: entra no catálogo já marcada (depois das já incluídas). */
-  function aoSalvarCerveja(cerveja: Produto) {
-    if (porId.has(cerveja.id)) {
-      setCatalogo((atual) => atual.map((p) => (p.id === cerveja.id ? cerveja : p)))
+  /**
+   * Cerveja cadastrada na janela ou trazida da Olist: entra no catálogo já marcada (depois das
+   * já incluídas). Se já estava no catálogo, atualiza os dados (e, vinda da Olist, marca).
+   */
+  function aoSalvarCerveja(cerveja: Produto, marcar = false) {
+    const anterior = porId.get(cerveja.id)
+    if (anterior) {
+      const atualizada = { ...cerveja, estoque_olist: cerveja.estoque_olist ?? anterior.estoque_olist }
+      setCatalogo((atual) => atual.map((p) => (p.id === cerveja.id ? atualizada : p)))
+      if (marcar && !linhas[cerveja.id]?.incluido) {
+        setLinhas((atual) => ({ ...atual, [cerveja.id]: { ...atual[cerveja.id], incluido: true } }))
+        setOrdem((atual) => [...atual.filter((id) => linhas[id]?.incluido), cerveja.id, ...atual.filter((id) => id !== cerveja.id && !linhas[id]?.incluido)])
+      }
       return
     }
     setCatalogo((atual) => [...atual, cerveja])
@@ -127,6 +142,12 @@ export function FormularioPreVenda({
     }))
     setOrdem((atual) => [...atual.filter((id) => linhas[id]?.incluido), cerveja.id, ...atual.filter((id) => !linhas[id]?.incluido)])
   }
+
+  const botaoOlist = olistConectado && (
+    <Button variante="escuro" className="max-sm:w-full" onClick={() => setBuscaOlist(true)}>
+      <PackageSearch /> Buscar na Olist
+    </Button>
+  )
 
   return (
     <Card className="px-5 pt-6 sm:px-6">
@@ -180,7 +201,7 @@ export function FormularioPreVenda({
 
           <FormSection
             titulo="Cervejas"
-            descricao={`${selecionados.length} selecionada(s). Cadastre aqui mesmo, com foto e descrição. Preço da pré-venda, limite por cliente e quantidade total são opcionais.`}
+            descricao={`${selecionados.length} selecionada(s). ${olistConectado ? 'Traga da Olist (foto e estoque de lá) ou cadastre aqui mesmo.' : 'Cadastre aqui mesmo, com foto e descrição.'} Preço da pré-venda, limite por cliente e quantidade total são opcionais.`}
           >
             <Field label="Cervejas da pré-venda" name="itens" className="sm:col-span-6">
               {catalogo.length === 0 ? (
@@ -189,10 +210,17 @@ export function FormularioPreVenda({
                     <Beer className="size-6" aria-hidden />
                   </span>
                   <p className="font-semibold">Nenhuma cerveja cadastrada ainda</p>
-                  <p className="max-w-sm text-sm text-suave">Cadastre com foto e descrição — ela já entra nesta pré-venda e fica salva no catálogo.</p>
-                  <Button variante="escuro" onClick={() => abrirJanela()}>
-                    <Plus /> Cadastrar a primeira cerveja
-                  </Button>
+                  <p className="max-w-sm text-sm text-suave">
+                    {olistConectado
+                      ? 'Traga da Olist com foto e estoque, ou cadastre com foto e descrição. Ela já entra nesta pré-venda e fica salva no catálogo.'
+                      : 'Cadastre com foto e descrição — ela já entra nesta pré-venda e fica salva no catálogo.'}
+                  </p>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {botaoOlist}
+                    <Button variante={olistConectado ? 'secundario' : 'escuro'} onClick={() => abrirJanela()}>
+                      <Plus /> Cadastrar a primeira cerveja
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -200,6 +228,7 @@ export function FormularioPreVenda({
                     {ordenados.map((p) => {
                       const linha = linhas[p.id]
                       const incompleta = !p.imagem_url || !p.descricao
+                      const estoqueOlist = p.olist_id ? (p.estoque_olist ?? null) : undefined
                       return (
                         <li key={p.id} className={cn('grid gap-3 p-3 sm:grid-cols-[1fr_auto] sm:items-center', linha.incluido && 'bg-volt-50')}>
                           <div className="flex min-w-0 items-center gap-3">
@@ -217,6 +246,12 @@ export function FormularioPreVenda({
                                   {detalhesDa(p).join(' · ') || 'Sem detalhes'} · catálogo{' '}
                                   {formatarMoeda(p.preco)}
                                 </span>
+                                {estoqueOlist !== undefined && (
+                                  <span className={cn('tipo-dado block text-[12px]', estoqueOlist !== null && estoqueOlist <= 0 ? 'text-alerta' : 'text-volt-700')}>
+                                    Olist ·{' '}
+                                    {estoqueOlist === null ? 'estoque ainda não lido' : estoqueOlist <= 0 ? 'sem estoque' : `${formatarNumero(estoqueOlist)} em estoque`}
+                                  </span>
+                                )}
                               </span>
                             </label>
                             <button
@@ -252,25 +287,40 @@ export function FormularioPreVenda({
                                   className="tipo-dado mt-1 h-9 w-full rounded-lg border border-linha bg-superficie px-2 text-ink"
                                 />
                               </label>
-                              <label className="text-[11px] font-semibold text-suave">
-                                Qtd. total
-                                <input
-                                  value={linha.estoque}
-                                  onChange={(e) => alterar(p.id, 'estoque', e.target.value.replace(/\D/g, ''))}
-                                  inputMode="numeric"
-                                  placeholder="∞"
-                                  className="tipo-dado mt-1 h-9 w-full rounded-lg border border-linha bg-superficie px-2 text-ink"
-                                />
-                              </label>
+                              {estoqueOlist !== undefined ? (
+                                <div className="text-[11px] font-semibold text-suave">
+                                  Estoque
+                                  <p
+                                    className="tipo-dado mt-1 flex h-9 items-center rounded-lg bg-papel px-2 text-ink"
+                                    title="Vale o estoque da Olist: cada venda baixa lá e o link para de vender quando acabar."
+                                  >
+                                    da Olist
+                                  </p>
+                                </div>
+                              ) : (
+                                <label className="text-[11px] font-semibold text-suave">
+                                  Qtd. total
+                                  <input
+                                    value={linha.estoque}
+                                    onChange={(e) => alterar(p.id, 'estoque', e.target.value.replace(/\D/g, ''))}
+                                    inputMode="numeric"
+                                    placeholder="∞"
+                                    className="tipo-dado mt-1 h-9 w-full rounded-lg border border-linha bg-superficie px-2 text-ink"
+                                  />
+                                </label>
+                              )}
                             </div>
                           )}
                         </li>
                       )
                     })}
                   </ul>
-                  <Button className="mt-3 max-sm:w-full" onClick={() => abrirJanela()}>
-                    <Plus /> Cadastrar nova cerveja
-                  </Button>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {botaoOlist}
+                    <Button className="max-sm:w-full" onClick={() => abrirJanela()}>
+                      <Plus /> Cadastrar nova cerveja
+                    </Button>
+                  </div>
                 </>
               )}
             </Field>
@@ -291,6 +341,13 @@ export function FormularioPreVenda({
           precoNaPreVenda={janela.cerveja ? lerDinheiro(linhas[janela.cerveja.id]?.preco || '0') || janela.cerveja.preco : undefined}
           aoSalvar={aoSalvarCerveja}
           aoFechar={() => setJanela(null)}
+        />
+      )}
+      {buscaOlist && (
+        <JanelaOlist
+          jaAdicionados={selecionados.flatMap((p) => (p.olist_id ? [p.olist_id] : []))}
+          aoImportar={(cerveja) => aoSalvarCerveja(cerveja, true)}
+          aoFechar={() => setBuscaOlist(false)}
         />
       )}
     </Card>

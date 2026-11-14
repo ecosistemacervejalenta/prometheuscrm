@@ -49,7 +49,7 @@ export default async function PaginaAtendimento({ searchParams }: PageProps<'/at
     <TemaAtendimento inicial={cookiesSalvos.get(COOKIE_TEMA_ATENDIMENTO)?.value === 'escuro'}>
       {!uazapiConfigurada() && (
         <Alert tom="alerta" titulo="WhatsApp ainda não conectado" className="mb-3">
-          Cadastre UAZAPI_URL e UAZAPI_TOKEN na Vercel e ative o webhook em Configurações › Integrações.
+          Cadastre UAZAPI_URL e UAZAPI_TOKEN na Vercel e ative o webhook em Configurações › WhatsApp da loja.
         </Alert>
       )}
       <div
@@ -93,7 +93,7 @@ export default async function PaginaAtendimento({ searchParams }: PageProps<'/at
               Mensagens novas entram na <strong className="text-ink">Fila</strong>. Responder ou clicar em Assumir coloca o atendimento com você.
             </p>
             {perfil.papel === 'admin' && (
-              <ButtonLink href="/configuracoes/integracoes#whatsapp" tamanho="sm" className="mt-5">
+              <ButtonLink href="/configuracoes/whatsapp" tamanho="sm" className="mt-5">
                 <Settings /> Configurar WhatsApp
               </ButtonLink>
             )}

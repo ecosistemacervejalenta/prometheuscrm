@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 
 import { PageHeader } from '@/components/ui/page-header'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
+import { statusOlist } from '@/features/olist/queries'
 import { salvarPreVenda } from '@/features/pre-vendas/actions'
 import { FormularioPreVenda } from '@/features/pre-vendas/components/formulario-pre-venda'
 import { obterPreVendaParaEdicao } from '@/features/pre-vendas/queries'
@@ -13,7 +14,12 @@ export const metadata: Metadata = { title: 'Editar pré-venda' }
 
 export default async function PaginaEditarPreVenda({ params }: PageProps<'/pre-vendas/[id]/editar'>) {
   const { id } = await params
-  const [preVenda, produtosAtivos, config] = await Promise.all([obterPreVendaParaEdicao(id), opcoesProdutos(), obterConfiguracoes()])
+  const [preVenda, produtosAtivos, config, olist] = await Promise.all([
+    obterPreVendaParaEdicao(id),
+    opcoesProdutos(),
+    obterConfiguracoes(),
+    statusOlist().catch(() => null),
+  ])
   if (!preVenda) notFound()
 
   // Mantém na lista produtos já ofertados mesmo que tenham sido desativados depois.
@@ -34,6 +40,7 @@ export default async function PaginaEditarPreVenda({ params }: PageProps<'/pre-v
         encerraEmLocal={isoParaLocal(preVenda.encerra_em)}
         nomeLoja={config.nome_loja}
         freteVip={Number(config.frete_vip_valor)}
+        olistConectado={Boolean(olist?.conectado)}
       />
     </>
   )

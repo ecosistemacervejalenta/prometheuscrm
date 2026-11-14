@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { erroJson, verificarChave } from '@/features/integracoes/api-auth'
 import { agendarProcessamentoDeEventos } from '@/features/integracoes/eventos'
+import { agendarFilaEstoqueOlist } from '@/features/olist/estoque'
 import { envServidor } from '@/lib/env.server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -44,6 +45,7 @@ export async function PATCH(request: NextRequest, contexto: RouteContext<'/api/v
   if (!data) return erroJson('Pedido não encontrado.', 404)
 
   agendarProcessamentoDeEventos()
+  if (dados.data.status) agendarFilaEstoqueOlist() // cancelar/reabrir mexe no estoque da Olist
   const { data: pedido } = await db.rpc('pedido_json', { p_pedido_id: id })
   return NextResponse.json({ dados: pedido })
 }

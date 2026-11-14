@@ -173,7 +173,7 @@ export function PainelVendasPorCanal({
       {olist?.expirada && (
         <Alert tom="erro" titulo="A conexão com o Olist expirou">
           Os números do Mercado Livre, Shopee e Loja Virtual podem estar desatualizados.{' '}
-          <Link href="/configuracoes/integracoes" className="font-semibold text-ink underline underline-offset-2">
+          <Link href="/configuracoes/olist" className="font-semibold text-ink underline underline-offset-2">
             Reconectar o Olist
           </Link>
         </Alert>
@@ -231,7 +231,7 @@ export function PainelVendasPorCanal({
                     : `${listaPendentes} entram no total quando o Olist for conectado.`}{' '}
                 {!olist?.conectado && !comErro && (
                   <>
-                    <Link href="/configuracoes/integracoes" className="font-semibold whitespace-nowrap text-volt-700 hover:text-ink">
+                    <Link href="/configuracoes/olist" className="font-semibold whitespace-nowrap text-volt-700 hover:text-ink">
                       Conectar o Olist
                     </Link>
                     {' · '}

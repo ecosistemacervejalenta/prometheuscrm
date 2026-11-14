@@ -198,7 +198,7 @@ export function GuiaShopee({ status, site }: { status: StatusMarketplace; site: 
               },
               {
                 campo: 'Your client user interface screenshot',
-                resposta: 'Um print desta tela (Configurações › Marketplaces) ou da Visão geral do CRM.',
+                resposta: 'Um print desta tela (Configurações › Shopee) ou da Visão geral do CRM.',
               },
               { campo: 'Test / Live Redirect URL Domain', resposta: <>O mesmo domínio do passo anterior: {dominio}</> },
               {

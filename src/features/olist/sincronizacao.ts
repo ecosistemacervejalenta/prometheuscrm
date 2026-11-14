@@ -5,7 +5,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import type { Database } from '@/types/database.types'
 
 import { listarPedidos, paraPedidoErp } from './api'
-import { ConexaoOlistExpirada, renovarTokens } from './oauth'
+import { ConexaoOlistExpirada } from './oauth'
+import { obterTokenOlist } from './token'
 
 /**
  * Sincroniza os pedidos do Olist para a tabela pedidos_erp.
@@ -74,22 +75,8 @@ export async function sincronizarOlist(modo: ModoSincronizacao = 'padrao'): Prom
   }
 
   try {
-    let accessToken = conexao.access_token
-    const expiraEm = conexao.access_expira_em ? new Date(conexao.access_expira_em).getTime() : 0
-    if (!accessToken || expiraEm < Date.now() + 5 * 60_000) {
-      const tokens = await renovarTokens(conexao.refresh_token)
-      accessToken = tokens.accessToken
-      const { error } = await supabase
-        .from('integracao_olist')
-        .update({
-          access_token: tokens.accessToken,
-          refresh_token: tokens.refreshToken,
-          access_expira_em: tokens.accessExpiraEm,
-          refresh_expira_em: tokens.refreshExpiraEm,
-        })
-        .eq('id', 1)
-      if (error) throw error
-    }
+    // Renovação com trava: a fila de estoque das pré-vendas também usa o token.
+    const accessToken = await obterTokenOlist(supabase)
 
     const hoje = hojeISO()
     const completa = modo === 'completa' || !conexao.sincronizado_ate

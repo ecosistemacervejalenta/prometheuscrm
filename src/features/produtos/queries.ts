@@ -35,24 +35,30 @@ export async function obterProduto(id: string) {
   return data
 }
 
+const CAMPOS_OPCAO = 'id, nome, estilo, cervejaria, volume_ml, teor_alcoolico, descricao, preco, imagem_url, ativo, fotos, cervejas_do_kit, olist_id'
+
+type Supabase = Awaited<ReturnType<typeof exigirEquipe>>['supabase']
+
+/** Estoque da Olist (já descontado o que o CRM vendeu) dos produtos vinculados. */
+async function comEstoqueOlist<T extends { id: string; olist_id: number | null }>(supabase: Supabase, produtos: T[]) {
+  const vinculados = produtos.filter((p) => p.olist_id).map((p) => p.id)
+  if (vinculados.length === 0) return produtos.map((p) => ({ ...p, estoque_olist: null as number | null }))
+  const { data } = await supabase.rpc('estoques_olist_produtos', { p_produto_ids: vinculados })
+  const estoque = new Map((data ?? []).map((e) => [e.produto_id, e.estoque]))
+  return produtos.map((p) => ({ ...p, estoque_olist: estoque.get(p.id) ?? null }))
+}
+
 /** Produtos ativos para montar pré-vendas e pedidos. */
 export async function opcoesProdutos() {
   const { supabase } = await exigirEquipe()
-  const { data } = await supabase
-    .from('produtos')
-    .select('id, nome, estilo, cervejaria, volume_ml, teor_alcoolico, descricao, preco, imagem_url, ativo, fotos, cervejas_do_kit')
-    .eq('ativo', true)
-    .order('nome')
-  return (data ?? []).map(paraCerveja)
+  const { data } = await supabase.from('produtos').select(CAMPOS_OPCAO).eq('ativo', true).order('nome')
+  return comEstoqueOlist(supabase, (data ?? []).map(paraCerveja))
 }
 
 /** Produtos específicos (inclusive inativos) — ex.: itens antigos de uma pré-venda. */
 export async function produtosPorIds(ids: string[]) {
   if (ids.length === 0) return []
   const { supabase } = await exigirEquipe()
-  const { data } = await supabase
-    .from('produtos')
-    .select('id, nome, estilo, cervejaria, volume_ml, teor_alcoolico, descricao, preco, imagem_url, ativo, fotos, cervejas_do_kit')
-    .in('id', ids)
-  return (data ?? []).map(paraCerveja)
+  const { data } = await supabase.from('produtos').select(CAMPOS_OPCAO).in('id', ids)
+  return comEstoqueOlist(supabase, (data ?? []).map(paraCerveja))
 }

@@ -42,10 +42,10 @@ export function FormularioCredenciais({
         </Field>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <SubmitButton>
+        <SubmitButton variante="escuro">
           <Save /> Salvar dados do app
         </SubmitButton>
-        <p className="text-[13px] text-suave">A chave fica criptografada no banco — ninguém consegue vê-la de novo pela tela.</p>
+        <p className="min-w-0 flex-1 basis-56 text-[13px] text-suave">A chave fica criptografada no banco — ninguém consegue vê-la de novo pela tela.</p>
       </div>
     </ActionForm>
   )

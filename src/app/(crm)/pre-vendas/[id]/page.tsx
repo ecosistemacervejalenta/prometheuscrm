@@ -30,6 +30,12 @@ export async function generateMetadata({ params }: PageProps<'/pre-vendas/[id]'>
   return { title: pv?.titulo ?? 'Pré-venda' }
 }
 
+/** Estoque da Olist já descontado o que o CRM vendeu e ainda não chegou lá. */
+function olistTexto(estoque: number | null) {
+  if (estoque === null) return 'estoque da Olist ainda não lido'
+  return estoque <= 0 ? 'sem estoque na Olist' : `${formatarNumero(estoque)} em estoque na Olist`
+}
+
 export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/[id]'>) {
   const { id } = await params
   const [{ perfil }, pv, itens, pedidos, config, basePix] = await Promise.all([
@@ -111,7 +117,10 @@ export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/
       </div>
 
       <Card className="mb-6">
-        <CardHeader titulo="Cervejas da pré-venda" descricao="Vendido e saldo por item." />
+        <CardHeader
+          titulo="Cervejas da pré-venda"
+          descricao={itens.some((i) => i.olist_id) ? 'Vendido e saldo por item. Cervejas da Olist usam o estoque de lá: cada venda baixa e cada cancelamento devolve.' : 'Vendido e saldo por item.'}
+        />
         <ListaMobile>
           {itens.map((i) => {
             const total = i.quantidade_disponivel
@@ -126,7 +135,7 @@ export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/
                   </div>
                   <p className="tipo-dado text-[12px] text-suave">
                     {formatarNumero(i.vendido)} vendido(s)
-                    {total ? ` · restam ${formatarNumero(i.restante)}` : ''}
+                    {i.olist_id ? ` · ${olistTexto(i.estoque_olist)}` : total ? ` · restam ${formatarNumero(i.restante)}` : ''}
                     {i.limite_por_cliente ? ` · máx. ${i.limite_por_cliente}/cliente` : ''}
                   </p>
                   {progresso !== null && (
@@ -168,7 +177,11 @@ export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/
                   <TD className="min-w-48">
                     <p className="tipo-dado text-[13px]">
                       {formatarNumero(i.vendido)}
-                      {total ? ` de ${formatarNumero(total)} · restam ${formatarNumero(i.restante)}` : ' · sem limite'}
+                      {i.olist_id
+                        ? ` · ${olistTexto(i.estoque_olist)}`
+                        : total
+                          ? ` de ${formatarNumero(total)} · restam ${formatarNumero(i.restante)}`
+                          : ' · sem limite'}
                     </p>
                     {progresso !== null && (
                       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-papel">

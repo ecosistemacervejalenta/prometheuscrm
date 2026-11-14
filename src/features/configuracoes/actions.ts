@@ -14,25 +14,65 @@ import { enviarParaWebhook, processarFilaDeEventos } from '../integracoes/evento
 
 // Loja --------------------------------------------------------------------------
 
-const esquemaConfiguracoes = z.object({
+// Cada seção das Configurações salva só os próprios campos: mexer em uma não toca nas outras.
+
+const esquemaDadosLoja = z.object({
   nome_loja: texto('Informe o nome da loja.'),
   whatsapp_loja: whatsappOpcional,
+})
+
+const esquemaPagamentoPix = z.object({
   chave_pix: textoOpcional,
   nome_recebedor_pix: textoOpcional,
   whatsapp_comprovante: whatsappOpcional,
+})
+
+const esquemaMensagens = z.object({
   mensagem_pre_venda: texto('A mensagem não pode ficar vazia.'),
   mensagem_cobranca: texto('A mensagem não pode ficar vazia.'),
 })
 
-export async function salvarConfiguracoes(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
+const esquemaCaixaVip = z.object({
+  caixa_prazo_pagamento_dias: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? 0 : Number(String(v).replace(/\D/g, ''))),
+    z.number().int().min(0, 'Use 0 a 60 dias.').max(60, 'Use 0 a 60 dias.'),
+  ),
+})
+
+type CamposDaLoja = z.infer<typeof esquemaDadosLoja> &
+  z.infer<typeof esquemaPagamentoPix> &
+  z.infer<typeof esquemaMensagens> &
+  z.infer<typeof esquemaCaixaVip>
+
+async function salvarParteDaLoja(
+  esquema: z.ZodType<Partial<CamposDaLoja>>,
+  formData: FormData,
+  mensagem: string,
+): Promise<EstadoAcao> {
   const { supabase } = await exigirEquipe()
-  const dados = esquemaConfiguracoes.safeParse(formParaObjeto(formData))
+  const dados = esquema.safeParse(formParaObjeto(formData))
   if (!dados.success) return errosDeValidacao(dados.error)
 
   const { error } = await supabase.from('configuracoes').update(dados.data).eq('id', 1)
   if (error) return falha(traduzirErro(error))
   revalidatePath('/', 'layout')
-  return sucesso('Configurações salvas.')
+  return sucesso(mensagem)
+}
+
+export async function salvarDadosLoja(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
+  return salvarParteDaLoja(esquemaDadosLoja, formData, 'Dados da loja salvos.')
+}
+
+export async function salvarPagamentoPix(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
+  return salvarParteDaLoja(esquemaPagamentoPix, formData, 'Pagamento por PIX salvo.')
+}
+
+export async function salvarMensagens(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
+  return salvarParteDaLoja(esquemaMensagens, formData, 'Mensagens salvas.')
+}
+
+export async function salvarCaixaVip(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
+  return salvarParteDaLoja(esquemaCaixaVip, formData, 'Prazo da Caixa VIP salvo.')
 }
 
 // Webhooks (n8n, Zapier, App...) --------------------------------------------------
@@ -104,7 +144,7 @@ export async function processarFilaAgora(): Promise<EstadoAcao> {
   await exigirEquipe()
   try {
     const r = await processarFilaDeEventos(100)
-    revalidatePath('/configuracoes/integracoes')
+    revalidatePath('/configuracoes', 'layout')
     return sucesso(`Fila processada: ${r.enviados} enviado(s), ${r.falhas} falha(s), ${r.ignorados} sem destino.`)
   } catch {
     return falha('Configure SUPABASE_SECRET_KEY no servidor para processar a fila.')
@@ -118,7 +158,7 @@ export async function reenviarEvento(id: string): Promise<EstadoAcao> {
     .update({ status: 'pendente', tentativas: 0, proxima_tentativa_em: new Date().toISOString() })
     .eq('id', id)
   if (error) return falha(traduzirErro(error))
-  revalidatePath('/configuracoes/integracoes')
+  revalidatePath('/configuracoes', 'layout')
   return sucesso('Evento voltou para a fila.')
 }
 
@@ -176,7 +216,7 @@ export async function cadastrarMembro(_: EstadoAcao, formData: FormData): Promis
     .eq('id', data.user.id)
   if (erroPerfil) return falha(traduzirErro(erroPerfil))
 
-  revalidatePath('/configuracoes/equipe')
+  revalidatePath('/configuracoes', 'layout')
   return { ok: true, mensagem: `Acesso de ${nome} criado.`, credenciais: await credenciais(nome, email, senha) }
 }
 
@@ -197,7 +237,7 @@ export async function gerarNovaSenha(id: string): Promise<EstadoAcao> {
   const { error: erroPerfil } = await admin.from('perfis').update({ trocar_senha: true }).eq('id', id)
   if (erroPerfil) return falha(traduzirErro(erroPerfil))
 
-  revalidatePath('/configuracoes/equipe')
+  revalidatePath('/configuracoes', 'layout')
   return {
     ok: true,
     mensagem: 'Nova senha temporária gerada.',
@@ -213,7 +253,7 @@ export async function atualizarAcessoMembro(
   if (id === perfil.id) return falha('Você não pode alterar o seu próprio acesso.')
   const { error } = await supabase.from('perfis').update(mudanca).eq('id', id)
   if (error) return falha(traduzirErro(error))
-  revalidatePath('/configuracoes/equipe')
+  revalidatePath('/configuracoes', 'layout')
   return sucesso('Acesso atualizado.')
 }
 

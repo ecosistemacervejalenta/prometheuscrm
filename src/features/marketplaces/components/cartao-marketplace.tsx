@@ -1,11 +1,11 @@
 import { Link2, RefreshCw, Unplug } from 'lucide-react'
-import type { ReactNode } from 'react'
 
 import { ActionButton } from '@/components/ui/action-button'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button, classesBotao } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Dado, Dados, SomenteAdmin, ZonaDeRisco } from '@/features/configuracoes/components/blocos'
 import { diasDesde } from '@/lib/datas'
 import { formatarData, formatarDataHora } from '@/lib/format'
 
@@ -31,43 +31,24 @@ const CAMPOS: Record<IdMarketplace, { rotuloId: string; dicaId: string; rotuloSe
   },
 }
 
-function Dado({ rotulo, children }: { rotulo: string; children: ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <dt className="tipo-rotulo text-suave">{rotulo}</dt>
-      <dd className="mt-0.5 truncate">{children}</dd>
-    </div>
-  )
+/** Situação da conexão em uma etiqueta (cabeçalho da seção e visão geral). */
+export function situacaoMarketplace(status: StatusMarketplace): { tom: 'sucesso' | 'alerta' | 'perigo'; rotulo: string } {
+  if (status.conectado) return status.ultimo_erro ? { tom: 'perigo', rotulo: 'Com erro' } : { tom: 'sucesso', rotulo: 'Conectado' }
+  if (!status.configurado) return { tom: 'alerta', rotulo: 'Não conectado' }
+  return { tom: 'alerta', rotulo: status.ultimo_erro ? 'Reconectar' : 'Pronto para conectar' }
 }
 
-/** Conexão com um marketplace: conta autorizada, ações e o formulário com os dados do app. */
-export function CartaoMarketplace({
-  canal,
-  status,
-  descricao,
-  ehAdmin,
-}: {
-  canal: IdMarketplace
-  status: StatusMarketplace
-  descricao: string
-  ehAdmin: boolean
-}) {
+export function SeloMarketplace({ status }: { status: StatusMarketplace }) {
+  const { tom, rotulo } = situacaoMarketplace(status)
+  return <Badge tom={tom} ponto>{rotulo}</Badge>
+}
+
+/** Conta autorizada no marketplace e as ações do dia a dia (conectar, testar). */
+export function ConexaoMarketplace({ canal, status, descricao, ehAdmin }: { canal: IdMarketplace; status: StatusMarketplace; descricao: string; ehAdmin: boolean }) {
   const { nome, slug } = MARKETPLACES[canal]
   // diasDesde é positivo para o passado: negativo aqui = dias que faltam.
   const diasParaVencer = status.autorizacao_expira_em ? -(diasDesde(status.autorizacao_expira_em) ?? 0) : null
   const venceLogo = diasParaVencer !== null && diasParaVencer <= DIAS_AVISO_AUTORIZACAO
-
-  const selo = status.conectado ? (
-    status.ultimo_erro ? (
-      <Badge tom="perigo" ponto>Com erro</Badge>
-    ) : (
-      <Badge tom="sucesso" ponto>Conectado</Badge>
-    )
-  ) : status.configurado ? (
-    <Badge tom="alerta" ponto>{status.ultimo_erro ? 'Reconectar' : 'Pronto para conectar'}</Badge>
-  ) : (
-    <Badge tom="alerta" ponto>Falta configurar</Badge>
-  )
 
   const rotuloConectar = status.conectado || status.ultimo_erro ? 'Reconectar' : `Conectar ${nome}`
   const botaoConectar = !ehAdmin ? null : status.configurado ? (
@@ -86,10 +67,10 @@ export function CartaoMarketplace({
 
   return (
     <Card>
-      <CardHeader titulo={nome} descricao={descricao} acoes={selo} />
-      <CardContent className="space-y-4">
-        {status.conectado && (
-          <dl className="grid grid-cols-2 gap-3 rounded-xl bg-papel p-4 text-[14px] sm:grid-cols-4">
+      <CardHeader titulo="Conexão" descricao={descricao} />
+      <CardContent className="space-y-4 text-sm">
+        {status.conectado ? (
+          <Dados colunas={4}>
             <Dado rotulo={canal === 'shopee' ? 'Loja' : 'Conta'}>{status.conta_nome ?? status.conta_id ?? '—'}</Dado>
             <Dado rotulo="Conectado em">{formatarDataHora(status.conectado_em)}</Dado>
             <Dado rotulo="Último teste">{status.verificado_em ? formatarDataHora(status.verificado_em) : '—'}</Dado>
@@ -104,7 +85,13 @@ export function CartaoMarketplace({
                 'automática, todo dia'
               )}
             </Dado>
-          </dl>
+          </Dados>
+        ) : (
+          <p className="text-suave">
+            {status.configurado
+              ? `Os dados do app já estão salvos. Falta autorizar o CRM na conta do ${nome}.`
+              : `Ainda não conectado. Salve os dados do app em Credenciais e depois clique em Conectar ${nome}.`}
+          </p>
         )}
 
         {status.conectado && venceLogo && (
@@ -126,35 +113,30 @@ export function CartaoMarketplace({
                 <RefreshCw /> Testar conexão
               </ActionButton>
             )}
-            {ehAdmin && status.conectado && (
-              <ActionButton
-                acao={desconectarMarketplace.bind(null, canal)}
-                variante="perigo"
-                confirmar={`Desconectar o ${nome}? O CRM para de ler as vendas desse canal até conectar de novo.`}
-              >
-                <Unplug /> Desconectar
-              </ActionButton>
-            )}
           </div>
         )}
-
-        {ehAdmin ? (
-          status.configurado ? (
-            <details className="group rounded-xl border border-linha">
-              <summary className="cursor-pointer list-none px-4 py-3 text-[14px] font-semibold hover:bg-papel/60 [&::-webkit-details-marker]:hidden">
-                Trocar ID ou chave do app
-              </summary>
-              <div className="border-t border-linha p-4">
-                <FormularioCredenciais canal={canal} status={status} {...CAMPOS[canal]} />
-              </div>
-            </details>
-          ) : (
-            <FormularioCredenciais canal={canal} status={status} {...CAMPOS[canal]} />
-          )
-        ) : (
-          !status.conectado && <p className="text-[13px] text-suave">Um administrador precisa colar os dados do app e conectar.</p>
-        )}
+        {!ehAdmin && !status.conectado && <SomenteAdmin>Um administrador precisa colar os dados do app e conectar.</SomenteAdmin>}
       </CardContent>
     </Card>
+  )
+}
+
+/** ID e chave do app, colados por um administrador. */
+export function CredenciaisMarketplace({ canal, status }: { canal: IdMarketplace; status: StatusMarketplace }) {
+  return <FormularioCredenciais canal={canal} status={status} {...CAMPOS[canal]} />
+}
+
+export function DesconectarMarketplace({ canal }: { canal: IdMarketplace }) {
+  const { nome } = MARKETPLACES[canal]
+  return (
+    <ZonaDeRisco titulo={`Desconectar o ${nome}`} descricao="O CRM para de ler as vendas desse canal até conectar de novo.">
+      <ActionButton
+        acao={desconectarMarketplace.bind(null, canal)}
+        variante="perigo"
+        confirmar={`Desconectar o ${nome}? O CRM para de ler as vendas desse canal até conectar de novo.`}
+      >
+        <Unplug /> Desconectar
+      </ActionButton>
+    </ZonaDeRisco>
   )
 }

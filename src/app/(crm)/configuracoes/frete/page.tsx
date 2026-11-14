@@ -1,11 +1,12 @@
 import type { Metadata } from 'next'
 
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { CabecalhoConfiguracoes } from '@/features/configuracoes/components/cabecalho'
+import { CabecalhoSecao } from '@/features/configuracoes/components/cabecalho'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
 import { FormularioValorFrete, ListaCepsVip, TestarCep } from '@/features/frete/components/configuracao-frete'
 import { resumoCepsVip } from '@/features/frete/queries'
-import { formatarMoeda } from '@/lib/format'
+import { formatarMoeda, formatarNumero } from '@/lib/format'
 
 export const metadata: Metadata = { title: 'Frete VIP' }
 
@@ -14,8 +15,17 @@ export default async function PaginaFreteVip() {
 
   return (
     <>
-      <CabecalhoConfiguracoes ativa="frete" />
-      <div className="grid gap-5 lg:grid-cols-[1fr_340px] lg:gap-6">
+      <CabecalhoSecao
+        secao="frete"
+        selo={
+          resumo.ceps_cobertos > 0 ? (
+            <Badge>{formatarNumero(resumo.ceps_cobertos)} CEPs com frete fixo</Badge>
+          ) : (
+            <Badge tom="alerta" ponto>Sem lista de CEPs</Badge>
+          )
+        }
+      />
+      <div className="grid gap-5 lg:gap-6 2xl:grid-cols-[minmax(0,1fr)_320px]">
         <Card>
           <CardHeader
             titulo="Lista de CEPs VIP"
@@ -26,7 +36,7 @@ export default async function PaginaFreteVip() {
           </CardContent>
         </Card>
 
-        <div className="space-y-5 lg:space-y-6">
+        <div className="grid content-start gap-5 sm:grid-cols-2 lg:gap-6 2xl:grid-cols-1">
           <Card>
             <CardHeader titulo="Valor do frete" />
             <CardContent>
@@ -41,7 +51,7 @@ export default async function PaginaFreteVip() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="sm:col-span-2 2xl:col-span-1">
             <CardHeader titulo="Como funciona no link" />
             <CardContent>
               <ul className="space-y-2.5 text-sm">

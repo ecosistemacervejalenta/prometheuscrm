@@ -8,6 +8,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { normalizarWhatsapp, whatsappValido } from '@/lib/whatsapp'
 
 import { agendarProcessamentoDeEventos } from '../../integracoes/eventos'
+import { agendarFilaEstoqueOlist } from '../../olist/estoque'
 import { lerCaixa, type CaixaPublica } from './caixa-dados'
 
 /**
@@ -93,6 +94,7 @@ export async function confirmarPedidoPreVenda(entrada: z.input<typeof esquemaCon
   const { data: caixa } = await db.rpc('caixa_publica', { p_pedido_id: data.id })
 
   agendarProcessamentoDeEventos()
+  agendarFilaEstoqueOlist() // a compra já baixou na cópia local; aqui vai para a Olist
   revalidatePath(`/p/${slug}`)
   return {
     ok: true,

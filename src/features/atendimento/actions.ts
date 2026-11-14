@@ -41,7 +41,7 @@ function atualizarTelas() {
 }
 
 /**
- * "*Ana Souza:* " quando a assinatura está ligada (Configurações › Integrações).
+ * "*Ana Souza:* " quando a assinatura está ligada (Configurações › Preferências do atendimento).
  * O nome é o escolhido em "Assinar como" na conversa; senão o do responsável;
  * sem responsável, o de quem envia (que passa a ser o responsável).
  */
@@ -203,7 +203,7 @@ export async function transferirAtendimento(id: string, para: string): Promise<E
   return sucesso('Atendimento transferido.')
 }
 
-/** "Assinar como": um nome da lista (Configurações › Integrações) ou nulo para assinar com o nome do responsável. */
+/** "Assinar como": um nome da lista (Configurações › Preferências do atendimento) ou nulo para assinar com o nome do responsável. */
 export async function definirAssinatura(atendimentoId: string, nome: string | null): Promise<EstadoAcao> {
   const { supabase } = await exigirEquipe()
   let escolhido: string | null = null
@@ -212,7 +212,7 @@ export async function definirAssinatura(atendimentoId: string, nome: string | nu
     if (!dados.success) return falha('Nome inválido.')
     const { data: config } = await supabase.from('configuracoes').select('whatsapp_nomes_assinatura').eq('id', 1).maybeSingle()
     escolhido = config?.whatsapp_nomes_assinatura.find((n) => n.toLowerCase() === dados.data.toLowerCase()) ?? null
-    if (!escolhido) return falha('Este nome não está na lista “Assinar como” (Configurações › Integrações).')
+    if (!escolhido) return falha('Este nome não está na lista “Assinar como” (Configurações › Atendimento › Preferências).')
   }
   const { data, error } = await supabase
     .from('atendimentos')
@@ -246,7 +246,7 @@ export async function alterarStatusAtendimento(id: string, status: string): Prom
 
 function atualizarTelasEtiquetas() {
   atualizarTelas()
-  revalidatePath('/configuracoes/etiquetas')
+  revalidatePath('/configuracoes', 'layout')
 }
 
 /** Coloca ou tira uma etiqueta do atendimento (fica registrado na linha do tempo). */
@@ -391,7 +391,7 @@ export async function ativarWebhookWhatsapp(): Promise<EstadoAcao> {
   } catch (e) {
     return falha(e instanceof Error ? e.message : 'Não foi possível configurar o webhook.')
   }
-  revalidatePath('/configuracoes/integracoes')
+  revalidatePath('/configuracoes', 'layout')
   return sucesso('Webhook ativado: as mensagens novas já chegam no Atendimento.')
 }
 
@@ -420,6 +420,6 @@ export async function salvarConfigAtendimento(_: EstadoAcao, formData: FormData)
     .update({ ...dados.data, whatsapp_rodizio_participantes: participantes })
     .eq('id', 1)
   if (error) return falha(traduzirErro(error))
-  revalidatePath('/configuracoes/integracoes')
+  revalidatePath('/configuracoes', 'layout')
   return sucesso('Configurações do atendimento salvas.')
 }

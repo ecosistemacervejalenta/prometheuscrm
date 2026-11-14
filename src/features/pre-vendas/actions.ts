@@ -9,6 +9,7 @@ import { slugificar } from '@/lib/utils'
 import type { StatusPreVenda } from '@/types'
 
 import { agendarProcessamentoDeEventos } from '../integracoes/eventos'
+import { agendarEnvioEstoqueOlist } from '../olist/rotina-estoque'
 import { esquemaPreVenda } from './schema'
 
 function atualizarTelas() {
@@ -57,6 +58,7 @@ export async function excluirPreVenda(id: string, comPedidos = false): Promise<E
   if (perfil.papel !== 'admin') return falha('Só administradores podem excluir pré-vendas.')
   const { error } = await supabase.rpc('excluir_pre_venda', { p_pre_venda_id: id, p_com_pedidos: comPedidos })
   if (error) return falha(traduzirErro(error))
+  await agendarEnvioEstoqueOlist() // itens excluídos devolvem o estoque na Olist
   atualizarTelas()
   revalidatePath('/pedidos')
   revalidatePath('/clientes', 'layout')

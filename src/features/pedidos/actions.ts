@@ -11,6 +11,7 @@ import { dinheiroOpcional, textoOpcional } from '@/lib/validacao'
 import type { SituacaoCaixa, StatusPagamento, StatusPedido } from '@/types'
 
 import { agendarProcessamentoDeEventos } from '../integracoes/eventos'
+import { agendarEnvioEstoqueOlist } from '../olist/rotina-estoque'
 
 function atualizarTelas(id?: string) {
   if (id) revalidatePath(`/pedidos/${id}`)
@@ -59,6 +60,7 @@ export async function criarPedidoManual(_: EstadoAcao, formData: FormData): Prom
   if (error) return falha(traduzirErro(error))
 
   agendarProcessamentoDeEventos()
+  await agendarEnvioEstoqueOlist() // pedido de pré-venda baixa o estoque na Olist
   atualizarTelas()
   redirect(`/pedidos/${data.id}`)
 }
@@ -90,6 +92,7 @@ export async function definirStatusPedido(id: string, status: StatusPedido): Pro
   const { error } = await supabase.from('pedidos').update({ status }).eq('id', id)
   if (error) return falha(traduzirErro(error))
   agendarProcessamentoDeEventos()
+  await agendarEnvioEstoqueOlist() // cancelar devolve o estoque na Olist; reabrir baixa de novo
   atualizarTelas(id)
   return sucesso(`Pedido marcado como ${STATUS_PEDIDO[status].rotulo.toLowerCase()}.`)
 }
@@ -126,6 +129,7 @@ export async function excluirPedido(id: string, voltarPara: string | null): Prom
   if (perfil.papel !== 'admin') return falha('Só administradores podem excluir vendas.')
   const { error } = await supabase.rpc('excluir_pedido', { p_pedido_id: id })
   if (error) return falha(traduzirErro(error))
+  await agendarEnvioEstoqueOlist() // itens de pré-venda devolvem o estoque na Olist
   atualizarTelas()
   revalidatePath('/clientes', 'layout')
   if (voltarPara) redirect(voltarPara)

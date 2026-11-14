@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
+import { after } from 'next/server'
 
+import { atualizarEstoqueDaPreVenda } from '@/features/olist/estoque'
 import { CheckoutPreVenda } from '@/features/pre-vendas/publico/checkout'
 import { obterPreVendaPublica } from '@/features/pre-vendas/publico/queries'
 import { param } from '@/lib/utils'
@@ -25,6 +27,8 @@ export default async function PaginaPublicaPreVenda({ params, searchParams }: Pa
   const [{ slug }, busca] = await Promise.all([params, searchParams])
   const dados = await obterPreVendaPublica(slug)
   if (!dados) notFound()
+  // Estoque da Olist com mais de 2 min: lê de novo depois de responder (a compra confere no banco).
+  if (dados.preVenda.ativa) after(() => atualizarEstoqueDaPreVenda(slug).catch(() => undefined))
 
   return (
     <div className="min-h-dvh bg-papel">

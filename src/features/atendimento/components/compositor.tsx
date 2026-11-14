@@ -275,7 +275,7 @@ export function Compositor({
   contatoId: string
   naFila: boolean
   anexos: ControleAnexos
-  /** Nulo quando a assinatura está desligada em Configurações › Integrações. */
+  /** Nulo quando a assinatura está desligada em Configurações › Preferências do atendimento. */
   assinatura: OpcoesAssinatura | null
 }) {
   const [modo, setModo] = useState<'mensagem' | 'nota'>('mensagem')

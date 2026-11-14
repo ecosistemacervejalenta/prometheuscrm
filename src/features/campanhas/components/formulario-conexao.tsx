@@ -52,10 +52,10 @@ export function FormularioConexao({ conexao }: { conexao: ConexaoMeta }) {
         </Field>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <SubmitButton>
+        <SubmitButton variante={salvo ? 'escuro' : 'primario'}>
           <PlugZap /> Salvar e testar conexão
         </SubmitButton>
-        <p className="text-[13px] text-suave">O CRM confere tudo na Meta e já liga o webhook do app à sua conta.</p>
+        <p className="min-w-0 flex-1 basis-56 text-[13px] text-suave">O CRM confere tudo na Meta e já liga o webhook do app à sua conta.</p>
       </div>
     </ActionForm>
   )

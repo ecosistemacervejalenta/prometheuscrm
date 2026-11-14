@@ -23,7 +23,7 @@ type EventoUazapi = {
 
 /**
  * Recebe os eventos do WhatsApp da loja (uazapi). Configurado pelo botão
- * "Ativar webhook" em Configurações › Integrações (eventos messages,
+ * "Ativar webhook" em Configurações › WhatsApp da loja (eventos messages,
  * messages_update e connection; grupos excluídos).
  * A uazapi não assina o corpo: o evento traz o token da instância, que precisa
  * ser igual ao UAZAPI_TOKEN. A resposta é rápida — mídias são baixadas depois.

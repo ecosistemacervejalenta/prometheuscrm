@@ -5,38 +5,38 @@ import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { ButtonLink } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { CopyButton } from '@/components/ui/copy-button'
+import { Codigo, Dado, Dados, UrlCopiavel } from '@/features/configuracoes/components/blocos'
 import { formatarDataHora, formatarWhatsapp } from '@/lib/format'
 
 import { ativarWebhookWhatsapp } from '../actions'
-import type { ConfigAtendimento, StatusWhatsapp } from '../queries'
-import { FormularioConfigAtendimento } from './formulario-config'
+import type { StatusWhatsapp } from '../queries'
 
-function Codigo({ children }: { children: string }) {
-  return <code className="tipo-dado text-[12px]">{children}</code>
+/** Situação do WhatsApp da loja em uma etiqueta (cabeçalho da seção e visão geral). */
+export function situacaoWhatsapp(status: StatusWhatsapp): { tom: 'sucesso' | 'alerta' | 'perigo'; rotulo: string } {
+  if (!status.configurado) return { tom: 'alerta', rotulo: 'Falta configurar' }
+  if (status.erroConexao) return { tom: 'perigo', rotulo: 'Servidor inacessível' }
+  if (!status.conectado) return { tom: 'perigo', rotulo: 'Número desconectado' }
+  if (!status.webhookAtivo) return { tom: 'alerta', rotulo: 'Webhook inativo' }
+  return { tom: 'sucesso', rotulo: 'Recebendo mensagens' }
 }
 
-/** WhatsApp da loja (uazapi): conexão, webhook e preferências do Atendimento. */
-export function CartaoWhatsapp({ status, config, ehAdmin }: { status: StatusWhatsapp; config: ConfigAtendimento; ehAdmin: boolean }) {
-  const selo = !status.configurado ? (
-    <Badge tom="alerta" ponto>Falta configurar</Badge>
-  ) : status.erroConexao ? (
-    <Badge tom="perigo" ponto>Servidor inacessível</Badge>
-  ) : !status.conectado ? (
-    <Badge tom="perigo" ponto>Número desconectado</Badge>
-  ) : status.webhookAtivo ? (
-    <Badge tom="sucesso" ponto>Recebendo mensagens</Badge>
-  ) : (
-    <Badge tom="alerta" ponto>Webhook inativo</Badge>
-  )
+export function SeloWhatsapp({ status }: { status: StatusWhatsapp }) {
+  const { tom, rotulo } = situacaoWhatsapp(status)
+  return <Badge tom={tom} ponto>{rotulo}</Badge>
+}
 
+/** Número conectado pela uazapi: de quem é e se está no ar. */
+export function ConexaoWhatsapp({ status }: { status: StatusWhatsapp }) {
   return (
     <Card>
-      <div id="whatsapp" className="scroll-mt-6" />
       <CardHeader
-        titulo="WhatsApp da loja (uazapi)"
+        titulo="Número conectado"
         descricao="Caixa de entrada da equipe em Atendimento: fila, responsáveis e histórico de cada cliente."
-        acoes={selo}
+        acoes={
+          <ButtonLink href="/atendimento" tamanho="sm">
+            <MessagesSquare /> Abrir Atendimento
+          </ButtonLink>
+        }
       />
       <CardContent className="space-y-4 text-sm">
         {!status.configurado ? (
@@ -50,78 +50,73 @@ export function CartaoWhatsapp({ status, config, ehAdmin }: { status: StatusWhat
             . Use a Server URL e o token da <strong>instância</strong> (painel uazapiGO), cadastre na Vercel em Production e faça o
             Redeploy.
           </Alert>
+        ) : status.erroConexao ? (
+          <Alert tom="erro" titulo="Não foi possível falar com a uazapi">
+            {status.erroConexao}
+          </Alert>
         ) : (
           <>
-            {status.erroConexao ? (
-              <Alert tom="erro" titulo="Não foi possível falar com a uazapi">{status.erroConexao}</Alert>
-            ) : (
-              <dl className="grid gap-3 sm:grid-cols-3">
-                <div>
-                  <dt className="tipo-rotulo text-suave">Número</dt>
-                  <dd className="tipo-dado mt-0.5">{status.numero ? formatarWhatsapp(status.numero) : '—'}</dd>
-                </div>
-                <div>
-                  <dt className="tipo-rotulo text-suave">Perfil</dt>
-                  <dd className="mt-0.5">{status.perfil ?? '—'}</dd>
-                </div>
-                <div>
-                  <dt className="tipo-rotulo text-suave">Conexão</dt>
-                  <dd className="mt-0.5">{status.conectado ? 'Conectado' : 'Desconectado — reconecte pelo QR Code no painel da uazapi'}</dd>
-                </div>
-              </dl>
-            )}
-
-            <div className="flex flex-wrap items-center gap-2 rounded-xl bg-papel p-3">
-              <span className="tipo-rotulo w-full text-suave">URL do webhook</span>
-              <code className="tipo-dado flex-1 text-[13px] break-all">{status.urlWebhook}</code>
-              <CopyButton texto={status.urlWebhook} />
-            </div>
-
-            {!status.webhookAtivo && !status.erroConexao && (
-              <p className="text-suave">
-                Clique em <strong className="text-ink">Ativar webhook</strong> para a uazapi enviar ao CRM as mensagens recebidas
-                (grupos ficam de fora) e os recibos de entrega e leitura.
-              </p>
-            )}
-            {status.outrosWebhooks.length > 0 && (
-              <Alert tom="info" titulo="Outro destino de webhook na instância">
-                {status.outrosWebhooks.join(', ')}. Ativar o webhook do CRM substitui o destino principal.
+            <Dados>
+              <Dado rotulo="Número">
+                <span className="tipo-dado">{status.numero ? formatarWhatsapp(status.numero) : '—'}</span>
+              </Dado>
+              <Dado rotulo="Perfil">{status.perfil ?? '—'}</Dado>
+              <Dado rotulo="Conexão">{status.conectado ? 'Conectado' : 'Desconectado'}</Dado>
+            </Dados>
+            {!status.conectado && (
+              <Alert tom="erro" titulo="O número está desconectado">
+                Reconecte pelo QR Code no painel da uazapi.
               </Alert>
             )}
-            {status.errosRecentes.length > 0 && (
-              <Alert tom="alerta" titulo="Entregas recentes com erro (uazapi → CRM)">
-                <ul className="mt-1 space-y-0.5 text-[12px]">
-                  {status.errosRecentes.map((e, i) => (
-                    <li key={i}>
-                      {e.created ? formatarDataHora(e.created) : ''} · {e.event} · {e.status_code ?? ''} {e.error}
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-1 text-[12px]">A rotina /api/cron/whatsapp recupera as mensagens perdidas a cada 2 h.</p>
-              </Alert>
-            )}
-
-            <div className="flex flex-wrap gap-2">
-              {ehAdmin && !status.erroConexao && (
-                <ActionButton acao={ativarWebhookWhatsapp} variante={status.webhookAtivo ? 'secundario' : 'primario'} tamanho="sm">
-                  <Webhook /> {status.webhookAtivo ? 'Reaplicar webhook' : 'Ativar webhook'}
-                </ActionButton>
-              )}
-              <ButtonLink href="/atendimento" tamanho="sm">
-                <MessagesSquare /> Abrir Atendimento
-              </ButtonLink>
-            </div>
           </>
         )}
+      </CardContent>
+    </Card>
+  )
+}
 
-        <div className="border-t border-linha pt-4">
-          <h3 className="mb-3 text-[14px] font-semibold">Preferências do atendimento</h3>
-          {ehAdmin ? (
-            <FormularioConfigAtendimento config={config} />
-          ) : (
-            <p className="text-[13px] text-suave">Somente administradores alteram as preferências.</p>
-          )}
-        </div>
+/** Webhook que traz as mensagens da uazapi para o CRM. Só aparece com o servidor configurado. */
+export function WebhookWhatsapp({ status, ehAdmin }: { status: StatusWhatsapp; ehAdmin: boolean }) {
+  if (!status.configurado) return null
+
+  return (
+    <Card>
+      <CardHeader
+        titulo="Recebimento das mensagens"
+        descricao="A uazapi avisa o CRM a cada mensagem recebida (grupos ficam de fora) e a cada recibo de entrega e leitura."
+        acoes={status.webhookAtivo ? <Badge tom="sucesso" ponto>Webhook ativo</Badge> : <Badge tom="alerta" ponto>Webhook inativo</Badge>}
+      />
+      <CardContent className="space-y-4 text-sm">
+        <UrlCopiavel rotulo="URL do webhook" valor={status.urlWebhook} />
+
+        {status.outrosWebhooks.length > 0 && (
+          <Alert tom="info" titulo="Outro destino de webhook na instância">
+            {status.outrosWebhooks.join(', ')}. Ativar o webhook do CRM substitui o destino principal.
+          </Alert>
+        )}
+        {status.errosRecentes.length > 0 && (
+          <Alert tom="alerta" titulo="Entregas recentes com erro (uazapi → CRM)">
+            <ul className="mt-1 space-y-0.5 text-[12px]">
+              {status.errosRecentes.map((e, i) => (
+                <li key={i}>
+                  {e.created ? formatarDataHora(e.created) : ''} · {e.event} · {e.status_code ?? ''} {e.error}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1 text-[12px]">A rotina /api/cron/whatsapp recupera as mensagens perdidas a cada 2 h.</p>
+          </Alert>
+        )}
+
+        {status.erroConexao ? null : ehAdmin ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <ActionButton acao={ativarWebhookWhatsapp} variante={status.webhookAtivo ? 'secundario' : 'primario'} tamanho="sm">
+              <Webhook /> {status.webhookAtivo ? 'Reaplicar webhook' : 'Ativar webhook'}
+            </ActionButton>
+            {!status.webhookAtivo && <p className="text-[13px] text-suave">Ative para as mensagens chegarem ao Atendimento na hora.</p>}
+          </div>
+        ) : (
+          !status.webhookAtivo && <p className="text-[13px] text-suave">Peça a um administrador para ativar o webhook.</p>
+        )}
       </CardContent>
     </Card>
   )

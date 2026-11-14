@@ -607,6 +607,7 @@ export type Database = {
           whatsapp_rodizio_participantes: string[]
           whatsapp_rodizio_ultimo_id: string | null
           whatsapp_pasta_leads_id: string | null
+          caixa_prazo_pagamento_dias: number
         }
         Insert: {
           atualizado_em?: string
@@ -628,6 +629,7 @@ export type Database = {
           whatsapp_rodizio_participantes?: string[]
           whatsapp_rodizio_ultimo_id?: string | null
           whatsapp_pasta_leads_id?: string | null
+          caixa_prazo_pagamento_dias?: number
         }
         Update: {
           atualizado_em?: string
@@ -649,6 +651,7 @@ export type Database = {
           whatsapp_rodizio_participantes?: string[]
           whatsapp_rodizio_ultimo_id?: string | null
           whatsapp_pasta_leads_id?: string | null
+          caixa_prazo_pagamento_dias?: number
         }
         Relationships: [
           {
@@ -880,6 +883,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      estoque_olist: {
+        Row: {
+          atualizado_em: string
+          atualizando_desde: string | null
+          disponivel: number
+          erro: string | null
+          id: number
+          lido_em: string | null
+          nome: string
+          reservado: number
+          saldo: number
+          sku: string | null
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizando_desde?: string | null
+          disponivel?: number
+          erro?: string | null
+          id: number
+          lido_em?: string | null
+          nome?: string
+          reservado?: number
+          saldo?: number
+          sku?: string | null
+        }
+        Update: {
+          atualizado_em?: string
+          atualizando_desde?: string | null
+          disponivel?: number
+          erro?: string | null
+          id?: number
+          lido_em?: string | null
+          nome?: string
+          reservado?: number
+          saldo?: number
+          sku?: string | null
+        }
+        Relationships: []
       }
       eventos_integracao: {
         Row: {
@@ -1225,6 +1267,9 @@ export type Database = {
           sincronizando_desde: string | null
           ultima_sincronizacao: string | null
           ultimo_erro: string | null
+          erro_estoque: string | null
+          erro_estoque_em: string | null
+          renovando_token_desde: string | null
         }
         Insert: {
           access_expira_em?: string | null
@@ -1239,6 +1284,9 @@ export type Database = {
           sincronizando_desde?: string | null
           ultima_sincronizacao?: string | null
           ultimo_erro?: string | null
+          erro_estoque?: string | null
+          erro_estoque_em?: string | null
+          renovando_token_desde?: string | null
         }
         Update: {
           access_expira_em?: string | null
@@ -1253,6 +1301,9 @@ export type Database = {
           sincronizando_desde?: string | null
           ultima_sincronizacao?: string | null
           ultimo_erro?: string | null
+          erro_estoque?: string | null
+          erro_estoque_em?: string | null
+          renovando_token_desde?: string | null
         }
         Relationships: [
           {
@@ -1464,6 +1515,69 @@ export type Database = {
           id?: boolean
           pendente?: boolean
           whatsapp_unicos?: number
+        }
+        Relationships: []
+      }
+      movimentos_estoque_olist: {
+        Row: {
+          criado_em: string
+          enviado_em: string | null
+          enviando_desde: string | null
+          id: number
+          id_lancamento: number | null
+          lote: string | null
+          motivo: string
+          olist_produto_id: number
+          pedido_id: string | null
+          pedido_item_id: string | null
+          pedido_numero: number | null
+          produto_id: string | null
+          proximo_envio_em: string
+          quantidade: number
+          status: Database["public"]["Enums"]["status_movimento_olist"]
+          tentativas: number
+          tipo: string
+          ultimo_erro: string | null
+        }
+        Insert: {
+          criado_em?: string
+          enviado_em?: string | null
+          enviando_desde?: string | null
+          id?: number
+          id_lancamento?: number | null
+          lote?: string | null
+          motivo: string
+          olist_produto_id: number
+          pedido_id?: string | null
+          pedido_item_id?: string | null
+          pedido_numero?: number | null
+          produto_id?: string | null
+          proximo_envio_em?: string
+          quantidade: number
+          status?: Database["public"]["Enums"]["status_movimento_olist"]
+          tentativas?: number
+          tipo: string
+          ultimo_erro?: string | null
+        }
+        Update: {
+          criado_em?: string
+          enviado_em?: string | null
+          enviando_desde?: string | null
+          id?: number
+          id_lancamento?: number | null
+          lote?: string | null
+          motivo?: string
+          olist_produto_id?: number
+          pedido_id?: string | null
+          pedido_item_id?: string | null
+          pedido_numero?: number | null
+          produto_id?: string | null
+          proximo_envio_em?: string
+          quantidade?: number
+          status?: Database["public"]["Enums"]["status_movimento_olist"]
+          tentativas?: number
+          tipo?: string
+          ultimo_erro?: string | null
         }
         Relationships: []
       }
@@ -1971,6 +2085,8 @@ export type Database = {
           sku: string | null
           teor_alcoolico: number | null
           volume_ml: number | null
+          olist_id: number | null
+          olist_kit: Json
         }
         Insert: {
           ativo?: boolean
@@ -1991,6 +2107,8 @@ export type Database = {
           sku?: string | null
           teor_alcoolico?: number | null
           volume_ml?: number | null
+          olist_id?: number | null
+          olist_kit?: Json
         }
         Update: {
           ativo?: boolean
@@ -2011,6 +2129,8 @@ export type Database = {
           sku?: string | null
           teor_alcoolico?: number | null
           volume_ml?: number | null
+          olist_id?: number | null
+          olist_kit?: Json
         }
         Relationships: [
           {
@@ -2998,6 +3118,8 @@ export type Database = {
           teor_alcoolico: number | null
           vendido: number | null
           volume_ml: number | null
+          estoque_olist: number | null
+          olist_id: number | null
         }
         Relationships: [
           {
@@ -3097,6 +3219,54 @@ export type Database = {
       }
     }
     Functions: {
+      ajustar_estoque_olist_item: {
+        Args: {
+          p_item_id: string
+          p_motivo: string
+          p_pedido_id: string
+          p_produto_id: string
+          p_quantidade: number
+        }
+        Returns: undefined
+      }
+      avisar_estoque_olist: {
+        Args: { p_texto: string; p_titulo: string }
+        Returns: undefined
+      }
+      componentes_olist: {
+        Args: { p_produto_id: string }
+        Returns: {
+          olist_id: number
+          quantidade: number
+        }[]
+      }
+      estoque_olist_efetivo: { Args: { p_olist_id: number }; Returns: number }
+      estoque_olist_produto: { Args: { p_produto_id: string }; Returns: number }
+      estoques_olist_produtos: {
+        Args: { p_produto_ids: string[] }
+        Returns: {
+          estoque: number
+          produto_id: string
+        }[]
+      }
+      produtos_olist_em_uso: { Args: never; Returns: number[] }
+      reservar_leitura_estoque_olist: {
+        Args: { p_idade_segundos?: number; p_ids: number[] }
+        Returns: number[]
+      }
+      reservar_movimentos_olist: {
+        Args: { p_limite?: number }
+        Returns: Database["public"]["Tables"]["movimentos_estoque_olist"]["Row"][]
+      }
+      resolver_movimento_olist: {
+        Args: { p_acao: string; p_id: number }
+        Returns: undefined
+      }
+      travar_estoque_olist: {
+        Args: { p_produto_ids: string[] }
+        Returns: undefined
+      }
+      vencer_caixas_vip: { Args: never; Returns: number }
       adicionar_contatos_campanha: {
         Args: { p_campanha_id: string; p_contatos: Json }
         Returns: number
@@ -3664,6 +3834,14 @@ export type Database = {
         | "ignorada"
       status_evento: "pendente" | "enviado" | "erro" | "ignorado"
       status_lista_leads: "importando" | "pronta"
+      status_movimento_olist:
+        | "pendente"
+        | "enviando"
+        | "enviado"
+        | "erro"
+        | "conferir"
+        | "ignorado"
+        | "cancelado"
       status_mensagem_whatsapp:
         | "enviando"
         | "enviada"
@@ -3846,6 +4024,15 @@ export const Constants = {
       ],
       status_evento: ["pendente", "enviado", "erro", "ignorado"],
       status_lista_leads: ["importando", "pronta"],
+      status_movimento_olist: [
+        "pendente",
+        "enviando",
+        "enviado",
+        "erro",
+        "conferir",
+        "ignorado",
+        "cancelado",
+      ],
       status_mensagem_whatsapp: [
         "enviando",
         "enviada",

@@ -89,8 +89,8 @@ export default async function PaginaGrupoVip({ searchParams }: PageProps<'/grupo
       }),
   )
   const pendenciasConfig = [
-    !config.chave_pix && { texto: 'Cadastrar a chave PIX (aparece no fim do link)', href: '/configuracoes' },
-    !config.whatsapp_comprovante && { texto: 'Informar o WhatsApp que recebe os comprovantes', href: '/configuracoes' },
+    !config.chave_pix && { texto: 'Cadastrar a chave PIX (aparece no fim do link)', href: '/configuracoes/pagamento' },
+    !config.whatsapp_comprovante && { texto: 'Informar o WhatsApp que recebe os comprovantes', href: '/configuracoes/pagamento' },
     ceps.ceps_cobertos === 0 && { texto: 'Enviar a planilha de CEPs com frete fixo', href: '/configuracoes/frete' },
   ].filter((p): p is { texto: string; href: string } => Boolean(p))
   const preVendaSelecionada = preVendas.find((p) => p.id === preVendaId)

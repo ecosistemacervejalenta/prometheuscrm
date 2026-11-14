@@ -14,7 +14,7 @@ import { urlDoSite } from '@/lib/url'
 export async function GET(request: NextRequest) {
   const site = await urlDoSite()
   const voltar = (status: string) => {
-    const resposta = NextResponse.redirect(`${site}/configuracoes/integracoes?olist=${status}`)
+    const resposta = NextResponse.redirect(`${site}/configuracoes/olist?olist=${status}`)
     resposta.cookies.set(COOKIE_ESTADO_OAUTH, '', { path: '/api/olist', maxAge: 0 })
     return resposta
   }

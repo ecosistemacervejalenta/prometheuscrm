@@ -66,7 +66,7 @@ function itensMenu(contagens: PropsSidebar['contagens']): ItemMenu[] {
 }
 
 /** Onde cada pessoa troca nome, cargo e foto. */
-export const LINK_MEU_PERFIL = '/configuracoes/equipe#meu-perfil'
+export const LINK_MEU_PERFIL = '/configuracoes/perfil'
 
 function Navegacao({ contagens }: { contagens: PropsSidebar['contagens'] }) {
   const caminho = usePathname()

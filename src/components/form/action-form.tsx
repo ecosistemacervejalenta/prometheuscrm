@@ -30,6 +30,7 @@ export function ActionForm({
   aoConcluir,
   limparAoConcluir = false,
   mostrarSucesso = true,
+  classeMensagem = 'mb-5',
 }: {
   action: AcaoFormulario
   children: ReactNode
@@ -37,6 +38,8 @@ export function ActionForm({
   aoConcluir?: (estado: EstadoAcao) => void
   limparAoConcluir?: boolean
   mostrarSucesso?: boolean
+  /** Margens da mensagem geral (para formulários sem padding próprio, como os cartões de ajuste). */
+  classeMensagem?: string
 }) {
   const [estado, despachar, pendente] = useActionState(action, estadoInicial)
   const formulario = useRef<HTMLFormElement>(null)
@@ -65,7 +68,7 @@ export function ActionForm({
         }}
       >
         {estado.mensagem && (estado.ok ? mostrarSucesso : true) && (
-          <Alert tom={estado.ok ? 'sucesso' : 'erro'} className="mb-5">
+          <Alert tom={estado.ok ? 'sucesso' : 'erro'} className={classeMensagem}>
             {estado.mensagem}
           </Alert>
         )}

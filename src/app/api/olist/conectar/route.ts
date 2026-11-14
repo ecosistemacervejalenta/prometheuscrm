@@ -8,7 +8,7 @@ import { urlDoSite } from '@/lib/url'
 /** Inicia o OAuth2: leva o administrador à tela de autorização do Olist. */
 export async function GET() {
   const site = await urlDoSite()
-  const voltar = (status: string) => NextResponse.redirect(`${site}/configuracoes/integracoes?olist=${status}`)
+  const voltar = (status: string) => NextResponse.redirect(`${site}/configuracoes/olist?olist=${status}`)
 
   const sessao = await obterSessao()
   if (!sessao) return NextResponse.redirect(`${site}/login`)

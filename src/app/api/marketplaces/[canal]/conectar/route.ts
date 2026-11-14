@@ -13,8 +13,8 @@ export async function GET(_: NextRequest, contexto: RouteContext<'/api/marketpla
   const { canal: slug } = await contexto.params
   const canal = marketplaceDoSlug(slug)
   const voltar = (status: string) =>
-    NextResponse.redirect(`${site}/configuracoes/marketplaces?marketplace=${slug}&status=${status}`)
-  if (!canal) return NextResponse.redirect(`${site}/configuracoes/marketplaces`)
+    NextResponse.redirect(`${site}/configuracoes/${slug}?status=${status}`)
+  if (!canal) return NextResponse.redirect(`${site}/configuracoes`)
 
   const sessao = await obterSessao()
   if (!sessao) return NextResponse.redirect(`${site}/login`)

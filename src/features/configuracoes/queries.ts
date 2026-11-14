@@ -25,6 +25,7 @@ const PADRAO: Configuracoes = {
   frete_vip_valor: 15,
   frete_vip_arquivo: null,
   frete_vip_importado_em: null,
+  caixa_prazo_pagamento_dias: 7,
 }
 
 /** Configurações da loja (linha única). */

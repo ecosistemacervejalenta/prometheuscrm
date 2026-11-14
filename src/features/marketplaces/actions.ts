@@ -12,7 +12,7 @@ import { pedirARotinaMarketplaces } from './disparo'
 import { esquemaCredenciais } from './schema'
 
 function atualizarTela() {
-  revalidatePath('/configuracoes/marketplaces')
+  revalidatePath('/configuracoes', 'layout')
 }
 
 export async function salvarCredenciaisMarketplace(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {

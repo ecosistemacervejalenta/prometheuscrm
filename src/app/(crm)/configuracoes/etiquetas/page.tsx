@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
 
+import { Badge } from '@/components/ui/badge'
 import { Card, CardHeader } from '@/components/ui/card'
 import { corSugerida } from '@/features/atendimento/components/etiqueta'
 import { FormularioNovaEtiqueta, LinhaEtiqueta } from '@/features/atendimento/components/gerenciar-etiquetas'
 import { listarEtiquetasComUso } from '@/features/atendimento/queries'
-import { CabecalhoConfiguracoes } from '@/features/configuracoes/components/cabecalho'
+import { CabecalhoSecao } from '@/features/configuracoes/components/cabecalho'
 
 export const metadata: Metadata = { title: 'Etiquetas' }
 
@@ -13,11 +14,11 @@ export default async function PaginaEtiquetas() {
 
   return (
     <>
-      <CabecalhoConfiguracoes ativa="etiquetas" />
+      <CabecalhoSecao secao="etiquetas" selo={<Badge>{etiquetas.length} etiqueta(s)</Badge>} />
       <Card className="max-w-3xl">
         <CardHeader
           titulo="Etiquetas do atendimento"
-          descricao="Dizem o que está sendo tratado em cada conversa e aparecem na lista do Atendimento. Também dá para criar uma na hora, pela própria conversa."
+          descricao="Aparecem na lista do Atendimento. Também dá para criar uma na hora, pela própria conversa."
         />
         <FormularioNovaEtiqueta sugerida={corSugerida(etiquetas)} />
         {etiquetas.length > 0 ? (

@@ -380,7 +380,7 @@ Nunca edite uma migration já aplicada em produção — crie outra.
 
 ## 9. Mensagens de WhatsApp
 
-Os textos ficam em **Configurações › Loja e mensagens**. Use `*negrito*` do WhatsApp e as variáveis:
+Os textos ficam em **Configurações › Mensagens** (com prévia de como chegam no WhatsApp). Use `*negrito*` do WhatsApp e as variáveis:
 
 | Mensagem | Variáveis |
 |---|---|
@@ -441,13 +441,13 @@ O workflow `.github/workflows/ci.yml` roda **teste do banco + lint + tipos + bui
 
 ### 11.1 Eventos → n8n (webhooks de saída)
 
-Toda mudança relevante gera um evento na tabela `eventos_integracao` (padrão *outbox*). O CRM entrega cada evento, logo após a ação, para os webhooks cadastrados em **Configurações › Integrações**. Falhas são tentadas de novo com espera crescente (1, 2, 4… min, até 8 tentativas) pela rotina `/api/cron/eventos`.
+Toda mudança relevante gera um evento na tabela `eventos_integracao` (padrão *outbox*). O CRM entrega cada evento, logo após a ação, para os webhooks cadastrados em **Configurações › Webhooks**. Falhas são tentadas de novo com espera crescente (1, 2, 4… min, até 8 tentativas) pela rotina `/api/cron/eventos`.
 
 **Eventos:** `pedido.criado` · `pedido.atualizado` · `pedido.pago` · `pedido.cancelado` · `cliente.criado` · `cliente.atualizado` · `pre_venda.criada` · `pre_venda.atualizada` · `whatsapp.mensagem_recebida` · `atendimento.transferido` (e `teste.ping` no botão “Testar”).
 
 **Eventos do Atendimento (WhatsApp):**
 
-- `whatsapp.mensagem_recebida`: o cliente mandou mensagem e a conversa não tinha aviso pendente. Mensagens seguidas antes de alguém abrir ou responder a conversa não geram outro evento. `responsavel` é quem está com a conversa (nulo = na fila). No primeiro contato de um atendimento (`novo: true`), `atendimento.motivo` diz como ele foi distribuído: `rodizio`, `retorno` (voltou para quem atendeu da última vez) ou `fila` (rodízio desligado). Nas mensagens seguintes, `motivo` vem nulo. `responsavel.whatsapp` é o WhatsApp pessoal do perfil (Configurações › Equipe › Meu perfil); conversas da loja com esses números não entram no Atendimento. Fluxo pronto no n8n: *Prometheus CRM - Aviso de Cliente Novo (rodízio do WhatsApp)*.
+- `whatsapp.mensagem_recebida`: o cliente mandou mensagem e a conversa não tinha aviso pendente. Mensagens seguidas antes de alguém abrir ou responder a conversa não geram outro evento. `responsavel` é quem está com a conversa (nulo = na fila). No primeiro contato de um atendimento (`novo: true`), `atendimento.motivo` diz como ele foi distribuído: `rodizio`, `retorno` (voltou para quem atendeu da última vez) ou `fila` (rodízio desligado). Nas mensagens seguintes, `motivo` vem nulo. `responsavel.whatsapp` é o WhatsApp pessoal do perfil (Configurações › Meu perfil); conversas da loja com esses números não entram no Atendimento. Fluxo pronto no n8n: *Prometheus CRM - Aviso de Cliente Novo (rodízio do WhatsApp)*.
 
   ```json
   { "atendimento": { "id": "…", "numero": 812, "novo": true, "motivo": "rodizio", "caminho": "/atendimento?aba=abertos&id=…" },
@@ -553,9 +553,9 @@ O painel da Visão geral mostra as vendas do **Mercado Livre, Shopee e Loja Virt
 
 **Configuração (uma vez):**
 
-1. No Olist: **Menu › Configurações › aba Geral › Aplicativos › + novo aplicativo**. Permissão: só **Leitura** em **Pedidos**. URL de redirecionamento: `https://SEU-DOMINIO/api/olist/callback` (a tela Configurações › Integrações mostra a URL exata para copiar).
+1. No Olist: **Menu › Configurações › aba Geral › Aplicativos › + novo aplicativo**. Permissões: **Leitura** em **Pedidos** e **Produtos**; **Leitura e Escrita** em **Estoque** (estoque das pré-vendas, seção 11.5.1). Mudou as permissões de um aplicativo já conectado? Clique em **Reconectar**. URL de redirecionamento: `https://SEU-DOMINIO/api/olist/callback` (a tela Configurações › Olist ERP mostra a URL exata para copiar).
 2. Na Vercel, cadastre `OLIST_CLIENT_ID`, `OLIST_CLIENT_SECRET` e `CRON_SECRET` (`openssl rand -hex 32`) e faça um novo deploy.
-3. Em **Configurações › Integrações › Olist ERP**, um administrador clica em **Conectar Olist** e autoriza. A primeira sincronização importa 13 meses de histórico.
+3. Em **Configurações › Olist ERP**, um administrador clica em **Conectar Olist** e autoriza. A primeira sincronização importa 13 meses de histórico.
 
 **Como funciona:**
 
@@ -565,6 +565,23 @@ O painel da Visão geral mostra as vendas do **Mercado Livre, Shopee e Loja Virt
 - Se a renovação falhar por mais de 1 dia, a conexão expira: o painel avisa e basta **Reconectar** (o histórico importado é mantido).
 - Limite da API: 60 requisições/min no plano Evoluir (por conta, compartilhado entre aplicativos). Uma sincronização normal usa poucas requisições; a importação inicial, ~1 por 100 pedidos.
 - Código: `src/features/olist/` (OAuth, cliente da API, sincronização) e `src/features/vendas/` (painel).
+
+#### 11.5.1 Estoque da Olist nas pré-vendas
+
+Na pré-venda, **Buscar na Olist** traz o produto (título, foto principal copiada para o Storage, preço sugerido; kit com as cervejas que o compõem) e o vincula (`produtos.olist_id` / `olist_kit`). A partir daí **o estoque da Olist vale no link** e a Olist fica certa — sem criar pedido de venda nem nota fiscal lá:
+
+- **Cerveja entrou na Caixa VIP** (link ou pedido manual de pré-venda) → lançamento de **saída** na Olist. Kit baixa cada componente.
+- **Cancelado, item removido, pedido excluído, pré-venda excluída ou caixa vencida** → lançamento de **entrada**. Se a saída ainda nem tinha chegado à Olist, as duas se anulam (nada é enviado).
+- **Caixa VIP sem nenhum pagamento** é cancelada sozinha depois de `configuracoes.caixa_prazo_pagamento_dias` (padrão 7; 0 = nunca), contados da última compra, do fechamento ou da última cobrança. Caixa paga, com parte paga ou com PIX em aberto não vence. Aviso no sino.
+
+Como funciona:
+
+- O banco cria cada lançamento em `movimentos_estoque_olist` na **mesma transação** da venda/cancelamento (gatilhos em `pedido_itens` e `pedidos`), e a compra confere o estoque com trava (`adicionar_itens_pre_venda` + `travar_estoque_olist`): duas pessoas não levam a última unidade.
+- Estoque que vale no link = disponível lido na Olist (`estoque_olist`) − lançamentos que a Olist ainda não refletiu (`estoque_olist_efetivo`). O CRM já desconta a unidade antes de a Olist confirmar.
+- O servidor envia a fila logo depois de cada ação, somando por produto (um lançamento por produto e rodada); a rotina `/api/cron/olist-estoque` (a cada 5 min) reenvia o que ficou, cancela caixas vencidas e lê de novo o estoque das pré-vendas ativas. Limite de chamadas → espera e tenta depois; recusa da Olist → status `erro` + aviso no sino; envio sem resposta → `conferir` (não repete sozinho, para não lançar em dobro). Os dois aparecem em **Configurações › Olist ERP** com "Tentar de novo" / "Já acertei na Olist".
+- **Aviso de estoque da Olist (webhook)**: instale o aplicativo **Webhooks** na Olist e ative **Lançamentos de estoque** com a URL mostrada no cartão da Olist (`/api/olist/webhook?chave=…`, chave derivada do `CRON_SECRET`). Assim uma venda no Mercado Livre/Shopee atualiza o link na hora.
+- O refresh token da Olist muda a cada uso: a renovação tem trava (`integracao_olist.renovando_token_desde`) e é compartilhada com a sincronização de vendas (`src/features/olist/token.ts`).
+- Código: `src/features/olist/estoque.ts` (fila, leituras, webhook), `rotina-estoque.ts` (pedidos da tela), `components/janela-olist.tsx`; migration `20261113180000_estoque_olist.sql`; testes no `npm run db:test`.
 
 ### 11.6 Banco de Leads (importação de listas)
 

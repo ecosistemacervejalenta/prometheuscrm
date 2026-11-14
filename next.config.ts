@@ -11,6 +11,13 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [{ protocol: 'https', hostname: '*.supabase.co', pathname: '/storage/v1/object/public/**' }],
   },
+  async redirects() {
+    // Endereços antigos das Configurações (abas "Integrações" e "Marketplaces"), para favoritos e links salvos.
+    return [
+      { source: '/configuracoes/integracoes', destination: '/configuracoes', permanent: false },
+      { source: '/configuracoes/marketplaces', destination: '/configuracoes/mercado-livre', permanent: false },
+    ]
+  },
   async headers() {
     return [
       {

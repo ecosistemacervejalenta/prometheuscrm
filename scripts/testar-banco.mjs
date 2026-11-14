@@ -1192,6 +1192,106 @@ await db.exec(`reset role;`)
   await db.exec(`reset role;`)
 }
 
+// -----------------------------------------------------------------------------
+// Estoque da Olist: a pré-venda vende o que tem lá; cada compra baixa, cancelamento devolve
+// -----------------------------------------------------------------------------
+{
+  const como = (id) => `reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${id}', false);`
+  const um = async (sql, params) => (await q(sql, params))[0]
+  const lata = await um(`insert into produtos (nome, preco, olist_id) values ('Lata Olist', 20, 9001) returning id`)
+  const kit = await um(`insert into produtos (nome, preco, olist_id, olist_kit) values ('Kit Olist', 50, 9100, '[{"id":9001,"quantidade":2},{"id":9002,"quantidade":1}]') returning id`)
+  await q(`insert into estoque_olist (id, nome, disponivel, lido_em) values (9001, 'Lata', 5, now()), (9002, 'Garrafa', 10, now())`)
+  const pvo = await um(`insert into pre_vendas (titulo, slug, canal) values ('Drop Olist', 'drop-olist', 'grupo_vip') returning id`)
+  await q(`insert into pre_venda_itens (pre_venda_id, produto_id, preco) values ($1, $2, 20), ($1, $3, 50)`, [pvo.id, lata.id, kit.id])
+  const restantes = async () => Object.fromEntries((await q(`select nome, restante from vw_pre_venda_itens where pre_venda_id = $1 order by nome`, [pvo.id])).map((r) => [r.nome, r.restante]))
+  const efetivo = async (id) => Number((await um(`select estoque_olist_efetivo($1) n`, [id])).n)
+  const endereco = { cep: '04567-890', logradouro: 'Rua B', numero: '2', bairro: 'Centro', cidade: 'São Paulo', uf: 'SP' }
+  const comprar = (whatsapp, itensCompra) =>
+    um(`select * from registrar_pedido_pre_venda('drop-olist', $1::jsonb, $2::jsonb, true)`, [
+      JSON.stringify({ whatsapp, nome: 'Olívia Olist', email: 'olivia@x.com', ...endereco }), JSON.stringify(itensCompra)])
+
+  expectEq('link mostra o estoque da Olist (kit = quantos kits os componentes montam)', await restantes(), { 'Kit Olist': 2, 'Lata Olist': 5 })
+
+  await db.exec(`set role service_role;`)
+  const c1 = await comprar('11966660001', [{ produto_id: lata.id, quantidade: 2 }])
+  await comprar('11966660001', [{ produto_id: kit.id, quantidade: 1 }])
+  await db.exec(`reset role;`)
+  expectEq('cada compra vira saída na fila (kit baixa cada componente)',
+    await q(`select olist_produto_id::int id, tipo, quantidade, status::text from movimentos_estoque_olist where pedido_id = $1 order by id, quantidade`, [c1.id]),
+    [{ id: 9001, tipo: 'S', quantidade: 2, status: 'pendente' }, { id: 9001, tipo: 'S', quantidade: 2, status: 'pendente' }, { id: 9002, tipo: 'S', quantidade: 1, status: 'pendente' }])
+  expectEq('o CRM já desconta antes de a Olist confirmar', await restantes(), { 'Kit Olist': 0, 'Lata Olist': 1 })
+
+  await db.exec(`set role service_role;`)
+  await expectError('última unidade: não vende o que a Olist não tem', `select registrar_pedido_pre_venda('drop-olist', $1::jsonb, $2::jsonb)`,
+    [JSON.stringify({ whatsapp: '11966660002', nome: 'Beto', ...endereco }), JSON.stringify([{ produto_id: lata.id, quantidade: 2 }])])
+  const lote = await q(`select id, olist_produto_id::int p from reservar_movimentos_olist(50)`)
+  await db.exec(`reset role;`)
+  expectEq('servidor reserva a fila para enviar', { n: lote.length, status: (await um(`select count(*)::int n from movimentos_estoque_olist where status = 'enviando'`)).n }, { n: 3, status: 3 })
+
+  // Envio confirmado só da lata; a garrafa voltou para a fila. Depois a leitura da Olist já traz a baixa.
+  await q(`update movimentos_estoque_olist set status = 'enviado', enviado_em = now() where olist_produto_id = 9001 and status = 'enviando'`)
+  await q(`update movimentos_estoque_olist set status = 'pendente' where status = 'enviando'`)
+  expectEq('enviado e ainda não lido continua descontado', await efetivo(9001), 1)
+  await q(`update estoque_olist set disponivel = 1, lido_em = now() + interval '1 second' where id = 9001`)
+  expectEq('leitura nova da Olist já inclui a baixa (sem descontar duas vezes)', await efetivo(9001), 1)
+
+  // Cancelou: o que chegou à Olist volta (entrada); o que ainda estava na fila é anulado.
+  await q(`update pedidos set status = 'cancelado' where id = $1`, [c1.id])
+  expectEq('cancelamento devolve o que saiu e anula o que nem foi enviado',
+    await q(`select olist_produto_id::int id, tipo, quantidade, status::text, motivo from movimentos_estoque_olist where pedido_id = $1 and (tipo = 'E' or status = 'cancelado') order by id, tipo`, [c1.id]),
+    [{ id: 9001, tipo: 'E', quantidade: 2, status: 'pendente', motivo: 'cancelamento' }, { id: 9001, tipo: 'E', quantidade: 2, status: 'pendente', motivo: 'cancelamento' },
+      { id: 9002, tipo: 'S', quantidade: 1, status: 'cancelado', motivo: 'venda' }])
+  expectEq('estoque volta para o link', { lata: await efetivo(9001), garrafa: await efetivo(9002), link: await restantes() }, { lata: 5, garrafa: 10, link: { 'Kit Olist': 2, 'Lata Olist': 5 } })
+  await q(`update pedidos set status = 'novo' where id = $1`, [c1.id])
+  expectEq('reabrir baixa de novo', await efetivo(9001), 1)
+  await q(`update pedidos set status = 'cancelado' where id = $1`, [c1.id])
+
+  // Caixa sem pagamento vence (prazo padrão 7 dias) e devolve o estoque.
+  await db.exec(`set role service_role;`)
+  const c2 = await comprar('11966660003', [{ produto_id: lata.id, quantidade: 3 }])
+  await db.exec(`reset role;`)
+  expectEq('prazo padrão para pagar a caixa é 7 dias', (await um(`select caixa_prazo_pagamento_dias n from configuracoes`)).n, 7)
+  await db.exec(`set role service_role;`)
+  expectEq('caixa recente não vence', (await um(`select vencer_caixas_vip() n`)).n, 0)
+  await db.exec(`reset role;`)
+  await q(`update pedidos set criado_em = now() - interval '8 days' where id = $1`, [c2.id])
+  await q(`update atividades set criado_em = now() - interval '8 days' where pedido_id = $1`, [c2.id])
+  await db.exec(`set role service_role;`)
+  expectEq('caixa sem pagamento há 8 dias vence', (await um(`select vencer_caixas_vip() n`)).n, 1)
+  await db.exec(`reset role;`)
+  expectEq('caixa vencida: cancelada, estoque devolvido, aviso no sino',
+    { status: (await um(`select status::text s from pedidos where id = $1`, [c2.id])).s,
+      lata: await efetivo(9001),
+      motivo: (await um(`select string_agg(distinct motivo, ',') m from movimentos_estoque_olist where pedido_id = $1 and status <> 'cancelado' and tipo = 'E'`, [c2.id])).m,
+      aviso: (await um(`select count(*)::int n from notificacoes where tipo = 'caixa_vencida' and pedido_id = $1`, [c2.id])).n > 0 },
+    { status: 'cancelado', lata: 5, motivo: null, aviso: true })
+
+  // Excluir o pedido também devolve (aqui a baixa nem tinha sido enviada: é anulada).
+  await db.exec(`set role service_role;`)
+  const c3 = await comprar('11966660004', [{ produto_id: lata.id, quantidade: 1 }])
+  await db.exec(`reset role;`)
+  await db.exec(como(uid))
+  await q(`select excluir_pedido($1)`, [c3.id])
+  await db.exec(`reset role;`)
+  expectEq('pedido excluído não deixa baixa na fila', await efetivo(9001), 5)
+
+  // Pedido manual da equipe numa pré-venda também baixa (e respeita o estoque da Olist).
+  const cliente = await um(`select id from clientes where whatsapp = '5511966660004'`)
+  await db.exec(como(uid2))
+  const manual = await um(`select id from criar_pedido($1, $2::jsonb, $3)`, [cliente.id, JSON.stringify([{ produto_id: lata.id, quantidade: 2 }]), pvo.id])
+  await expectError('pedido manual além do estoque da Olist', `select criar_pedido($1, $2::jsonb, $3)`, [cliente.id, JSON.stringify([{ produto_id: lata.id, quantidade: 4 }]), pvo.id])
+  await db.exec(`reset role;`)
+  expectEq('pedido manual da equipe baixa o estoque', { fila: (await um(`select count(*)::int n from movimentos_estoque_olist where pedido_id = $1 and tipo = 'S'`, [manual.id])).n, lata: await efetivo(9001) }, { fila: 1, lata: 3 })
+
+  await db.exec(como(uid2))
+  expectEq('equipe vê o estoque da Olist e a fila', (await um(`select (select count(*)::int from estoque_olist) e, (select count(*)::int from movimentos_estoque_olist) m`)).e, 2)
+  await expectError('equipe não grava na fila', `insert into movimentos_estoque_olist (olist_produto_id, tipo, quantidade, motivo) values (1, 'S', 1, 'x')`)
+  await expectError('equipe não reserva a fila', `select reservar_movimentos_olist(10)`)
+  await db.exec(`reset role; set role anon; select set_config('request.jwt.claim.sub', '', false);`)
+  await expectError('visitante não vê o estoque', `select count(*) from estoque_olist`)
+  await db.exec(`reset role;`)
+}
+
 if (falhas > 0) {
   console.error(`\n✗ ${falhas} verificação(ões) falharam`)
   process.exit(1)

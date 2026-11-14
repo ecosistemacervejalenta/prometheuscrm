@@ -273,7 +273,7 @@ export async function configAtendimento() {
 
 export type ConfigAtendimento = Awaited<ReturnType<typeof configAtendimento>>
 
-/** Situação da integração para o cartão em Configurações › Integrações. */
+/** Situação da integração para Configurações › WhatsApp da loja. */
 export async function statusWhatsapp() {
   await exigirEquipe()
   const site = await urlDoSite()
