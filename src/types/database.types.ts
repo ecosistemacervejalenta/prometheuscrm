@@ -384,6 +384,8 @@ export type Database = {
           origem_descricao: string | null
           pausada_motivo: string | null
           processando_desde: string | null
+          contatos_lidos: number
+          repetidos: number
           rodape: string | null
           status: Database["public"]["Enums"]["status_campanha"]
           texto: string
@@ -421,6 +423,8 @@ export type Database = {
           origem_descricao?: string | null
           pausada_motivo?: string | null
           processando_desde?: string | null
+          contatos_lidos?: number
+          repetidos?: number
           rodape?: string | null
           status?: Database["public"]["Enums"]["status_campanha"]
           texto: string
@@ -458,6 +462,8 @@ export type Database = {
           origem_descricao?: string | null
           pausada_motivo?: string | null
           processando_desde?: string | null
+          contatos_lidos?: number
+          repetidos?: number
           rodape?: string | null
           status?: Database["public"]["Enums"]["status_campanha"]
           texto?: string
@@ -2824,6 +2830,8 @@ export type Database = {
           pendentes: number | null
           processando_desde: string | null
           respostas: number | null
+          contatos_lidos: number | null
+          repetidos: number | null
           rodape: string | null
           sairam: number | null
           status: Database["public"]["Enums"]["status_campanha"] | null
@@ -3338,6 +3346,7 @@ export type Database = {
       }
       confirmar_campanha: { Args: { p_campanha_id: string }; Returns: Json }
       contatos_campanha_24h: { Args: never; Returns: number }
+      publico_listas_campanha: { Args: { p_lista_ids: string[] }; Returns: Json }
       cotar_frete_pedido: {
         Args: { p_pedido_id: string; p_valor: number }
         Returns: {

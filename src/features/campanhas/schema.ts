@@ -43,6 +43,8 @@ export const esquemaCampanha = z
     origem_descricao: opcional(200, 'Descrição grande demais.'),
     // Listas do Banco de Leads (origem 'leads'); números repetidos entre elas entram uma vez só.
     lista_ids: z.array(z.uuid()).max(30, 'Escolha no máximo 30 listas por campanha.'),
+    // Arquivo/colar: linhas com WhatsApp válido antes de tirar os repetidos (só para mostrar quantos saíram).
+    contatos_lidos: z.number().int().min(0).max(10_000_000).default(0),
     agendada_para: z.iso.datetime({ offset: true }).nullable(),
     // Hora do dia (Brasília) para sair depois da aprovação; nulo = assim que a Meta aprovar.
     horario_envio: z.string().regex(REGEX_HORARIO, 'Escolha o horário do envio.').nullable(),

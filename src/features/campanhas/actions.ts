@@ -83,6 +83,9 @@ export async function criarCampanha(dados: DadosCampanha): Promise<ResultadoCria
     origem_descricao: c.origem_descricao,
     // A coluna guarda a primeira lista (referência); os contatos vêm de todas abaixo.
     lista_id: c.origem === 'leads' ? (c.lista_ids[0] ?? null) : null,
+    // Listas: o banco soma ao adicionar cada página. Repetidos = lidos − contatos (na confirmação).
+    contatos_lidos: c.origem === 'leads' ? 0 : c.contatos_lidos,
+    repetidos: 0,
     agendada_para: c.agendada_para,
     // Agendada (dia e hora): guarda a hora, usada se a Meta aprovar depois da hora marcada.
     horario_envio: c.horario_envio ?? (c.agendada_para ? horaEmBrasilia(c.agendada_para) : null),
@@ -101,7 +104,7 @@ export async function criarCampanha(dados: DadosCampanha): Promise<ResultadoCria
   }
 
   // Listas do Banco de Leads: cada uma em páginas de 5.000 (cada página cabe no tempo limite do banco).
-  // Um número que está em mais de uma lista entra uma vez só (o banco ignora o repetido).
+  // Um número que está em mais de uma lista entra uma vez só (o banco ignora o repetido e conta quantos foram).
   const listas = c.origem === 'leads' ? [...new Set(c.lista_ids)] : []
   for (const listaId of listas) {
     let apos: string | undefined
@@ -112,6 +115,22 @@ export async function criarCampanha(dados: DadosCampanha): Promise<ResultadoCria
     } while (apos)
   }
   return { ok: true }
+}
+
+export type PublicoListas = { soma: number; unicos: number }
+
+/** Prévia do público: quantos números as listas somam e quantos são diferentes (o mesmo número recebe 1 vez). */
+export async function contarPublicoListas(listaIds: string[]): Promise<PublicoListas | null> {
+  const { supabase } = await exigirEquipe()
+  const ids = [...new Set(listaIds)].slice(0, 30)
+  if (ids.length === 0) return { soma: 0, unicos: 0 }
+  const { data, error } = await supabase.rpc('publico_listas_campanha', { p_lista_ids: ids })
+  if (error) {
+    console.error('Prévia do público das listas:', error)
+    return null
+  }
+  const r = data as { soma?: number; unicos?: number } | null
+  return { soma: Number(r?.soma ?? 0), unicos: Number(r?.unicos ?? 0) }
 }
 
 export async function adicionarContatosCampanha(campanhaId: string, lote: unknown): Promise<EstadoAcao> {

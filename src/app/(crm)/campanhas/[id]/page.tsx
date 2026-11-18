@@ -35,7 +35,7 @@ import {
   STATUS_MODELO,
 } from '@/features/campanhas/status'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
-import { formatarDataHora, formatarNumero, formatarRelativo, formatarWhatsapp } from '@/lib/format'
+import { formatarDataHora, formatarNumero, formatarRelativo, formatarWhatsapp, plural } from '@/lib/format'
 import { linkWhatsapp } from '@/lib/whatsapp'
 
 // As ações desta página falam com a Meta (criação do modelo, foto, verificação): até 5 min.
@@ -271,7 +271,14 @@ export default async function PaginaCampanha({ params }: PageProps<'/campanhas/[
           <Kpi
             rotulo="Contatos"
             valor={formatarNumero(contatos)}
-            detalhe={campanha.ignoradas ? `${formatarNumero(campanha.ignoradas)} fora da lista` : 'sem repetidos'}
+            detalhe={
+              [
+                campanha.repetidos ? plural(campanha.repetidos, 'repetido tirado', 'repetidos tirados') : 'sem repetidos',
+                campanha.ignoradas ? `${formatarNumero(campanha.ignoradas)} fora da lista` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            }
           />
           <Kpi rotulo="Enviadas" valor={formatarNumero(enviadas)} detalhe={`${formatarNumero(campanha.pendentes)} na fila`} />
           <Kpi rotulo="Entregues" valor={percentual(campanha.entregues, enviadas)} detalhe={`${formatarNumero(campanha.entregues)} das enviadas`} tendencia="positiva" />

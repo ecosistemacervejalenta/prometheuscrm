@@ -40,7 +40,7 @@ import { formatarNumero, formatarWhatsapp, plural } from '@/lib/format'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
-import { adicionarContatosCampanha, confirmarCampanha, criarCampanha } from '../actions'
+import { adicionarContatosCampanha, confirmarCampanha, contarPublicoListas, criarCampanha, type PublicoListas } from '../actions'
 
 import {
   IMAGEM_MAXIMA,
@@ -298,11 +298,34 @@ export function NovaCampanha({
   )
   const disponiveis = listas.filter((l) => !listaIds.includes(l.id))
   const pastas = [...new Set(disponiveis.map((l) => l.pasta))]
-  // Soma das listas: quem está em mais de uma recebe só 1 vez, então o total real pode ser menor.
+  // Soma das listas: quem está em mais de uma recebe só 1 vez — o banco conta os números diferentes.
   const somaListas = escolhidas.reduce((total, l) => total + l.comWhatsapp, 0)
+  const chaveListas = [...listaIds].sort().join(',')
+  const [contagem, setContagem] = useState<{ chave: string; publico: PublicoListas | null } | null>(null)
+  const publicoListas = contagem?.chave === chaveListas ? contagem.publico : null
+  const contandoListas = listaIds.length > 0 && contagem?.chave !== chaveListas
+  const unicosListas = publicoListas?.unicos ?? somaListas
+  const repetidosListas = publicoListas ? Math.max(publicoListas.soma - publicoListas.unicos, 0) : 0
+
+  useEffect(() => {
+    if (!chaveListas) return
+    let atual = true
+    const espera = setTimeout(() => {
+      contarPublicoListas(chaveListas.split(','))
+        .catch(() => null)
+        .then((publico) => {
+          if (atual) setContagem({ chave: chaveListas, publico })
+        })
+    }, 300)
+    return () => {
+      atual = false
+      clearTimeout(espera)
+    }
+  }, [chaveListas])
 
   const leitura = origem === 'arquivo' ? leituraArquivo : origem === 'colar' ? leituraColada : null
-  const totalPublico = origem === 'leads' ? somaListas : (leitura?.contatos.length ?? 0)
+  const totalPublico = origem === 'leads' ? unicosListas : (leitura?.contatos.length ?? 0)
+  const repetidosPublico = origem === 'leads' ? repetidosListas : (leitura?.resumo.duplicados ?? 0)
   const descricaoPublico =
     origem === 'leads'
       ? descreverListas(escolhidas)
@@ -409,6 +432,7 @@ export function NovaCampanha({
           origem,
           origem_descricao: descricaoPublico,
           lista_ids: origem === 'leads' ? listaIds : [],
+          contatos_lidos: origem === 'leads' ? 0 : (leitura?.contatos.length ?? 0) + (leitura?.resumo.duplicados ?? 0),
           agendada_para: quando === 'agendar' ? new Date(agendarPara).toISOString() : null,
           horario_envio: quando === 'horario' ? horario : null,
         })
@@ -605,16 +629,24 @@ export function NovaCampanha({
                     </Campo>
                   )}
                   {escolhidas.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2" aria-live="polite">
                       <Badge tom="sucesso" ponto>
-                        {escolhidas.length > 1 ? 'Até ' : ''}
-                        {plural(somaListas, 'contato com WhatsApp', 'contatos com WhatsApp')}
+                        {contandoListas && escolhidas.length > 1 ? 'Até ' : ''}
+                        {plural(unicosListas, 'contato com WhatsApp', 'contatos com WhatsApp')}
                       </Badge>
-                      {escolhidas.length > 1 && (
+                      {contandoListas ? (
+                        <span className="text-[13px] text-suave">Conferindo números repetidos…</span>
+                      ) : repetidosListas > 0 ? (
+                        <Badge tom="neutro">
+                          {plural(repetidosListas, 'repetido tirado', 'repetidos tirados')} — cada número recebe só 1 vez
+                        </Badge>
+                      ) : escolhidas.length > 1 && publicoListas ? (
+                        <span className="text-[13px] text-suave">Nenhum número repetido entre as listas</span>
+                      ) : escolhidas.length > 1 ? (
                         <span className="text-[13px] text-suave">
                           {plural(escolhidas.length, 'lista', 'listas')} — quem está em mais de uma recebe só 1 vez
                         </span>
-                      )}
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -876,6 +908,11 @@ export function NovaCampanha({
                   <dt className="tipo-rotulo text-suave">Público</dt>
                   <dd className="mt-0.5 font-semibold">{totalPublico > 0 ? plural(totalPublico, 'contato', 'contatos') : '—'}</dd>
                   {totalPublico > 0 && <dd className="truncate text-[13px] text-suave">{descricaoPublico}</dd>}
+                  {repetidosPublico > 0 && (
+                    <dd className="text-[13px] text-suave">
+                      {plural(repetidosPublico, 'repetido tirado', 'repetidos tirados')} (recebe só 1 vez)
+                    </dd>
+                  )}
                 </div>
                 <div>
                   <dt className="tipo-rotulo text-suave">Mensagem</dt>
