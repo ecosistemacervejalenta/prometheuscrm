@@ -20,7 +20,7 @@ export const metadata: Metadata = { title: 'Campanhas' }
 const COMO_FUNCIONA = [
   { icone: Upload, titulo: 'Suba a lista', texto: 'CSV, Excel, números colados ou uma lista do Banco de Leads.' },
   { icone: MessageSquareText, titulo: 'Escreva a mensagem', texto: 'Com foto, {nome} e botões. A Meta aprova antes do 1º envio.' },
-  { icone: Send, titulo: 'Dispare', texto: 'Agora ou agendado, pelo WhatsApp oficial — sem risco de banimento.' },
+  { icone: Send, titulo: 'Dispare', texto: 'No horário que você escolher, pelo WhatsApp oficial — sem risco de banimento.' },
 ]
 
 export default async function PaginaCampanhas() {

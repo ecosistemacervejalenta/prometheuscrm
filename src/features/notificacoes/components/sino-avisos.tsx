@@ -1,6 +1,6 @@
 'use client'
 
-import { BadgeDollarSign, Bell, CheckCheck, ListTodo, MessageCircle, MessagesSquare, PackageX } from 'lucide-react'
+import { BadgeDollarSign, Bell, CheckCheck, ListTodo, Megaphone, MessageCircle, MessagesSquare, PackageX } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState, useTransition } from 'react'
 
@@ -18,6 +18,7 @@ function destinoDoAviso(a: Aviso) {
   if (a.tarefa) return `/tarefas?id=${a.tarefa.id}`
   if (a.atendimento_id) return `/atendimento?aba=abertos&id=${a.atendimento_id}`
   if (a.pedido_id) return `/pedidos/${a.pedido_id}`
+  if (a.campanha_id) return `/campanhas/${a.campanha_id}`
   if (a.tipo === 'estoque_olist') return '/configuracoes/olist#estoque-olist'
   if (a.tipo === 'caixa_vencida') return '/pedidos'
   return null
@@ -119,6 +120,7 @@ export function SinoAvisos({ itens, naoLidos, variante }: PropsAvisos & { varian
                   const mensagem = a.tipo === 'whatsapp_mensagem'
                   const pix = a.tipo === 'pix_recebido'
                   const estoque = a.tipo === 'estoque_olist' || a.tipo === 'caixa_vencida'
+                  const campanha = a.tipo === 'campanha_aprovada'
                   const destino = destinoDoAviso(a)
                   const conteudo = (
                     <>
@@ -129,6 +131,10 @@ export function SinoAvisos({ itens, naoLidos, variante }: PropsAvisos & { varian
                       ) : pix ? (
                         <span className="grid size-8 shrink-0 place-items-center rounded-full bg-sucesso-50 text-sucesso" aria-hidden>
                           <BadgeDollarSign className="size-4" />
+                        </span>
+                      ) : campanha ? (
+                        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-volt-50 text-volt-700" aria-hidden>
+                          <Megaphone className="size-4" />
                         </span>
                       ) : estoque ? (
                         <span className="grid size-8 shrink-0 place-items-center rounded-full bg-alerta-50 text-alerta" aria-hidden>
@@ -141,8 +147,8 @@ export function SinoAvisos({ itens, naoLidos, variante }: PropsAvisos & { varian
                         <span className={cn('block text-[14px] leading-5', a.lido ? 'font-medium' : 'font-semibold')}>{a.titulo}</span>
                         {a.tarefa && <span className="mt-0.5 block truncate text-[13px] text-ink/80">{a.tarefa.titulo}</span>}
                         {a.texto && (
-                          <span className={cn('mt-0.5 line-clamp-2 block text-[13px]', mensagem || pix || estoque ? 'text-ink/80' : 'text-suave')}>
-                            {mensagem || pix || estoque ? a.texto : `“${a.texto}”`}
+                          <span className={cn('mt-0.5 line-clamp-2 block text-[13px]', mensagem || pix || estoque || campanha ? 'text-ink/80' : 'text-suave')}>
+                            {mensagem || pix || estoque || campanha ? a.texto : `“${a.texto}”`}
                           </span>
                         )}
                         <span className="tipo-dado mt-1 block text-[11px] text-sutil">

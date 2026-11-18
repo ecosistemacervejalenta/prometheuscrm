@@ -64,9 +64,10 @@ export function AvisosAoVivo({ meuId, naoLidos }: { meuId: string; naoLidos: num
         if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
           const whatsapp = Boolean(novo.atendimento_id)
           // Mesma tag da tela de Atendimento: o navegador troca a notificação em vez de empilhar duas.
-          new Notification(whatsapp ? 'Prometheus · WhatsApp' : 'Prometheus · Tarefas', {
+          const campanha = novo.tipo === 'campanha_aprovada'
+          new Notification(whatsapp ? 'Prometheus · WhatsApp' : campanha ? 'Prometheus · Campanhas' : 'Prometheus · Tarefas', {
             body: (whatsapp && novo.texto ? `${novo.titulo}\n${novo.texto}` : texto).slice(0, 200),
-            tag: whatsapp ? 'prometheus-atendimento' : 'prometheus-tarefas',
+            tag: whatsapp ? 'prometheus-atendimento' : campanha ? 'prometheus-campanhas' : 'prometheus-tarefas',
           })
         }
       } catch {

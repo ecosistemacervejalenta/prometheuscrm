@@ -29,6 +29,7 @@ import type { RespostaRotina } from './disparo'
 import { bloqueioDaMeta, classeDoErro, ERRO_SAIU_DO_MARKETING, mensagemDoErro, motivoDaRecusa, type ClasseErro } from './erros-meta'
 import { urlImagemCampanha } from './mensagem'
 import { faixaDoLimite, limiteDiario } from './meta'
+import { horaEmBrasilia, planoAposAprovacao, rotuloQuando, type PlanoDeEnvio } from './horario'
 import { assinaturaDoModelo, componentesDoEnvio, corpoDoModelo, IDIOMA_MODELO, nomeDoModelo } from './modelo-meta'
 
 /**
@@ -295,6 +296,39 @@ function situacaoDoModelo(evento: string): string {
 }
 
 /**
+ * Aviso no sino (de quem criou a campanha e dos admins) quando a Meta aprova: quando sai ou,
+ * se aprovou depois do horário, que é preciso escolher entre enviar agora ou no próximo horário.
+ * Falha no aviso não desfaz a aprovação (fica só nos logs).
+ */
+async function avisarAprovacao(
+  supabase: Admin,
+  c: { id: string; nome: string; criado_por: string | null },
+  plano: PlanoDeEnvio,
+) {
+  const titulo =
+    plano.tipo === 'perguntar' ? `Escolha quando enviar · ${c.nome}` : `Campanha aprovada · ${c.nome}`
+  const texto =
+    plano.tipo === 'agora'
+      ? 'A Meta aprovou e o envio já começou.'
+      : plano.tipo === 'agendar'
+        ? `A Meta aprovou. Sai ${rotuloQuando(plano.para)}.`
+        : `A Meta aprovou às ${horaEmBrasilia(agora())}, depois das ${plano.horario}. Envie agora ou deixe para ${rotuloQuando(plano.para)}.`
+  try {
+    let consulta = supabase.from('perfis').select('id').eq('ativo', true)
+    consulta = c.criado_por ? consulta.or(`papel.eq.admin,id.eq.${c.criado_por}`) : consulta.eq('papel', 'admin')
+    const { data: perfis } = conferir(await consulta)
+    if (perfis.length === 0) return
+    conferir(
+      await supabase
+        .from('notificacoes')
+        .insert(perfis.map((p) => ({ perfil_id: p.id, tipo: 'campanha_aprovada', campanha_id: c.id, titulo, texto }))),
+    )
+  } catch (erro) {
+    console.error('[campanhas] aviso de aprovação', erro)
+  }
+}
+
+/**
  * Aplica o status do modelo (pela consulta ou pelo webhook) a todas as campanhas que o usam.
  * Devolve true se alguma campanha ficou liberada para envio agora.
  */
@@ -318,23 +352,31 @@ export async function aplicarStatusModelo(
   )
 
   if (status === 'APPROVED') {
-    conferir(
+    // Cada campanha segue o próprio horário: agora, agendada ou esperando a equipe escolher.
+    const { data: aprovadas } = conferir(
       await supabase
         .from('campanhas')
-        .update({ status: 'agendada' })
+        .select('id, nome, agendada_para, horario_envio, criado_por')
         .eq('modelo_id', modeloId)
-        .eq('status', 'aguardando_aprovacao')
-        .gt('agendada_para', agora()),
+        .eq('status', 'aguardando_aprovacao'),
     )
-    const { data } = conferir(
-      await supabase
-        .from('campanhas')
-        .update({ status: 'enviando', iniciada_em: agora() })
-        .eq('modelo_id', modeloId)
-        .eq('status', 'aguardando_aprovacao')
-        .select('id'),
-    )
-    return data.length > 0
+    let liberou = false
+    for (const c of aprovadas) {
+      const plano = planoAposAprovacao(c)
+      const quando = agora()
+      const campos =
+        plano.tipo === 'agora'
+          ? { status: 'enviando' as const, iniciada_em: quando, aprovada_em: quando }
+          : { status: 'agendada' as const, agendada_para: plano.para, decidir_envio: plano.tipo === 'perguntar', aprovada_em: quando }
+      // Só quem ainda estava em análise (o webhook e a consulta podem chegar juntos).
+      const { data } = conferir(
+        await supabase.from('campanhas').update(campos).eq('id', c.id).eq('status', 'aguardando_aprovacao').select('id'),
+      )
+      if (data.length === 0) continue
+      if (plano.tipo === 'agora') liberou = true
+      await avisarAprovacao(supabase, c, plano)
+    }
+    return liberou
   }
   if (status === 'REJECTED') {
     conferir(
@@ -457,7 +499,7 @@ export async function analisarCampanha(supabase: Admin, campanhaId: string): Pro
           ? 'A Meta aprovou a mensagem na hora.'
           : modelo.status === 'REJECTED'
             ? `A Meta recusou a mensagem. ${motivoDaRecusa(modelo.rejected_reason)}`
-            : 'Mensagem enviada para a análise da Meta. O envio começa sozinho quando ela aprovar.',
+            : 'Mensagem enviada para a análise da Meta. Quando ela aprovar, a campanha segue o horário escolhido.',
     }
   } catch (erro) {
     console.error('[campanhas] falha ao criar o modelo', erro)
@@ -762,7 +804,12 @@ async function rodada(supabase: Admin, cred: CredenciaisMeta): Promise<ResumoRod
     .lt('atualizado_em', doisMinutosAtras)
     .limit(5)
   for (const c of semModelo ?? []) await analisarCampanha(supabase, c.id)
-  await supabase.from('campanhas').update({ status: 'enviando', iniciada_em: agora() }).eq('status', 'agendada').lte('agendada_para', agora())
+  // Chegou a hora (inclusive as aprovadas fora do horário sem resposta da equipe: saem no próximo horário).
+  await supabase
+    .from('campanhas')
+    .update({ status: 'enviando', iniciada_em: agora(), decidir_envio: false })
+    .eq('status', 'agendada')
+    .lte('agendada_para', agora())
   const limite = limiteDiario(await conferirNumeroSePreciso(supabase, cred))
 
   const { data: campanhas, error } = await supabase

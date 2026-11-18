@@ -4,6 +4,7 @@ import {
   BookUser,
   CalendarClock,
   Check,
+  Clock,
   ClipboardPaste,
   FileSpreadsheet,
   ImagePlus,
@@ -54,6 +55,7 @@ import {
 import { formatarCusto, PRECOS_META, type PrecoMensagem } from '../custo'
 import { limiteDiario, rotuloLimite } from '../meta'
 import type { ListaParaCampanha } from '../queries'
+import { HORARIO_PADRAO, REGEX_HORARIO } from '../horario'
 import { CONTATOS_POR_LOTE } from '../schema'
 import { PreviaWhatsapp } from './previa-whatsapp'
 
@@ -98,6 +100,23 @@ function lerContatos(linhas: string[][], mapeamento: Mapeamento | null): Leitura
   const { leads, resumo } = prepararLeads(dados, colunas, mapa, { somenteComWhatsapp: true })
   const contatos = leads.flatMap((l) => (l.whatsapp ? [{ nome: l.nome, whatsapp: l.whatsapp }] : []))
   return { colunas, mapeamento: mapa, contatos, resumo }
+}
+
+/** "Lista X (Pasta)" ou "Listas X, Y e mais 2" — cabe nos 200 caracteres da descrição. */
+function descreverListas(listas: ListaParaCampanha[]): string {
+  if (listas.length === 0) return ''
+  if (listas.length === 1) return `Lista ${listas[0].nome} (${listas[0].pasta})`.slice(0, 200)
+  let texto = `Listas ${listas[0].nome}`
+  let usadas = 1
+  for (const l of listas.slice(1)) {
+    const resto = listas.length - usadas - 1
+    const proximo = `${texto}, ${l.nome}`
+    if ((proximo + (resto > 0 ? ` e mais ${resto + 1}` : '')).length > 200) break
+    texto = proximo
+    usadas++
+  }
+  const faltam = listas.length - usadas
+  return (faltam > 0 ? `${texto} e mais ${faltam}` : texto).slice(0, 200)
 }
 
 function Passo({
@@ -239,7 +258,7 @@ export function NovaCampanha({
   const [lendo, setLendo] = useState(false)
   const [arrastando, setArrastando] = useState(false)
   const [erroArquivo, setErroArquivo] = useState<string | null>(null)
-  const [listaId, setListaId] = useState('')
+  const [listaIds, setListaIds] = useState<string[]>([])
   const [textoColado, setTextoColado] = useState('')
 
   // Passo 2 — mensagem
@@ -256,7 +275,9 @@ export function NovaCampanha({
 
   // Passo 3 — revisão
   const [nome, setNome] = useState('')
-  const [quando, setQuando] = useState<'agora' | 'agendar'>('agora')
+  // Padrão: sai num horário comercial depois da aprovação (a Meta aprova a qualquer hora, até de noite).
+  const [quando, setQuando] = useState<'agora' | 'horario' | 'agendar'>('horario')
+  const [horario, setHorario] = useState(HORARIO_PADRAO)
   const [agendarPara, setAgendarPara] = useState('')
   const [disparo, setDisparo] = useState<Disparo>({
     executando: false,
@@ -271,13 +292,23 @@ export function NovaCampanha({
 
   const leituraArquivo = useMemo(() => (arquivo ? lerContatos(arquivo.linhas, mapaArquivo) : null), [arquivo, mapaArquivo])
   const leituraColada = useMemo(() => (textoColado.trim() ? lerContatos(lerTexto(textoColado), null) : null), [textoColado])
-  const lista = listas.find((l) => l.id === listaId)
-  const pastas = useMemo(() => [...new Set(listas.map((l) => l.pasta))], [listas])
+  const escolhidas = useMemo(
+    () => listaIds.flatMap((id) => listas.find((l) => l.id === id) ?? []),
+    [listaIds, listas],
+  )
+  const disponiveis = listas.filter((l) => !listaIds.includes(l.id))
+  const pastas = [...new Set(disponiveis.map((l) => l.pasta))]
+  // Soma das listas: quem está em mais de uma recebe só 1 vez, então o total real pode ser menor.
+  const somaListas = escolhidas.reduce((total, l) => total + l.comWhatsapp, 0)
 
   const leitura = origem === 'arquivo' ? leituraArquivo : origem === 'colar' ? leituraColada : null
-  const totalPublico = origem === 'leads' ? (lista?.comWhatsapp ?? 0) : (leitura?.contatos.length ?? 0)
+  const totalPublico = origem === 'leads' ? somaListas : (leitura?.contatos.length ?? 0)
   const descricaoPublico =
-    origem === 'leads' ? (lista ? `Lista ${lista.nome} (${lista.pasta})` : '') : origem === 'arquivo' ? (arquivo?.nome ?? '') : 'Números colados'
+    origem === 'leads'
+      ? descreverListas(escolhidas)
+      : origem === 'arquivo'
+        ? (arquivo?.nome ?? '')
+        : 'Números colados'
   const nomeContato = leitura?.contatos.find((c) => c.nome)?.nome ?? NOME_EXEMPLO
 
   const erros = validarMensagem(mensagem)
@@ -287,6 +318,7 @@ export function NovaCampanha({
     !mensagemPronta && 'Revise a mensagem (passo 2).',
     !nome.trim() && 'Dê um nome para a campanha.',
     quando === 'agendar' && !agendarPara && 'Escolha a data e a hora do envio.',
+    quando === 'horario' && !REGEX_HORARIO.test(horario) && 'Escolha o horário do envio.',
   ].filter((p): p is string => Boolean(p))
   const limite = limiteDiario(limiteTier)
 
@@ -376,8 +408,9 @@ export function NovaCampanha({
           imagem_path: imagemPath,
           origem,
           origem_descricao: descricaoPublico,
-          lista_id: origem === 'leads' ? listaId : null,
+          lista_ids: origem === 'leads' ? listaIds : [],
           agendada_para: quando === 'agendar' ? new Date(agendarPara).toISOString() : null,
+          horario_envio: quando === 'horario' ? horario : null,
         })
         if (!criada.ok) return parar(criada.mensagem)
         enviados = 0
@@ -410,7 +443,7 @@ export function NovaCampanha({
       <div className="min-w-0 space-y-5 lg:space-y-6">
         <fieldset disabled={bloqueado} className="min-w-0 space-y-5 lg:space-y-6">
           {/* 1 · Público */}
-          <Passo numero={1} titulo="Para quem enviar" descricao="Suba uma lista, escolha uma do Banco de Leads ou cole os números." feito={totalPublico > 0}>
+          <Passo numero={1} titulo="Para quem enviar" descricao="Suba uma lista, escolha uma ou mais do Banco de Leads ou cole os números." feito={totalPublico > 0}>
             <div role="tablist" aria-label="Origem dos contatos" className="mb-4 grid grid-cols-3 gap-1 rounded-xl border border-linha bg-papel p-1">
               {ORIGENS.map((o) => (
                 <button
@@ -516,30 +549,72 @@ export function NovaCampanha({
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <Campo label="Lista" htmlFor="lista_id">
-                    <Select name="lista_id" value={listaId} onChange={(e) => setListaId(e.target.value)}>
-                      <option value="">— escolha uma lista —</option>
-                      {pastas.map((pasta) => (
-                        <optgroup key={pasta} label={pasta}>
-                          {listas
-                            .filter((l) => l.pasta === pasta)
-                            .map((l) => (
-                              <option key={l.id} value={l.id}>
-                                {l.nome} · {formatarNumero(l.comWhatsapp)} com WhatsApp
-                              </option>
-                            ))}
-                        </optgroup>
+                  {escolhidas.length > 0 && (
+                    <ul className="divide-y divide-linha overflow-hidden rounded-xl border border-linha text-[14px]">
+                      {escolhidas.map((l) => (
+                        <li key={l.id} className="flex items-center gap-3 px-3 py-2">
+                          <BookUser className="size-4 shrink-0 text-volt-700" aria-hidden />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-semibold">{l.nome}</p>
+                            <p className="truncate text-[13px] text-suave">
+                              {l.pasta} · {plural(l.comWhatsapp, 'contato com WhatsApp', 'contatos com WhatsApp')}
+                            </p>
+                          </div>
+                          <Link href={`/leads/listas/${l.id}`} className="shrink-0 text-[13px] font-semibold text-volt-700 hover:text-ink max-sm:hidden">
+                            Ver
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => setListaIds((ids) => ids.filter((id) => id !== l.id))}
+                            className="grid size-8 shrink-0 place-items-center rounded-lg text-suave hover:bg-papel hover:text-ink"
+                            aria-label={`Tirar a lista ${l.nome}`}
+                          >
+                            <X className="size-4" aria-hidden />
+                          </button>
+                        </li>
                       ))}
-                    </Select>
-                  </Campo>
-                  {lista && (
+                    </ul>
+                  )}
+                  {disponiveis.length > 0 && (
+                    <Campo
+                      label={escolhidas.length === 0 ? 'Lista' : 'Adicionar outra lista'}
+                      htmlFor="lista_id"
+                      dica={escolhidas.length === 0 ? 'Dá para juntar várias listas na mesma campanha.' : undefined}
+                    >
+                      <Select
+                        name="lista_id"
+                        value=""
+                        onChange={(e) => {
+                          const id = e.target.value
+                          if (id) setListaIds((ids) => (ids.includes(id) ? ids : [...ids, id]))
+                        }}
+                      >
+                        <option value="">{escolhidas.length === 0 ? '— escolha uma lista —' : '— adicionar lista —'}</option>
+                        {pastas.map((pasta) => (
+                          <optgroup key={pasta} label={pasta}>
+                            {disponiveis
+                              .filter((l) => l.pasta === pasta)
+                              .map((l) => (
+                                <option key={l.id} value={l.id}>
+                                  {l.nome} · {formatarNumero(l.comWhatsapp)} com WhatsApp
+                                </option>
+                              ))}
+                          </optgroup>
+                        ))}
+                      </Select>
+                    </Campo>
+                  )}
+                  {escolhidas.length > 0 && (
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge tom="sucesso" ponto>
-                        {plural(lista.comWhatsapp, 'contato com WhatsApp', 'contatos com WhatsApp')}
+                        {escolhidas.length > 1 ? 'Até ' : ''}
+                        {plural(somaListas, 'contato com WhatsApp', 'contatos com WhatsApp')}
                       </Badge>
-                      <Link href={`/leads/listas/${lista.id}`} className="text-[13px] font-semibold text-volt-700 hover:text-ink">
-                        Ver a lista
-                      </Link>
+                      {escolhidas.length > 1 && (
+                        <span className="text-[13px] text-suave">
+                          {plural(escolhidas.length, 'lista', 'listas')} — quem está em mais de uma recebe só 1 vez
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -730,10 +805,11 @@ export function NovaCampanha({
 
               <fieldset>
                 <legend className="mb-1.5 text-[13px] font-semibold">Quando enviar</legend>
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2 sm:grid-cols-3">
                   {(
                     [
-                      { valor: 'agora', titulo: 'Agora', descricao: 'Começa assim que a Meta aprovar a mensagem.', icone: Send },
+                      { valor: 'horario', titulo: 'Num horário', descricao: 'Sai no horário escolhido depois que a Meta aprovar.', icone: Clock },
+                      { valor: 'agora', titulo: 'Assim que aprovar', descricao: 'Começa no minuto em que a Meta aprovar, a qualquer hora.', icone: Send },
                       { valor: 'agendar', titulo: 'Agendar', descricao: 'Escolha o dia e a hora.', icone: CalendarClock },
                     ] as const
                   ).map((o) => (
@@ -761,15 +837,37 @@ export function NovaCampanha({
                     </label>
                   ))}
                 </div>
+                {quando === 'horario' && (
+                  <div className="mt-2">
+                    <Input
+                      name="horario_envio"
+                      type="time"
+                      aria-label="Horário do envio"
+                      value={horario}
+                      onChange={(e) => setHorario(e.target.value)}
+                      className="sm:max-w-[10rem]"
+                    />
+                    <p className="mt-1.5 text-[13px] text-suave">
+                      Aprovada antes das {REGEX_HORARIO.test(horario) ? horario : '—'}, sai no mesmo dia nesse horário. Se a Meta aprovar
+                      depois, a campanha fica para o dia seguinte e o sino pergunta se você prefere enviar na hora.
+                    </p>
+                  </div>
+                )}
                 {quando === 'agendar' && (
-                  <Input
-                    name="agendar_para"
-                    type="datetime-local"
-                    aria-label="Data e hora do envio"
-                    value={agendarPara}
-                    onChange={(e) => setAgendarPara(e.target.value)}
-                    className="mt-2 sm:max-w-xs"
-                  />
+                  <div className="mt-2">
+                    <Input
+                      name="agendar_para"
+                      type="datetime-local"
+                      aria-label="Data e hora do envio"
+                      value={agendarPara}
+                      onChange={(e) => setAgendarPara(e.target.value)}
+                      className="sm:max-w-xs"
+                    />
+                    <p className="mt-1.5 text-[13px] text-suave">
+                      Se a Meta aprovar depois da hora marcada, a campanha fica para o dia seguinte no mesmo horário e o sino pergunta se
+                      você prefere enviar na hora.
+                    </p>
+                  </div>
                 )}
               </fieldset>
 
@@ -821,7 +919,8 @@ export function NovaCampanha({
               </div>
 
               <p className="text-[13px] text-suave">
-                Quer conferir antes? Agende a campanha e, assim que a Meta aprovar, mande um teste para o seu WhatsApp pela página dela.
+                Quer conferir antes? Use “Num horário” ou “Agendar” e, assim que a Meta aprovar, mande um teste para o seu WhatsApp pela
+                página dela.
               </p>
             </div>
           </Passo>

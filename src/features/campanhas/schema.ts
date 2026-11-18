@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { texto } from '@/lib/validacao'
 
+import { REGEX_HORARIO } from './horario'
 import { validarMensagem } from './mensagem'
 
 const opcional = (max: number, mensagem: string) =>
@@ -40,8 +41,11 @@ export const esquemaCampanha = z
     imagem_path: z.string().regex(/^[0-9a-f-]{36}\.(jpg|png)$/).nullable(),
     origem: z.enum(['arquivo', 'leads', 'colar']),
     origem_descricao: opcional(200, 'Descrição grande demais.'),
-    lista_id: z.uuid().nullable(),
+    // Listas do Banco de Leads (origem 'leads'); números repetidos entre elas entram uma vez só.
+    lista_ids: z.array(z.uuid()).max(30, 'Escolha no máximo 30 listas por campanha.'),
     agendada_para: z.iso.datetime({ offset: true }).nullable(),
+    // Hora do dia (Brasília) para sair depois da aprovação; nulo = assim que a Meta aprovar.
+    horario_envio: z.string().regex(REGEX_HORARIO, 'Escolha o horário do envio.').nullable(),
   })
   .superRefine((c, ctx) => {
     const erros = validarMensagem({
@@ -52,7 +56,9 @@ export const esquemaCampanha = z
       botaoSair: c.botao_sair,
     })
     for (const [campo, mensagem] of Object.entries(erros)) ctx.addIssue({ code: 'custom', path: [campo], message: mensagem })
-    if (c.origem === 'leads' && !c.lista_id) ctx.addIssue({ code: 'custom', path: ['lista_id'], message: 'Escolha a lista do Banco de Leads.' })
+    if (c.origem === 'leads' && c.lista_ids.length === 0) {
+      ctx.addIssue({ code: 'custom', path: ['lista_ids'], message: 'Escolha ao menos uma lista do Banco de Leads.' })
+    }
   })
 
 export type DadosCampanha = z.input<typeof esquemaCampanha>

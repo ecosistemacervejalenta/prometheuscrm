@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { Ban, MessageCircle, Pause, Play, RotateCcw, Trash2 } from 'lucide-react'
+import { Ban, CalendarClock, MessageCircle, Pause, Play, RotateCcw, Send, Trash2 } from 'lucide-react'
 
 import { ActionButton } from '@/components/ui/action-button'
 import { Alert } from '@/components/ui/alert'
@@ -11,15 +11,18 @@ import { Kpi } from '@/components/ui/kpi'
 import { PageHeader } from '@/components/ui/page-header'
 import {
   cancelarCampanha,
+  decidirEnvioCampanha,
   excluirCampanha,
   pausarCampanha,
   reenviarParaAnalise,
   retomarCampanha,
 } from '@/features/campanhas/actions'
 import { AtualizacaoAutomatica } from '@/features/campanhas/components/atualizacao-automatica'
+import { HorarioCampanha } from '@/features/campanhas/components/horario-campanha'
 import { custoDaCampanha, formatarCusto, precoDaConexao, type PrecoMensagem } from '@/features/campanhas/custo'
 import { PreviaWhatsapp } from '@/features/campanhas/components/previa-whatsapp'
 import { TesteCampanha } from '@/features/campanhas/components/teste-campanha'
+import { rotuloHorario, rotuloQuando } from '@/features/campanhas/horario'
 import { urlImagemCampanha } from '@/features/campanhas/mensagem'
 import { rotuloLimite } from '@/features/campanhas/meta'
 import { conexaoMeta, falhasDaCampanha, obterCampanha, respostasDaCampanha } from '@/features/campanhas/queries'
@@ -57,11 +60,29 @@ function Aviso({ campanha, limite }: { campanha: NonNullable<Awaited<ReturnType<
         <Alert tom="info" titulo="Em análise pela Meta">
           Costuma levar de alguns minutos a poucas horas.{' '}
           {campanha.agendada_para
-            ? `Depois de aprovada, sai em ${formatarDataHora(campanha.agendada_para)}.`
-            : 'O envio começa sozinho assim que ela aprovar.'}
+            ? `Depois de aprovada, sai em ${formatarDataHora(campanha.agendada_para)}. Se a Meta aprovar depois disso, você escolhe entre enviar na hora ou no dia seguinte.`
+            : campanha.horario_envio
+              ? `Depois de aprovada, sai às ${rotuloHorario(campanha.horario_envio)} — no mesmo dia, se a Meta aprovar antes desse horário. Se aprovar depois, você escolhe entre enviar na hora ou no dia seguinte.`
+              : 'O envio começa sozinho assim que ela aprovar, a qualquer hora.'}
         </Alert>
       )
     case 'agendada':
+      if (campanha.decidir_envio) {
+        return (
+          <Alert tom="alerta" titulo="A Meta aprovou depois do horário">
+            Aprovada em {formatarDataHora(campanha.aprovada_em)}. Para não chegar fora de hora, a campanha ficou para{' '}
+            {rotuloQuando(campanha.agendada_para)}. Prefere enviar agora? Sem resposta, ela sai no horário.
+            <span className="mt-3 flex flex-wrap gap-2">
+              <ActionButton acao={decidirEnvioCampanha.bind(null, campanha.id ?? '', 'agora')} variante="primario" tamanho="md">
+                <Send /> Enviar agora
+              </ActionButton>
+              <ActionButton acao={decidirEnvioCampanha.bind(null, campanha.id ?? '', 'horario')} tamanho="md">
+                <CalendarClock /> Enviar {rotuloQuando(campanha.agendada_para)}
+              </ActionButton>
+            </span>
+          </Alert>
+        )
+      }
       return (
         <Alert tom="info" titulo="Mensagem aprovada">
           Envio agendado para {formatarDataHora(campanha.agendada_para)}. Aproveite para mandar um teste para o seu WhatsApp.
@@ -353,6 +374,18 @@ export default async function PaginaCampanha({ params }: PageProps<'/campanhas/[
                 )}
               </CardContent>
             </Card>
+
+            {status === 'aguardando_aprovacao' && (
+              <Card>
+                <CardHeader titulo="Horário de envio" descricao="A Meta aprova a qualquer hora, até de noite. Escolha quando os clientes recebem." />
+                <CardContent>
+                  <HorarioCampanha campanhaId={id} horario={campanha.agendada_para ? null : rotuloHorario(campanha.horario_envio)} />
+                  {campanha.agendada_para && (
+                    <p className="mt-2 text-[12px] text-sutil">Agendada para {formatarDataHora(campanha.agendada_para)}. Salvar um horário troca esse agendamento.</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {campanha.modelo_status === 'APPROVED' && (
               <Card>

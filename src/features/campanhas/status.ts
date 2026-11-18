@@ -52,9 +52,16 @@ export function pedidoParaSair(texto: string | null | undefined): boolean {
 
 /**
  * Situação exibida: campanha enviando mas parada no limite diário, na avaliação da Meta ou num
- * bloqueio temporário da Meta ("retida" com aviso em ultimo_erro) aparece como espera.
+ * bloqueio temporário da Meta ("retida" com aviso em ultimo_erro) aparece como espera. Aprovada depois
+ * do horário de envio, a campanha agendada pede que a equipe escolha quando enviar.
  */
-export function situacaoDaCampanha(c: { status: StatusCampanha | null; pausada_motivo: string | null; ultimo_erro?: string | null }) {
+export function situacaoDaCampanha(c: {
+  status: StatusCampanha | null
+  pausada_motivo: string | null
+  ultimo_erro?: string | null
+  decidir_envio?: boolean | null
+}) {
+  if (c.status === 'agendada' && c.decidir_envio) return { rotulo: 'Escolha quando enviar', tom: 'alerta' as Tom }
   if (c.status === 'enviando' && c.pausada_motivo === 'limite') return { rotulo: 'Esperando o limite diário', tom: 'alerta' as Tom }
   if (c.status === 'enviando' && c.pausada_motivo === 'retida') {
     return { rotulo: c.ultimo_erro ? 'Esperando a Meta liberar' : 'Em avaliação pela Meta', tom: 'alerta' as Tom }

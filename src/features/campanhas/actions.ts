@@ -9,6 +9,7 @@ import { urlDaRequisicao } from '@/lib/url'
 import { formParaObjeto, whatsapp } from '@/lib/validacao'
 
 import { acordarEnvios, pedirARotina } from './disparo'
+import { horaEmBrasilia, REGEX_HORARIO, rotuloHorario, rotuloQuando } from './horario'
 import { esquemaCampanha, esquemaConexaoMeta, esquemaLoteContatos, type DadosCampanha } from './schema'
 import { STATUS_ATIVOS, STATUS_EXCLUIVEIS } from './status'
 
@@ -80,8 +81,11 @@ export async function criarCampanha(dados: DadosCampanha): Promise<ResultadoCria
     imagem_path: c.imagem_path,
     origem: c.origem,
     origem_descricao: c.origem_descricao,
-    lista_id: c.origem === 'leads' ? c.lista_id : null,
+    // A coluna guarda a primeira lista (referência); os contatos vêm de todas abaixo.
+    lista_id: c.origem === 'leads' ? (c.lista_ids[0] ?? null) : null,
     agendada_para: c.agendada_para,
+    // Agendada (dia e hora): guarda a hora, usada se a Meta aprovar depois da hora marcada.
+    horario_envio: c.horario_envio ?? (c.agendada_para ? horaEmBrasilia(c.agendada_para) : null),
   }
 
   const { data: existente } = await supabase.from('campanhas').select('status').eq('id', c.id).maybeSingle()
@@ -96,11 +100,13 @@ export async function criarCampanha(dados: DadosCampanha): Promise<ResultadoCria
     if (error) return { ok: false, mensagem: traduzirErro(error) }
   }
 
-  // Lista do Banco de Leads: em páginas de 5.000 (cada uma cabe no tempo limite do banco).
-  if (c.origem === 'leads' && c.lista_id) {
+  // Listas do Banco de Leads: cada uma em páginas de 5.000 (cada página cabe no tempo limite do banco).
+  // Um número que está em mais de uma lista entra uma vez só (o banco ignora o repetido).
+  const listas = c.origem === 'leads' ? [...new Set(c.lista_ids)] : []
+  for (const listaId of listas) {
     let apos: string | undefined
     do {
-      const { data, error } = await supabase.rpc('adicionar_lista_campanha', { p_campanha_id: c.id, p_lista_id: c.lista_id, p_apos: apos })
+      const { data, error } = await supabase.rpc('adicionar_lista_campanha', { p_campanha_id: c.id, p_lista_id: listaId, p_apos: apos })
       if (error) return { ok: false, mensagem: traduzirErro(error) }
       apos = (data as { ultimo: string | null }).ultimo ?? undefined
     } while (apos)
@@ -167,7 +173,7 @@ export async function retomarCampanha(id: string): Promise<EstadoAcao> {
   const status = !aprovado ? 'aguardando_aprovacao' : futura ? 'agendada' : 'enviando'
   const { error } = await supabase
     .from('campanhas')
-    .update({ status, pausada_motivo: null, ultimo_erro: null })
+    .update({ status, pausada_motivo: null, ultimo_erro: null, ...(status === 'enviando' && { decidir_envio: false }) })
     .eq('id', id)
     .eq('status', 'pausada')
   if (error) return falha(traduzirErro(error))
@@ -175,6 +181,50 @@ export async function retomarCampanha(id: string): Promise<EstadoAcao> {
   if (status === 'enviando') acordarEnvios(await urlDaRequisicao())
   atualizarTelas(id)
   return sucesso(status === 'enviando' ? 'Envio retomado.' : 'Campanha retomada.')
+}
+
+/**
+ * A Meta aprovou depois do horário: a equipe escolhe entre enviar agora ou manter para o
+ * próximo horário (já agendado). Sem resposta, a campanha sai no próximo horário.
+ */
+export async function decidirEnvioCampanha(id: string, escolha: 'agora' | 'horario'): Promise<EstadoAcao> {
+  const { supabase, perfil } = await exigirEquipe()
+  const agora = new Date().toISOString()
+  const { data, error } = await supabase
+    .from('campanhas')
+    .update(escolha === 'agora' ? { status: 'enviando', iniciada_em: agora, decidir_envio: false } : { decidir_envio: false })
+    .eq('id', id)
+    .eq('status', 'agendada')
+    .eq('decidir_envio', true)
+    .select('agendada_para')
+  if (error) return falha(traduzirErro(error))
+  if (data.length === 0) return falha('Esta campanha já seguiu — atualize a página.')
+
+  // O aviso do sino já foi respondido.
+  await supabase.from('notificacoes').update({ lida_em: agora }).eq('perfil_id', perfil.id).eq('campanha_id', id).is('lida_em', null)
+  if (escolha === 'agora') acordarEnvios(await urlDaRequisicao())
+  atualizarTelas(id)
+  revalidatePath('/', 'layout')
+  return sucesso(escolha === 'agora' ? 'Envio começando agora.' : `Combinado: a campanha sai ${rotuloQuando(data[0].agendada_para)}.`)
+}
+
+/** Troca o horário de envio enquanto a mensagem está em análise na Meta (vazio = assim que aprovar). */
+export async function alterarHorarioCampanha(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
+  const { supabase } = await exigirEquipe()
+  const id = String(formData.get('campanha_id') ?? '')
+  const valor = String(formData.get('horario_envio') ?? '').trim()
+  if (valor && !REGEX_HORARIO.test(valor)) return { ok: false, erros: { horario_envio: ['Escolha um horário válido, como 15:00.'] } }
+
+  const { data, error } = await supabase
+    .from('campanhas')
+    .update({ horario_envio: valor || null, agendada_para: null })
+    .eq('id', id)
+    .eq('status', 'aguardando_aprovacao')
+    .select('id')
+  if (error) return falha(traduzirErro(error))
+  if (data.length === 0) return falha('O horário só pode ser trocado enquanto a mensagem está em análise na Meta.')
+  atualizarTelas(id)
+  return sucesso(valor ? `Depois de aprovada, a campanha sai às ${rotuloHorario(valor)}.` : 'A campanha sai assim que a Meta aprovar.')
 }
 
 export async function cancelarCampanha(id: string): Promise<EstadoAcao> {

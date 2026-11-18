@@ -354,7 +354,10 @@ export type Database = {
       }
       campanhas: {
         Row: {
+          aprovada_em: string | null
           agendada_para: string | null
+          decidir_envio: boolean
+          horario_envio: string | null
           aguardar_ate: string | null
           atualizado_em: string
           botao_sair: boolean
@@ -388,7 +391,10 @@ export type Database = {
           ultimo_erro: string | null
         }
         Insert: {
+          aprovada_em?: string | null
           agendada_para?: string | null
+          decidir_envio?: boolean
+          horario_envio?: string | null
           aguardar_ate?: string | null
           atualizado_em?: string
           botao_sair?: boolean
@@ -422,7 +428,10 @@ export type Database = {
           ultimo_erro?: string | null
         }
         Update: {
+          aprovada_em?: string | null
           agendada_para?: string | null
+          decidir_envio?: boolean
+          horario_envio?: string | null
           aguardar_ate?: string | null
           atualizado_em?: string
           botao_sair?: boolean
@@ -1585,6 +1594,7 @@ export type Database = {
         Row: {
           atendimento_id: string | null
           autor_id: string | null
+          campanha_id: string | null
           criado_em: string
           id: string
           lida_em: string | null
@@ -1599,6 +1609,7 @@ export type Database = {
         Insert: {
           atendimento_id?: string | null
           autor_id?: string | null
+          campanha_id?: string | null
           criado_em?: string
           id?: string
           lida_em?: string | null
@@ -1613,6 +1624,7 @@ export type Database = {
         Update: {
           atendimento_id?: string | null
           autor_id?: string | null
+          campanha_id?: string | null
           criado_em?: string
           id?: string
           lida_em?: string | null
@@ -1625,6 +1637,20 @@ export type Database = {
           titulo?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "notificacoes_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificacoes_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "vw_campanhas"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "notificacoes_pedido_id_fkey"
             columns: ["pedido_id"]
@@ -2761,7 +2787,10 @@ export type Database = {
       }
       vw_campanhas: {
         Row: {
+          aprovada_em: string | null
           agendada_para: string | null
+          decidir_envio: boolean | null
+          horario_envio: string | null
           aguardar_ate: string | null
           atualizado_em: string | null
           botao_sair: boolean | null

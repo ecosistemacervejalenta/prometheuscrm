@@ -311,8 +311,8 @@ export function GuiaMeta({ conexao, urlWebhook, ehAdmin }: { conexao: ConexaoMet
             Em <strong>Campanhas › Nova campanha</strong>, escolha <strong>Colar números</strong> e cole só os WhatsApps da equipe.
           </li>
           <li>
-            Em “Quando enviar”, escolha <strong>Agendar</strong> (ex.: para daqui a 2 horas). Com “Agora”, a campanha sai assim que a
-            Meta aprova, sem tempo para o teste.
+            Em “Quando enviar”, escolha <strong>Agendar</strong> (ex.: para daqui a 2 horas). Com “Assim que aprovar”, a campanha sai
+            no minuto em que a Meta aprova, sem tempo para o teste.
           </li>
           <li>
             Quando a página da campanha mostrar <strong>Aprovada</strong>, use <strong>Enviar teste</strong> e confira foto, nome e
