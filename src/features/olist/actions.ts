@@ -11,7 +11,7 @@ import type { CervejaSalva } from '@/features/produtos/actions'
 import { lerKit } from '@/features/produtos/kit'
 
 import { dispararSincronizacao } from './disparo'
-import type { ResultadoBuscaComEstoque } from './estoque'
+import type { DetalheBuscaOlist, ResultadoBuscaComEstoque } from './estoque'
 import { copiarFotoDaOlist } from './foto'
 import { agendarEnvioEstoqueOlist, pedirARotinaEstoque } from './rotina-estoque'
 
@@ -62,6 +62,15 @@ export async function buscarProdutosNaOlist(termo: string): Promise<ResultadoBus
   const resposta = await pedirARotinaEstoque({ acao: 'buscar', termo: busca.slice(0, 80) })
   if ('produtos' in resposta) return { ok: true, produtos: resposta.produtos }
   return { ok: false, mensagem: 'mensagem' in resposta ? resposta.mensagem : 'Não foi possível buscar na Olist.' }
+}
+
+/** Foto e estoque de alguns resultados da busca (a tela pede aos poucos). */
+export async function detalhesProdutosNaOlist(ids: number[]): Promise<DetalheBuscaOlist[]> {
+  await exigirEquipe()
+  const validos = ids.filter((id) => Number.isSafeInteger(id) && id > 0).slice(0, 6)
+  if (validos.length === 0) return []
+  const resposta = await pedirARotinaEstoque({ acao: 'detalhes', ids: validos })
+  return 'detalhes' in resposta ? resposta.detalhes : validos.map((id) => ({ id, foto: null, estoque: null, ok: false }))
 }
 
 export type ResultadoImportacaoOlist = { ok: true; cerveja: CervejaSalva; novo: boolean } | { ok: false; mensagem: string }

@@ -105,11 +105,13 @@ async function requisicao(caminho: string, accessToken: string, opcoes: OpcoesRe
     })
     if (resposta.ok) return resposta.status === 204 ? null : resposta.json().catch(() => null)
 
-    // Limite de requisições (por conta): espera o reset informado pela API e tenta de novo.
+    // Limite de requisições (por conta): ~3 por segundo e 60 por minuto. O de segundo
+    // (reset de 1–3 s) sempre espera e tenta de novo — inclusive POST, que a Olist recusou
+    // sem lançar. O de minuto só espera quando esperarLimite.
     if (resposta.status === 429) {
       const reset = Number(resposta.headers.get('X-RateLimit-Reset'))
       const segundos = Math.min(Number.isFinite(reset) && reset > 0 ? reset : 5, 60)
-      if (esperarLimite && tentativa < MAX_TENTATIVAS) {
+      if ((esperarLimite || segundos <= 3) && tentativa < MAX_TENTATIVAS + 2) {
         await esperar(segundos * 1000)
         continue
       }

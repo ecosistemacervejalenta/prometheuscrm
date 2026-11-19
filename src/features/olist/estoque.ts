@@ -35,7 +35,8 @@ type Admin = ReturnType<typeof createAdminClient>
 type Movimento = Database['public']['Tables']['movimentos_estoque_olist']['Row']
 
 const TRAVADO_MINUTOS = 10
-const LEITURAS_SIMULTANEAS = 3
+// A Olist aceita ~3 chamadas por segundo por conta: duas ao mesmo tempo já levam "espere 1 s".
+const LEITURAS_SIMULTANEAS = 1
 const MAX_LEITURAS_POR_RODADA = 80
 export const IDADE_LEITURA_ROTINA_S = 4 * 60
 export const IDADE_LEITURA_LINK_S = 2 * 60
@@ -400,46 +401,64 @@ export async function receberAvisoEstoqueOlist(corpo: unknown): Promise<{ produt
 // Pedidos da tela (via rotina): buscar e preparar produtos para a pré-venda
 // -----------------------------------------------------------------------------
 
-export type ResultadoBuscaComEstoque = ResultadoBuscaOlist & { estoque: number | null; foto: string | null }
+export type ResultadoBuscaComEstoque = ResultadoBuscaOlist & {
+  estoque: number | null
+  foto: string | null
+  /** Foto e estoque já consultados (senão a tela pede em seguida, aos poucos). */
+  detalhado: boolean
+}
+
+export type DetalheBuscaOlist = { id: number; foto: string | null; estoque: number | null; ok: boolean }
 
 /** Foto e estoque já consultados (10 min): repetir a busca não gasta o limite da Olist de novo. */
 const resumos = new Map<number, { foto: string | null; estoque: number | null; em: number }>()
 const VALIDADE_RESUMO_MS = 10 * 60_000
 
+/**
+ * Busca na Olist e devolve a lista na hora. Foto e estoque já consultados nos últimos 10 min
+ * vêm junto; os demais a tela pede em seguida (detalhesNaOlist), aos poucos, para respeitar o
+ * limite da Olist (~3 chamadas por segundo).
+ */
 export async function buscarNaOlist(termo: string): Promise<ResultadoBuscaComEstoque[]> {
   const supabase = createAdminClient()
   const token = await obterTokenOlist(supabase)
   try {
     const produtos = await buscarProdutosOlist(token, termo)
-    // Foto e estoque de cada resultado (sem esperar o limite: o que não vier aparece sem foto e com "—").
     const agoraMs = Date.now()
-    const comEstoque: ResultadoBuscaComEstoque[] = produtos.map((p) => {
+    await registrarErroEstoque(supabase, null)
+    return produtos.map((p) => {
       const guardado = resumos.get(p.id)
       return guardado && agoraMs - guardado.em < VALIDADE_RESUMO_MS
-        ? { ...p, estoque: guardado.estoque, foto: guardado.foto }
-        : { ...p, estoque: null, foto: null }
+        ? { ...p, estoque: guardado.estoque, foto: guardado.foto, detalhado: true }
+        : { ...p, estoque: null, foto: null, detalhado: false }
     })
-    const fila = comEstoque.filter((p) => !resumos.has(p.id) || agoraMs - resumos.get(p.id)!.em >= VALIDADE_RESUMO_MS)
-    await Promise.all(
-      Array.from({ length: 4 }, async () => {
-        for (let p = fila.shift(); p; p = fila.shift()) {
-          try {
-            const resumo = await obterResumoProdutoOlist(token, p.id)
-            Object.assign(p, resumo)
-            resumos.set(p.id, { ...resumo, em: Date.now() })
-          } catch {
-            break
-          }
-        }
-      }),
-    )
-    if (resumos.size > 2000) resumos.clear()
-    await registrarErroEstoque(supabase, null)
-    return comEstoque
   } catch (erro) {
     if (erro instanceof ErroApiOlist && erro.status === 403) await registrarErroEstoque(supabase, erro.message)
     throw erro
   }
+}
+
+/** Foto e estoque de alguns produtos da busca, um por vez (no máximo 6 por pedido). */
+export async function detalhesNaOlist(ids: number[]): Promise<DetalheBuscaOlist[]> {
+  const supabase = createAdminClient()
+  const token = await obterTokenOlist(supabase)
+  const resultado: DetalheBuscaOlist[] = []
+  for (const id of ids.slice(0, 6)) {
+    const guardado = resumos.get(id)
+    if (guardado && Date.now() - guardado.em < VALIDADE_RESUMO_MS) {
+      resultado.push({ id, foto: guardado.foto, estoque: guardado.estoque, ok: true })
+      continue
+    }
+    try {
+      const resumo = await obterResumoProdutoOlist(token, id)
+      resumos.set(id, { ...resumo, em: Date.now() })
+      resultado.push({ id, ...resumo, ok: true })
+    } catch {
+      resultado.push({ id, foto: null, estoque: null, ok: false })
+    }
+  }
+  if (resumos.size > 2000) resumos.clear()
+  return resultado
 }
 
 /** Produto completo + estoque lido agora (dele ou dos componentes do kit). */
