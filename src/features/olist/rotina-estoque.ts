@@ -6,7 +6,7 @@ import { envServidor } from '@/lib/env.server'
 import { urlDaRequisicao } from '@/lib/url'
 
 import type { ProdutoOlist } from './api'
-import type { DetalheBuscaOlist, ResultadoBuscaComEstoque } from './estoque'
+import type { DetalheBuscaOlist, PaginaBuscaComEstoque } from './estoque'
 
 /**
  * A tela não lê a chave secreta nem os tokens da Olist: pede à rotina /api/cron/olist-estoque
@@ -14,13 +14,13 @@ import type { DetalheBuscaOlist, ResultadoBuscaComEstoque } from './estoque'
  */
 
 export type PedidoRotinaEstoque =
-  | { acao: 'buscar'; termo: string }
+  | { acao: 'buscar'; termo: string; offset?: number }
   | { acao: 'produto'; id: number }
   | { acao: 'detalhes'; ids: number[] }
   | { acao: 'processar' }
 
 export type RespostaRotinaEstoque =
-  | { ok: true; produtos: ResultadoBuscaComEstoque[] }
+  | ({ ok: true } & PaginaBuscaComEstoque)
   | { ok: true; produto: ProdutoOlist }
   | { ok: true; detalhes: DetalheBuscaOlist[] }
   | { ok: boolean; mensagem: string }

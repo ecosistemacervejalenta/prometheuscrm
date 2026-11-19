@@ -1,6 +1,6 @@
 'use client'
 
-import { Boxes, Check, Loader2, Package, Search, X } from 'lucide-react'
+import { Boxes, Check, ChevronDown, Loader2, Package, Search, X } from 'lucide-react'
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react'
 import Image from 'next/image'
 import { createPortal } from 'react-dom'
@@ -32,7 +32,12 @@ export function JanelaOlist({
 }) {
   const janela = useRef<HTMLDialogElement>(null)
   const [termo, setTermo] = useState('')
+  const [termoBuscado, setTermoBuscado] = useState('')
   const [resultados, setResultados] = useState<ResultadoBuscaComEstoque[] | null>(null)
+  /** Quantos a Olist achou e o offset da próxima página ("Ver mais"). */
+  const [total, setTotal] = useState(0)
+  const [proximo, setProximo] = useState<number | null>(null)
+  const [carregandoMais, setCarregandoMais] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [buscando, iniciarBusca] = useTransition()
   const [importando, setImportando] = useState<number | null>(null)
@@ -42,58 +47,114 @@ export function JanelaOlist({
   const [consultando, setConsultando] = useState<Set<number>>(() => new Set())
   const [semResposta, setSemResposta] = useState<Set<number>>(() => new Set())
   const [totalConsulta, setTotalConsulta] = useState(0)
-  /** Cada busca nova (ou fechar a janela) interrompe a consulta da anterior. */
+  /** A Olist pediu pausa (limite de 60 consultas por minuto): segundos até continuar. */
+  const [pausa, setPausa] = useState<number | null>(null)
+  /** Cada busca nova (ou fechar a janela) descarta o que ainda estava na fila da anterior. */
   const buscaAtual = useRef(0)
+  /** Uma fila só, consultada de 3 em 3: a Olist aceita ~3 consultas por segundo. */
+  const fila = useRef<number[]>([])
+  const rodando = useRef(false)
 
   useEffect(() => {
     janela.current?.showModal()
     return () => {
       buscaAtual.current++
+      fila.current = []
     }
   }, [])
 
   const fechar = () => janela.current?.close()
 
-  /**
-   * Foto e estoque, de 3 em 3: a Olist aceita ~3 consultas por segundo, então a lista aparece
-   * na hora e vai sendo completada de cima para baixo.
-   */
-  async function completarDetalhes(busca: number, ids: number[]) {
-    setTotalConsulta(ids.length)
-    setConsultando(new Set(ids))
-    setSemResposta(new Set())
-    const falharam: number[] = []
-    for (let i = 0; i < ids.length; i += 3) {
-      if (busca !== buscaAtual.current) return
-      const lote = ids.slice(i, i + 3)
-      const detalhes = await detalhesProdutosNaOlist(lote).catch(() => lote.map((id) => ({ id, foto: null, estoque: null, ok: false })))
-      if (busca !== buscaAtual.current) return
-      const porId = new Map(detalhes.filter((d) => d.ok).map((d) => [d.id, d]))
-      falharam.push(...lote.filter((id) => !porId.has(id)))
-      setResultados((atual) => atual?.map((p) => (porId.has(p.id) ? { ...p, ...porId.get(p.id)!, detalhado: true } : p)) ?? atual)
-      setConsultando((atual) => new Set([...atual].filter((id) => !lote.includes(id))))
+  async function rodarFila() {
+    if (rodando.current) return
+    rodando.current = true
+    try {
+      while (fila.current.length) {
+        const busca = buscaAtual.current
+        const lote = fila.current.splice(0, 3)
+        const detalhes = await detalhesProdutosNaOlist(lote).catch(() =>
+          lote.map((id) => ({ id, foto: null, estoque: null, ok: false, espera: undefined as number | undefined })),
+        )
+        if (busca !== buscaAtual.current) continue // busca nova: a fila já é outra
+        const porId = new Map(detalhes.filter((d) => d.ok).map((d) => [d.id, d]))
+        const pausados = detalhes.filter((d) => !d.ok && d.espera).map((d) => d.id)
+        const falharam = detalhes.filter((d) => !d.ok && !d.espera).map((d) => d.id)
+        setResultados((atual) => atual?.map((p) => (porId.has(p.id) ? { ...p, ...porId.get(p.id)!, detalhado: true } : p)) ?? atual)
+        setConsultando((atual) => new Set([...atual].filter((id) => !porId.has(id) && !falharam.includes(id))))
+        if (falharam.length) setSemResposta((atual) => new Set([...atual, ...falharam]))
+        if (pausados.length) {
+          // Limite por minuto: volta para o começo da fila e continua sozinho depois da pausa.
+          const segundos = Math.min(Math.max(...detalhes.map((d) => d.espera ?? 0)), 60)
+          fila.current.unshift(...pausados)
+          setPausa(segundos)
+          await new Promise((resolver) => setTimeout(resolver, segundos * 1000 + 300))
+          setPausa(null)
+        }
+      }
+    } finally {
+      rodando.current = false
     }
-    if (busca === buscaAtual.current) setSemResposta(new Set(falharam))
+  }
+
+  function enfileirar(ids: number[]) {
+    if (ids.length === 0) return
+    fila.current.push(...ids)
+    setConsultando((atual) => new Set([...atual, ...ids]))
+    setTotalConsulta((atual) => atual + ids.length)
+    void rodarFila()
   }
 
   function buscar(e: FormEvent) {
     e.preventDefault()
     setErro(null)
     const busca = ++buscaAtual.current
+    const texto = termo.trim()
+    fila.current = []
     setConsultando(new Set())
+    setSemResposta(new Set())
+    setTotalConsulta(0)
     setResultados(null)
+    setProximo(null)
+    setTotal(0)
     iniciarBusca(async () => {
-      const r = await buscarProdutosNaOlist(termo)
+      const r = await buscarProdutosNaOlist(texto)
       if (busca !== buscaAtual.current) return
       if (r.ok) {
+        setTermoBuscado(texto)
         setResultados(r.produtos)
-        const faltam = r.produtos.filter((p) => !p.detalhado).map((p) => p.id)
-        if (faltam.length) void completarDetalhes(busca, faltam)
+        setTotal(r.total)
+        setProximo(r.proximo)
+        enfileirar(r.produtos.filter((p) => !p.detalhado).map((p) => p.id))
       } else {
         setResultados(null)
         setErro(r.mensagem)
       }
     })
+  }
+
+  /** Próximos 20 da mesma busca (a foto e o estoque deles entram na mesma fila). */
+  async function verMais() {
+    if (proximo === null || carregandoMais) return
+    const busca = buscaAtual.current
+    setCarregandoMais(true)
+    setErro(null)
+    try {
+      const r = await buscarProdutosNaOlist(termoBuscado, proximo)
+      if (busca !== buscaAtual.current) return
+      if (!r.ok) {
+        setErro(r.mensagem)
+        return
+      }
+      const novos = r.produtos.filter((p) => !resultados?.some((atual) => atual.id === p.id))
+      setResultados((atual) => [...(atual ?? []), ...novos])
+      setTotal(r.total)
+      setProximo(r.proximo)
+      enfileirar(novos.filter((p) => !p.detalhado).map((p) => p.id))
+    } catch {
+      if (busca === buscaAtual.current) setErro('Não foi possível trazer mais resultados da Olist. Tente de novo.')
+    } finally {
+      setCarregandoMais(false)
+    }
   }
 
   async function adicionar(id: number) {
@@ -166,12 +227,25 @@ export function JanelaOlist({
           )}
 
           {consultando.size > 0 && resultados && (
-            <div className="sticky top-0 z-10 flex items-center gap-2.5 border-b border-linha bg-volt-50 px-5 py-2.5 text-[13px] text-ink" role="status">
-              <Loader2 className="size-4 shrink-0 animate-spin text-volt-700" aria-hidden />
-              <span>
-                Consultando foto e estoque na Olist: <b className="tipo-dado">{totalConsulta - consultando.size}</b> de{' '}
-                <b className="tipo-dado">{totalConsulta}</b>. A Olist responde poucas por segundo — já dá para adicionar.
-              </span>
+            <div
+              className={cn(
+                'sticky top-0 z-10 flex items-center gap-2.5 border-b border-linha px-5 py-2.5 text-[13px] text-ink',
+                pausa ? 'bg-alerta-50' : 'bg-volt-50',
+              )}
+              role="status"
+            >
+              <Loader2 className={cn('size-4 shrink-0 animate-spin', pausa ? 'text-alerta' : 'text-volt-700')} aria-hidden />
+              {pausa ? (
+                <span>
+                  A Olist pediu uma pausa (limite de consultas por minuto). Continua sozinho em cerca de{' '}
+                  <b className="tipo-dado">{pausa}s</b> — já dá para adicionar.
+                </span>
+              ) : (
+                <span>
+                  Consultando foto e estoque na Olist: <b className="tipo-dado">{totalConsulta - consultando.size}</b> de{' '}
+                  <b className="tipo-dado">{totalConsulta}</b>. A Olist responde poucas por segundo — já dá para adicionar.
+                </span>
+              )}
             </div>
           )}
 
@@ -191,10 +265,10 @@ export function JanelaOlist({
             <p className="px-6 py-14 text-center text-[14px] text-suave">Nada encontrado na Olist com “{termo.trim()}”.</p>
           )}
 
-          {/* 20 = LIMITE_BUSCA da API (cada resultado custa uma chamada à Olist para foto e estoque). */}
-          {resultados && resultados.length >= 20 && (
+          {resultados && resultados.length > 0 && total > resultados.length && (
             <p className="mx-5 mt-4 rounded-xl bg-papel px-4 py-2.5 text-[13px] text-suave">
-              Mostrando os 20 primeiros. Digite mais palavras para achar a cerveja certa (ex.: “dogma hop lover”).
+              Mostrando <b className="tipo-dado text-ink">{resultados.length}</b> de <b className="tipo-dado text-ink">{total}</b>. Use “Ver
+              mais” no fim da lista, ou digite mais palavras para ir direto (ex.: “dogma hop lover”).
             </p>
           )}
 
@@ -259,6 +333,21 @@ export function JanelaOlist({
                 )
               })}
             </ul>
+          )}
+
+          {resultados && resultados.length > 0 && proximo !== null && (
+            <div className="px-5 pt-1 pb-5">
+              <Button bloco variante="secundario" disabled={carregandoMais} onClick={verMais}>
+                {carregandoMais ? <Loader2 className="animate-spin" /> : <ChevronDown />}
+                {carregandoMais
+                  ? 'Buscando mais na Olist…'
+                  : `Ver mais (${formatarNumero(Math.min(20, Math.max(total - resultados.length, 1)))} de ${formatarNumero(Math.max(total - resultados.length, 0))} restantes)`}
+              </Button>
+            </div>
+          )}
+
+          {resultados && resultados.length > 20 && proximo === null && (
+            <p className="px-5 pt-1 pb-5 text-center text-[13px] text-suave">Fim da lista: estes são todos os produtos encontrados na Olist.</p>
           )}
         </div>
 

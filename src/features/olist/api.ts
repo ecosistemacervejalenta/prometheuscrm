@@ -234,26 +234,42 @@ const ehImagem = (url: string) => /\.(jpe?g|png|webp|gif|avif)(\?|$)/i.test(url)
  * Busca produtos ativos pelo nome (ou SKU, se nada vier pelo nome). Variações "pai" ficam de
  * fora: o estoque é de cada variação.
  */
-export async function buscarProdutosOlist(accessToken: string, termo: string): Promise<ResultadoBuscaOlist[]> {
+export type PaginaBuscaOlist = {
+  produtos: ResultadoBuscaOlist[]
+  /** Quantos produtos a Olist achou no total (para o "Ver mais"). */
+  total: number
+  /** Offset da próxima página, ou null se acabou. */
+  proximo: number | null
+}
+
+export async function buscarProdutosOlist(accessToken: string, termo: string, offset = 0): Promise<PaginaBuscaOlist> {
   const buscar = async (campo: 'nome' | 'codigo') => {
     // O filtro "nome" da Olist é "começa com" ("Paulaner" não acha "Cerveja Paulaner..."); com %
     // vira "contém", e cada palavra pode estar em qualquer parte do nome, nessa ordem.
     const valor = campo === 'nome' ? `%${termo.trim().split(/\s+/).join('%')}%` : termo.trim()
-    const params = new URLSearchParams({ [campo]: valor, situacao: 'A', limit: String(LIMITE_BUSCA), offset: '0' })
-    const pagina = (await requisicao(`/produtos?${params}`, accessToken, { esperarLimite: false })) as { itens?: ProdutoListadoOlist[] } | null
-    return pagina?.itens ?? []
+    const params = new URLSearchParams({ [campo]: valor, situacao: 'A', limit: String(LIMITE_BUSCA), offset: String(offset) })
+    const pagina = (await requisicao(`/produtos?${params}`, accessToken, { esperarLimite: false })) as {
+      itens?: ProdutoListadoOlist[]
+      paginacao?: { total?: number }
+    } | null
+    return { itens: pagina?.itens ?? [], total: pagina?.paginacao?.total ?? 0 }
   }
-  let itens = await buscar('nome')
-  if (itens.length === 0 && !/\s/.test(termo)) itens = await buscar('codigo')
-  return itens
-    .filter((p) => typeof p.id === 'number' && p.tipoVariacao !== 'P')
-    .map((p) => ({
-      id: p.id,
-      sku: p.sku?.trim() || null,
-      nome: p.descricao?.trim() || `Produto ${p.id}`,
-      kit: p.tipo === 'K',
-      preco: p.precos?.preco ?? null,
-    }))
+  let pagina = await buscar('nome')
+  if (offset === 0 && pagina.itens.length === 0 && !/\s/.test(termo)) pagina = await buscar('codigo')
+  const fim = offset + pagina.itens.length
+  return {
+    total: Math.max(pagina.total, fim),
+    proximo: pagina.itens.length === LIMITE_BUSCA && fim < pagina.total ? fim : null,
+    produtos: pagina.itens
+      .filter((p) => typeof p.id === 'number' && p.tipoVariacao !== 'P')
+      .map((p) => ({
+        id: p.id,
+        sku: p.sku?.trim() || null,
+        nome: p.descricao?.trim() || `Produto ${p.id}`,
+        kit: p.tipo === 'K',
+        preco: p.precos?.preco ?? null,
+      })),
+  }
 }
 
 export async function obterProdutoOlist(accessToken: string, id: number): Promise<ProdutoOlist> {

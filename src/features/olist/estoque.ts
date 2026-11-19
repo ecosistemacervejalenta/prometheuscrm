@@ -408,53 +408,75 @@ export type ResultadoBuscaComEstoque = ResultadoBuscaOlist & {
   detalhado: boolean
 }
 
-export type DetalheBuscaOlist = { id: number; foto: string | null; estoque: number | null; ok: boolean }
+export type DetalheBuscaOlist = {
+  id: number
+  foto: string | null
+  estoque: number | null
+  ok: boolean
+  /** A Olist pediu pausa (limite por minuto): segundos até poder consultar de novo. */
+  espera?: number
+}
+
+export type PaginaBuscaComEstoque = { produtos: ResultadoBuscaComEstoque[]; total: number; proximo: number | null }
 
 /** Foto e estoque já consultados (10 min): repetir a busca não gasta o limite da Olist de novo. */
 const resumos = new Map<number, { foto: string | null; estoque: number | null; em: number }>()
 const VALIDADE_RESUMO_MS = 10 * 60_000
 
 /**
- * Busca na Olist e devolve a lista na hora. Foto e estoque já consultados nos últimos 10 min
- * vêm junto; os demais a tela pede em seguida (detalhesNaOlist), aos poucos, para respeitar o
- * limite da Olist (~3 chamadas por segundo).
+ * Busca na Olist e devolve uma página da lista na hora. Foto e estoque já consultados nos
+ * últimos 10 min vêm junto; os demais a tela pede em seguida (detalhesNaOlist), aos poucos,
+ * para respeitar o limite da Olist (~3 chamadas por segundo e 60 por minuto).
  */
-export async function buscarNaOlist(termo: string): Promise<ResultadoBuscaComEstoque[]> {
+export async function buscarNaOlist(termo: string, offset = 0): Promise<PaginaBuscaComEstoque> {
   const supabase = createAdminClient()
   const token = await obterTokenOlist(supabase)
   try {
-    const produtos = await buscarProdutosOlist(token, termo)
+    const pagina = await buscarProdutosOlist(token, termo, offset)
     const agoraMs = Date.now()
     await registrarErroEstoque(supabase, null)
-    return produtos.map((p) => {
-      const guardado = resumos.get(p.id)
-      return guardado && agoraMs - guardado.em < VALIDADE_RESUMO_MS
-        ? { ...p, estoque: guardado.estoque, foto: guardado.foto, detalhado: true }
-        : { ...p, estoque: null, foto: null, detalhado: false }
-    })
+    return {
+      total: pagina.total,
+      proximo: pagina.proximo,
+      produtos: pagina.produtos.map((p) => {
+        const guardado = resumos.get(p.id)
+        return guardado && agoraMs - guardado.em < VALIDADE_RESUMO_MS
+          ? { ...p, estoque: guardado.estoque, foto: guardado.foto, detalhado: true }
+          : { ...p, estoque: null, foto: null, detalhado: false }
+      }),
+    }
   } catch (erro) {
     if (erro instanceof ErroApiOlist && erro.status === 403) await registrarErroEstoque(supabase, erro.message)
     throw erro
   }
 }
 
-/** Foto e estoque de alguns produtos da busca, um por vez (no máximo 6 por pedido). */
+/**
+ * Foto e estoque de alguns produtos da busca, um por vez (no máximo 6 por pedido). Se a Olist
+ * pedir pausa pelo limite por minuto, para e devolve quantos segundos esperar (espera).
+ */
 export async function detalhesNaOlist(ids: number[]): Promise<DetalheBuscaOlist[]> {
   const supabase = createAdminClient()
   const token = await obterTokenOlist(supabase)
   const resultado: DetalheBuscaOlist[] = []
+  let espera: number | null = null
   for (const id of ids.slice(0, 6)) {
     const guardado = resumos.get(id)
     if (guardado && Date.now() - guardado.em < VALIDADE_RESUMO_MS) {
       resultado.push({ id, foto: guardado.foto, estoque: guardado.estoque, ok: true })
       continue
     }
+    if (espera !== null) {
+      resultado.push({ id, foto: null, estoque: null, ok: false, espera })
+      continue
+    }
     try {
       const resumo = await obterResumoProdutoOlist(token, id)
       resumos.set(id, { ...resumo, em: Date.now() })
       resultado.push({ id, ...resumo, ok: true })
-    } catch {
-      resultado.push({ id, foto: null, estoque: null, ok: false })
+    } catch (erro) {
+      if (erro instanceof ErroApiOlist && erro.status === 429) espera = Math.max(erro.liberaEm ?? 10, 1)
+      resultado.push({ id, foto: null, estoque: null, ok: false, ...(espera !== null ? { espera } : {}) })
     }
   }
   if (resumos.size > 2000) resumos.clear()

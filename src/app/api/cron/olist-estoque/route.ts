@@ -12,7 +12,7 @@ export const maxDuration = 300
  * Estoque da Olist nas pré-vendas (única rota da tela que usa os tokens da Olist).
  *   GET  → Vercel Cron a cada 5 min (vercel.ts): vence caixas sem pagamento, envia a fila de
  *          lançamentos e atualiza o estoque das pré-vendas ativas.
- *   POST → pedidos da tela: { acao: 'buscar', termo } | { acao: 'detalhes', ids } | { acao: 'produto', id } |
+ *   POST → pedidos da tela: { acao: 'buscar', termo, offset? } | { acao: 'detalhes', ids } | { acao: 'produto', id } |
  *          { acao: 'processar' }.
  */
 export async function GET(request: NextRequest) {
@@ -35,7 +35,10 @@ export async function POST(request: NextRequest) {
   try {
     switch (pedido?.acao) {
       case 'buscar':
-        resposta = { ok: true, produtos: await buscarNaOlist(String(pedido.termo ?? '').trim().slice(0, 80)) }
+        resposta = {
+          ok: true,
+          ...(await buscarNaOlist(String(pedido.termo ?? '').trim().slice(0, 80), Math.max(0, Math.floor(Number(pedido.offset) || 0)))),
+        }
         break
       case 'produto':
         if (!Number.isSafeInteger(pedido.id) || pedido.id <= 0) return NextResponse.json({ ok: false, mensagem: 'Produto inválido.' }, { status: 400 })

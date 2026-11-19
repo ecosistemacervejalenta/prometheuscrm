@@ -11,7 +11,7 @@ import type { CervejaSalva } from '@/features/produtos/actions'
 import { lerKit } from '@/features/produtos/kit'
 
 import { dispararSincronizacao } from './disparo'
-import type { DetalheBuscaOlist, ResultadoBuscaComEstoque } from './estoque'
+import type { DetalheBuscaOlist, PaginaBuscaComEstoque } from './estoque'
 import { copiarFotoDaOlist } from './foto'
 import { agendarEnvioEstoqueOlist, pedirARotinaEstoque } from './rotina-estoque'
 
@@ -51,16 +51,16 @@ export async function desconectarOlist(): Promise<EstadoAcao> {
 // -----------------------------------------------------------------------------
 
 export type ResultadoBuscaOlistTela =
-  | { ok: true; produtos: ResultadoBuscaComEstoque[] }
+  | ({ ok: true } & PaginaBuscaComEstoque)
   | { ok: false; mensagem: string }
 
-/** Busca produtos ativos na Olist (nome ou SKU), com o estoque disponível de cada um. */
-export async function buscarProdutosNaOlist(termo: string): Promise<ResultadoBuscaOlistTela> {
+/** Busca produtos ativos na Olist (nome ou SKU), 20 por página (offset = "Ver mais"). */
+export async function buscarProdutosNaOlist(termo: string, offset = 0): Promise<ResultadoBuscaOlistTela> {
   await exigirEquipe()
   const busca = termo.trim()
   if (busca.length < 2) return { ok: false, mensagem: 'Digite pelo menos 2 letras do nome ou o SKU.' }
-  const resposta = await pedirARotinaEstoque({ acao: 'buscar', termo: busca.slice(0, 80) })
-  if ('produtos' in resposta) return { ok: true, produtos: resposta.produtos }
+  const resposta = await pedirARotinaEstoque({ acao: 'buscar', termo: busca.slice(0, 80), offset: Math.max(0, Math.floor(offset) || 0) })
+  if ('produtos' in resposta) return { ok: true, produtos: resposta.produtos, total: resposta.total, proximo: resposta.proximo }
   return { ok: false, mensagem: 'mensagem' in resposta ? resposta.mensagem : 'Não foi possível buscar na Olist.' }
 }
 
