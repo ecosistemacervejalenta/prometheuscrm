@@ -9,7 +9,11 @@ const nextConfig: NextConfig = {
     },
   },
   images: {
-    remotePatterns: [{ protocol: 'https', hostname: '*.supabase.co', pathname: '/storage/v1/object/public/**' }],
+    remotePatterns: [
+      { protocol: 'https', hostname: '*.supabase.co', pathname: '/storage/v1/object/public/**' },
+      // Fotos dos produtos da Olist (miniaturas na busca da pré-venda).
+      { protocol: 'https', hostname: 's3.amazonaws.com', pathname: '/tiny-anexos-us/**' },
+    ],
   },
   async redirects() {
     // Endereços antigos das Configurações (abas "Integrações" e "Marketplaces"), para favoritos e links salvos.

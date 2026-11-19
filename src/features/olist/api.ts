@@ -198,6 +198,9 @@ type EstoqueRespostaOlist = {
   disponivel?: number | null
 }
 
+/** Resultados por busca (cada um custa 1 chamada a mais para foto e estoque; a Olist permite 60/min). */
+export const LIMITE_BUSCA = 20
+
 /** Produto encontrado na busca da pré-venda. */
 export type ResultadoBuscaOlist = {
   id: number
@@ -234,7 +237,7 @@ export async function buscarProdutosOlist(accessToken: string, termo: string): P
     // O filtro "nome" da Olist é "começa com" ("Paulaner" não acha "Cerveja Paulaner..."); com %
     // vira "contém", e cada palavra pode estar em qualquer parte do nome, nessa ordem.
     const valor = campo === 'nome' ? `%${termo.trim().split(/\s+/).join('%')}%` : termo.trim()
-    const params = new URLSearchParams({ [campo]: valor, situacao: 'A', limit: '30', offset: '0' })
+    const params = new URLSearchParams({ [campo]: valor, situacao: 'A', limit: String(LIMITE_BUSCA), offset: '0' })
     const pagina = (await requisicao(`/produtos?${params}`, accessToken, { esperarLimite: false })) as { itens?: ProdutoListadoOlist[] } | null
     return pagina?.itens ?? []
   }
@@ -274,6 +277,22 @@ export async function obterProdutoOlist(accessToken: string, id: number): Promis
     foto: anexos.find(ehImagem) ?? anexos[0] ?? null,
     kit,
     controlaEstoque: p.estoque?.controlar !== false,
+  }
+}
+
+/**
+ * Foto principal e estoque de um produto numa chamada só (para a lista da busca).
+ * O estoque aqui é o saldo; o disponível exato é lido ao adicionar à pré-venda.
+ */
+export async function obterResumoProdutoOlist(accessToken: string, id: number): Promise<{ foto: string | null; estoque: number | null }> {
+  const p = (await requisicao(`/produtos/${id}`, accessToken, { esperarLimite: false })) as ProdutoDetalheOlist & {
+    estoque?: { quantidade?: number | null } | null
+  }
+  const anexos = (p.anexos ?? []).map((a) => a.url?.trim()).filter((u): u is string => Boolean(u && /^https?:\/\//i.test(u)))
+  const quantidade = p.estoque?.quantidade
+  return {
+    foto: anexos.find(ehImagem) ?? anexos[0] ?? null,
+    estoque: typeof quantidade === 'number' && Number.isFinite(quantidade) ? quantidade : null,
   }
 }
 

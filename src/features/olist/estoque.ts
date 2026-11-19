@@ -13,6 +13,7 @@ import {
   lancarEstoqueOlist,
   obterEstoqueOlist,
   obterProdutoOlist,
+  obterResumoProdutoOlist,
   type ProdutoOlist,
   type ResultadoBuscaOlist,
 } from './api'
@@ -399,27 +400,40 @@ export async function receberAvisoEstoqueOlist(corpo: unknown): Promise<{ produt
 // Pedidos da tela (via rotina): buscar e preparar produtos para a pré-venda
 // -----------------------------------------------------------------------------
 
-export type ResultadoBuscaComEstoque = ResultadoBuscaOlist & { estoque: number | null }
+export type ResultadoBuscaComEstoque = ResultadoBuscaOlist & { estoque: number | null; foto: string | null }
+
+/** Foto e estoque já consultados (10 min): repetir a busca não gasta o limite da Olist de novo. */
+const resumos = new Map<number, { foto: string | null; estoque: number | null; em: number }>()
+const VALIDADE_RESUMO_MS = 10 * 60_000
 
 export async function buscarNaOlist(termo: string): Promise<ResultadoBuscaComEstoque[]> {
   const supabase = createAdminClient()
   const token = await obterTokenOlist(supabase)
   try {
     const produtos = await buscarProdutosOlist(token, termo)
-    // Estoque de cada resultado (sem esperar o limite: o que não vier aparece como "—").
-    const comEstoque: ResultadoBuscaComEstoque[] = produtos.map((p) => ({ ...p, estoque: null }))
-    const fila = comEstoque.slice(0, 12)
+    // Foto e estoque de cada resultado (sem esperar o limite: o que não vier aparece sem foto e com "—").
+    const agoraMs = Date.now()
+    const comEstoque: ResultadoBuscaComEstoque[] = produtos.map((p) => {
+      const guardado = resumos.get(p.id)
+      return guardado && agoraMs - guardado.em < VALIDADE_RESUMO_MS
+        ? { ...p, estoque: guardado.estoque, foto: guardado.foto }
+        : { ...p, estoque: null, foto: null }
+    })
+    const fila = comEstoque.filter((p) => !resumos.has(p.id) || agoraMs - resumos.get(p.id)!.em >= VALIDADE_RESUMO_MS)
     await Promise.all(
       Array.from({ length: 4 }, async () => {
         for (let p = fila.shift(); p; p = fila.shift()) {
           try {
-            p.estoque = (await obterEstoqueOlist(token, p.id, { esperarLimite: false })).disponivel
+            const resumo = await obterResumoProdutoOlist(token, p.id)
+            Object.assign(p, resumo)
+            resumos.set(p.id, { ...resumo, em: Date.now() })
           } catch {
             break
           }
         }
       }),
     )
+    if (resumos.size > 2000) resumos.clear()
     await registrarErroEstoque(supabase, null)
     return comEstoque
   } catch (erro) {

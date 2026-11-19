@@ -2,6 +2,7 @@
 
 import { Boxes, Check, Loader2, Package, Search, X } from 'lucide-react'
 import { useEffect, useRef, useState, useTransition, type FormEvent } from 'react'
+import Image from 'next/image'
 import { createPortal } from 'react-dom'
 
 import { classesControle } from '@/components/form/fields'
@@ -134,9 +135,10 @@ export function JanelaOlist({
             <p className="px-6 py-14 text-center text-[14px] text-suave">Nada encontrado na Olist com “{termo.trim()}”.</p>
           )}
 
-          {resultados && resultados.length >= 30 && (
+          {/* 20 = LIMITE_BUSCA da API (cada resultado custa uma chamada à Olist para foto e estoque). */}
+          {resultados && resultados.length >= 20 && (
             <p className="mx-5 mt-4 rounded-xl bg-papel px-4 py-2.5 text-[13px] text-suave">
-              Mostrando os 30 primeiros. Digite mais palavras para achar a cerveja certa (ex.: “dogma hop lover”).
+              Mostrando os 20 primeiros. Digite mais palavras para achar a cerveja certa (ex.: “dogma hop lover”).
             </p>
           )}
 
@@ -147,19 +149,30 @@ export function JanelaOlist({
                 const semEstoque = p.estoque !== null && p.estoque <= 0
                 return (
                   <li key={p.id} className="flex items-center gap-3 px-5 py-3">
-                    <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl', p.kit ? 'bg-ink text-white' : 'bg-volt-50 text-volt-700')}>
-                      {p.kit ? <Boxes className="size-5" aria-hidden /> : <Package className="size-5" aria-hidden />}
+                    <span
+                      className={cn(
+                        'relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-xl ring-1 ring-linha',
+                        p.foto ? 'bg-white' : p.kit ? 'bg-ink text-white' : 'bg-volt-50 text-volt-700',
+                      )}
+                    >
+                      {p.foto ? (
+                        <Image src={p.foto} alt={p.nome} fill sizes="64px" className="object-contain p-0.5" />
+                      ) : p.kit ? (
+                        <Boxes className="size-6" aria-hidden />
+                      ) : (
+                        <Package className="size-6" aria-hidden />
+                      )}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[15px] font-semibold">{p.nome}</p>
-                      <p className="tipo-dado truncate text-[12px] text-suave">
+                      <p className="line-clamp-2 text-[14px] leading-5 font-semibold">{p.nome}</p>
+                      <p className="tipo-dado mt-0.5 text-[12px] text-suave">
                         {[p.kit ? 'Kit' : null, p.sku ? `SKU ${p.sku}` : null, p.preco ? formatarMoeda(p.preco) : null].filter(Boolean).join(' · ')}
+                      </p>
+                      <p className={cn('tipo-dado text-[12px] font-semibold', semEstoque ? 'text-alerta' : 'text-volt-700')}>
+                        {p.estoque === null ? 'estoque: —' : semEstoque ? 'sem estoque' : `${formatarNumero(p.estoque)} em estoque`}
                       </p>
                       {erros[p.id] && <p className="mt-1 text-[12px] text-perigo">{erros[p.id]}</p>}
                     </div>
-                    <span className={cn('tipo-dado shrink-0 text-right text-[13px]', semEstoque ? 'text-alerta' : 'text-ink')}>
-                      {p.estoque === null ? '—' : semEstoque ? 'sem estoque' : `${formatarNumero(p.estoque)} em estoque`}
-                    </span>
                     <Button
                       tamanho="sm"
                       variante={adicionado ? 'fantasma' : 'secundario'}
