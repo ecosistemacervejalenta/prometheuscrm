@@ -231,7 +231,10 @@ const ehImagem = (url: string) => /\.(jpe?g|png|webp|gif|avif)(\?|$)/i.test(url)
  */
 export async function buscarProdutosOlist(accessToken: string, termo: string): Promise<ResultadoBuscaOlist[]> {
   const buscar = async (campo: 'nome' | 'codigo') => {
-    const params = new URLSearchParams({ [campo]: termo, situacao: 'A', limit: '30', offset: '0' })
+    // O filtro "nome" da Olist é "começa com" ("Paulaner" não acha "Cerveja Paulaner..."); com %
+    // vira "contém", e cada palavra pode estar em qualquer parte do nome, nessa ordem.
+    const valor = campo === 'nome' ? `%${termo.trim().split(/\s+/).join('%')}%` : termo.trim()
+    const params = new URLSearchParams({ [campo]: valor, situacao: 'A', limit: '30', offset: '0' })
     const pagina = (await requisicao(`/produtos?${params}`, accessToken, { esperarLimite: false })) as { itens?: ProdutoListadoOlist[] } | null
     return pagina?.itens ?? []
   }

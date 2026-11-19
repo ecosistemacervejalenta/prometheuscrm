@@ -105,7 +105,7 @@ export function JanelaOlist({
             <input
               value={termo}
               onChange={(e) => setTermo(e.target.value)}
-              placeholder="Nome ou SKU (ex.: IPA, KIT-6)"
+              placeholder="Parte do nome ou SKU (ex.: dogma ipa)"
               autoFocus
               className={cn(classesControle, 'h-11 pl-9')}
             />
@@ -125,13 +125,19 @@ export function JanelaOlist({
               </span>
               <p className="font-semibold">Procure pelo nome ou SKU</p>
               <p className="mx-auto mt-1 max-w-sm text-[13px] text-suave">
-                Só produtos ativos. Kits da Olist entram como kit: a venda baixa cada cerveja que vem nele.
+                Pode digitar só parte do nome, em qualquer ordem de palavras do título (ex.: “dogma ipa”). Só produtos ativos.
               </p>
             </div>
           )}
 
           {resultados?.length === 0 && (
             <p className="px-6 py-14 text-center text-[14px] text-suave">Nada encontrado na Olist com “{termo.trim()}”.</p>
+          )}
+
+          {resultados && resultados.length >= 30 && (
+            <p className="mx-5 mt-4 rounded-xl bg-papel px-4 py-2.5 text-[13px] text-suave">
+              Mostrando os 30 primeiros. Digite mais palavras para achar a cerveja certa (ex.: “dogma hop lover”).
+            </p>
           )}
 
           {resultados && resultados.length > 0 && (
