@@ -1,30 +1,25 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Mail, MapPin, MessageCircle, Pencil, Phone, Plus, Send, ShoppingBag } from 'lucide-react'
+import { Mail, MapPin, MessageCircle, Pencil, Phone, Plus, Send } from 'lucide-react'
 
 import { LinhaDoTempo } from '@/components/dominio/linha-do-tempo'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { ButtonExternal, ButtonLink } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { EmptyState } from '@/components/ui/empty-state'
 import { Kpi } from '@/components/ui/kpi'
-import { ItemMobile, ListaMobile } from '@/components/ui/lista-mobile'
-import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
-import { atividadesDoCliente, obterCliente, pedidosDoCliente } from '@/features/clientes/queries'
+import { HistoricoDePedidos } from '@/features/clientes/components/historico-pedidos'
+import { atividadesDoCliente, historicoDoCliente, obterCliente } from '@/features/clientes/queries'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
-import { CanalBadge, PagamentoBadge } from '@/features/pedidos/components/selos'
 import { listarPreVendasAtivas } from '@/features/pre-vendas/queries'
 import {
-  formatarData,
   formatarEndereco,
   formatarMesAno,
   formatarMoeda,
   formatarNumero,
   formatarRelativo,
   formatarWhatsapp,
-  numeroPedido,
   primeiroNome,
 } from '@/lib/format'
 import { ORIGEM_CLIENTE } from '@/lib/rotulos'
@@ -38,17 +33,17 @@ export async function generateMetadata({ params }: PageProps<'/clientes/[id]'>):
 
 export default async function PaginaCliente({ params }: PageProps<'/clientes/[id]'>) {
   const { id } = await params
-  const [cliente, pedidos, atividades, preVendas, config] = await Promise.all([
+  const [cliente, { pedidos, totais }, atividades, preVendas, config] = await Promise.all([
     obterCliente(id),
-    pedidosDoCliente(id),
+    historicoDoCliente(id),
     atividadesDoCliente(id),
     listarPreVendasAtivas(),
     obterConfiguracoes(),
   ])
   if (!cliente?.id) notFound()
 
-  const totalPedidos = cliente.pedidos ?? 0
-  const ticket = totalPedidos > 0 ? Number(cliente.total_gasto) / totalPedidos : 0
+  const ticket = totais.pedidos > 0 ? totais.comprado / totais.pedidos : 0
+  const ultimo = pedidos.find((p) => p.status !== 'cancelado')?.criadoEm
   const endereco = formatarEndereco(cliente)
   const links = await Promise.all(
     preVendas.map(async (pv) => {
@@ -101,69 +96,36 @@ export default async function PaginaCliente({ params }: PageProps<'/clientes/[id
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi rotulo="LTV" valor={formatarMoeda(cliente.total_gasto)} />
-        <Kpi rotulo="Pedidos" valor={formatarNumero(totalPedidos)} detalhe={cliente.ultimo_pedido_em ? `último ${formatarRelativo(cliente.ultimo_pedido_em)}` : undefined} />
-        <Kpi rotulo="Ticket médio" valor={formatarMoeda(ticket)} />
+        <Kpi
+          rotulo="Total comprado"
+          valor={formatarMoeda(totais.comprado)}
+          detalhe={`${formatarNumero(totais.unidades)} ${totais.unidades === 1 ? 'cerveja' : 'cervejas'}`}
+        />
+        <Kpi rotulo="Total pago" valor={formatarMoeda(totais.pago)} tendencia={totais.pago > 0 ? 'positiva' : 'neutra'} />
         <Kpi
           rotulo="Em aberto"
-          valor={formatarMoeda(cliente.em_aberto)}
-          tendencia={Number(cliente.em_aberto) > 0 ? 'negativa' : 'neutra'}
-          detalhe={Number(cliente.em_aberto) > 0 ? 'aguardando pagamento' : 'tudo pago'}
+          valor={formatarMoeda(totais.emAberto)}
+          tendencia={totais.emAberto > 0 ? 'negativa' : 'neutra'}
+          detalhe={totais.emAberto > 0 ? 'aguardando pagamento' : 'tudo pago'}
+        />
+        <Kpi
+          rotulo="Pedidos"
+          valor={formatarNumero(totais.pedidos)}
+          detalhe={totais.pedidos > 0 ? `ticket ${formatarMoeda(ticket)}${ultimo ? ` · último ${formatarRelativo(ultimo)}` : ''}` : undefined}
         />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <Card className="min-w-0 self-start">
-          <CardHeader titulo="Pedidos" descricao={`${formatarNumero(totalPedidos)} no total`} />
-          {pedidos.length === 0 ? (
-            <EmptyState icone={ShoppingBag} titulo="Nenhum pedido ainda" acao={<ButtonLink href={`/pedidos/novo?cliente=${id}`}>Lançar pedido</ButtonLink>} />
-          ) : (
-            <>
-            <ListaMobile>
-              {pedidos.map((p) => (
-                <ItemMobile
-                  key={p.id}
-                  href={`/pedidos/${p.id}`}
-                  titulo={<span className="tipo-dado">{numeroPedido(p.numero)}</span>}
-                  subtitulo={`${formatarData(p.criado_em)}${p.pre_venda_titulo ? ` · ${p.pre_venda_titulo}` : ''}`}
-                  fim={
-                    <>
-                      <p className="tipo-dado text-[13px]">{formatarMoeda(p.total)}</p>
-                      <div className="mt-1"><PagamentoBadge status={p.status_pagamento} /></div>
-                    </>
-                  }
-                />
-              ))}
-            </ListaMobile>
-            <Table somenteDesktop>
-              <THead>
-                <TR>
-                  <TH>Pedido</TH>
-                  <TH>Canal</TH>
-                  <TH>Data</TH>
-                  <TH className="text-right">Total</TH>
-                  <TH>Pagamento</TH>
-                </TR>
-              </THead>
-              <TBody>
-                {pedidos.map((p) => (
-                  <TR key={p.id} className="hover:bg-papel/60">
-                    <TD>
-                      <Link href={`/pedidos/${p.id}`} className="tipo-dado font-semibold hover:text-volt-700">
-                        {numeroPedido(p.numero)}
-                      </Link>
-                      {p.pre_venda_titulo && <p className="text-[12px] text-suave">{p.pre_venda_titulo}</p>}
-                    </TD>
-                    <TD><CanalBadge canal={p.canal} /></TD>
-                    <TD className="tipo-dado text-[13px] text-suave">{formatarData(p.criado_em)}</TD>
-                    <TD className="tipo-dado text-right">{formatarMoeda(p.total)}</TD>
-                    <TD><PagamentoBadge status={p.status_pagamento} /></TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-            </>
-          )}
+          <CardHeader
+            titulo="Histórico de compras"
+            descricao={
+              pedidos.length > 0
+                ? `${formatarNumero(pedidos.length)} ${pedidos.length === 1 ? 'pedido' : 'pedidos'}, do mais novo ao mais antigo — fica guardado mesmo se a pré-venda for excluída.`
+                : undefined
+            }
+          />
+          <HistoricoDePedidos pedidos={pedidos} clienteId={id} />
         </Card>
 
         <div className="space-y-6">

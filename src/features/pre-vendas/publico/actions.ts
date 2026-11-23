@@ -76,19 +76,36 @@ export async function confirmarPedidoPreVenda(entrada: z.input<typeof esquemaCon
   if (cliente && !email) return { ok: false, mensagem: 'Informe o seu e-mail.' }
 
   const db = createAdminClient()
+  const numeroWhatsapp = normalizarWhatsapp(whatsapp) ?? ''
+  // Cadastro de antes desta compra: o link veio preenchido com ele, então só grava o que mudou.
+  const antes = cliente ? await lerCadastro(db, numeroWhatsapp) : null
+  const atualizarEndereco = cliente ? await enderecoMudou(db, antes, cliente) : false
+
   const { data, error } = await db.rpc('registrar_pedido_pre_venda', {
     p_slug: slug,
-    p_cliente: { ...cliente, ...(cliente ? { uf: cliente.uf.toUpperCase() } : {}), email, whatsapp: normalizarWhatsapp(whatsapp) },
+    p_cliente: { ...cliente, ...(cliente ? { uf: cliente.uf.toUpperCase() } : {}), email, whatsapp: numeroWhatsapp },
     p_itens: itens,
-    p_atualizar_endereco: Boolean(cliente),
+    p_atualizar_endereco: atualizarEndereco,
     p_observacoes: observacoes?.trim() || undefined,
   })
   if (error) return { ok: false, mensagem: traduzirErro(error) }
 
   // E-mail no cadastro: o Mercado Pago usa no PIX (preparar_cobranca_pix lê clientes.email).
-  if (email) {
-    const { error: erroEmail } = await db.from('clientes').update({ email }).eq('id', data.cliente_id)
-    if (erroEmail) console.error('[pre-venda] e-mail do cliente', erroEmail.message)
+  // Nome corrigido no link também vale para o CRM (o banco só grava o nome no primeiro cadastro).
+  const nomeNovo = cliente && antes && semEspacosSobrando(cliente.nome) !== semEspacosSobrando(antes.nome) ? semEspacosSobrando(cliente.nome) : null
+  if (email || nomeNovo) {
+    const { error: erroCadastro } = await db
+      .from('clientes')
+      .update({ ...(email ? { email } : {}), ...(nomeNovo ? { nome: nomeNovo } : {}) })
+      .eq('id', data.cliente_id)
+    if (erroCadastro) console.error('[pre-venda] cadastro do cliente', erroCadastro.message)
+    else if (nomeNovo && antes) {
+      await db.from('atividades').insert({
+        cliente_id: data.cliente_id,
+        tipo: 'nome_atualizado',
+        descricao: `Nome atualizado pelo link da pré-venda: "${antes.nome}" → "${nomeNovo}"`,
+      })
+    }
   }
 
   const { data: caixa } = await db.rpc('caixa_publica', { p_pedido_id: data.id })
@@ -113,26 +130,100 @@ export async function confirmarPedidoPreVenda(entrada: z.input<typeof esquemaCon
 // -----------------------------------------------------------------------------
 
 export type ResultadoIdentificacao =
-  | { ok: true; cliente: boolean; temEndereco: boolean; caixa: CaixaPublica | null }
+  | { ok: true; cadastro: CadastroDoCliente | null; caixa: CaixaPublica | null }
   | { ok: false; mensagem: string }
 
 /**
- * O cliente digitou o WhatsApp: ele já tem uma Caixa VIP em andamento?
- * Devolve só o primeiro nome, as cervejas e os valores da caixa — nunca o endereço completo.
+ * O cliente digitou o WhatsApp: devolve o cadastro dele no CRM (para o link vir preenchido em
+ * qualquer pré-venda e em qualquer aparelho) e a Caixa VIP em andamento, se houver.
+ * Decisão do dono da loja (2026-11-19): mostrar o cadastro inteiro só pelo WhatsApp, sem código.
  */
-export async function identificarCaixa(slug: string, whatsapp: string): Promise<ResultadoIdentificacao> {
+export async function identificarCliente(slug: string, whatsapp: string): Promise<ResultadoIdentificacao> {
   if (!whatsappValido(whatsapp)) return { ok: false, mensagem: 'Confira o número: DDD + celular.' }
   const db = createAdminClient()
   const { data: preVenda } = await db.from('vw_pre_vendas').select('status_efetivo').eq('slug', slug).maybeSingle()
   if (preVenda?.status_efetivo !== 'ativa') return { ok: false, mensagem: 'Esta pré-venda não está mais disponível.' }
 
-  const { data, error } = await db.rpc('caixa_do_whatsapp', { p_whatsapp: normalizarWhatsapp(whatsapp) ?? '' })
-  if (error) {
-    console.error('[pre-venda] identificar caixa', error.message)
-    return { ok: true, cliente: false, temEndereco: false, caixa: null }
+  const numero = normalizarWhatsapp(whatsapp) ?? ''
+  const [cadastro, { data, error }] = await Promise.all([lerCadastro(db, numero), db.rpc('caixa_do_whatsapp', { p_whatsapp: numero })])
+  if (error) console.error('[pre-venda] identificar caixa', error.message)
+  const r = (data ?? {}) as { caixa?: unknown }
+  return {
+    ok: true,
+    cadastro: cadastro && {
+      nome: cadastro.nome,
+      email: cadastro.email ?? '',
+      cep: cadastro.cep ?? '',
+      logradouro: cadastro.logradouro ?? '',
+      numero: cadastro.numero ?? '',
+      complemento: cadastro.complemento ?? '',
+      bairro: cadastro.bairro ?? '',
+      cidade: cadastro.cidade ?? '',
+      uf: cadastro.uf ?? '',
+    },
+    caixa: error ? null : lerCaixa(r.caixa),
   }
-  const r = (data ?? {}) as { cliente?: boolean; tem_endereco?: boolean; caixa?: unknown }
-  return { ok: true, cliente: r.cliente === true, temEndereco: r.tem_endereco === true, caixa: lerCaixa(r.caixa) }
+}
+
+// -----------------------------------------------------------------------------
+// Cadastro do cliente (fica no CRM para sempre: excluir a pré-venda não apaga o cliente)
+// -----------------------------------------------------------------------------
+
+/** O que o link mostra preenchido para quem já comprou. O nome vem inteiro (o link separa o sobrenome). */
+export type CadastroDoCliente = {
+  nome: string
+  email: string
+  cep: string
+  logradouro: string
+  numero: string
+  complemento: string
+  bairro: string
+  cidade: string
+  uf: string
+}
+
+type Db = ReturnType<typeof createAdminClient>
+type CamposEndereco = { cep?: string | null; logradouro?: string | null; numero?: string | null; complemento?: string | null; bairro?: string | null; cidade?: string | null; uf?: string | null }
+
+const COLUNAS_CADASTRO = 'id, nome, email, cep, logradouro, numero, complemento, bairro, cidade, uf'
+
+async function lerCadastro(db: Db, whatsapp: string) {
+  if (!whatsapp) return null
+  const { data, error } = await db.from('clientes').select(COLUNAS_CADASTRO).eq('whatsapp', whatsapp).maybeSingle()
+  if (error) console.error('[pre-venda] cadastro do WhatsApp', error.message)
+  return data
+}
+
+const semEspacosSobrando = (v: string | null | undefined) => (v ?? '').trim().replace(/\s+/g, ' ')
+const comparavel = (v: string | null | undefined) => semEspacosSobrando(v).toLocaleLowerCase('pt-BR')
+
+function mesmoEndereco(a: CamposEndereco, b: CamposEndereco) {
+  return (
+    (a.cep ?? '').replace(/\D/g, '') === (b.cep ?? '').replace(/\D/g, '') &&
+    (['logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf'] as const).every((campo) => comparavel(a[campo]) === comparavel(b[campo]))
+  )
+}
+
+/**
+ * O endereço confirmado no link é diferente do que já está gravado? Compara com o cadastro e com a
+ * Caixa VIP em andamento (a equipe pode ter mudado o cadastro depois que a caixa abriu).
+ * Mesma regra de caixa em andamento de public.caixa_em_andamento().
+ */
+async function enderecoMudou(db: Db, antes: Awaited<ReturnType<typeof lerCadastro>>, digitado: CamposEndereco) {
+  if (!antes?.logradouro || !mesmoEndereco(antes, digitado)) return true
+  const { data: caixa } = await db
+    .from('pedidos')
+    .select('endereco_entrega')
+    .eq('cliente_id', antes.id)
+    .not('caixa', 'is', null)
+    .in('status', ['novo', 'confirmado'])
+    .neq('status_pagamento', 'estornado')
+    .order('criado_em', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const enderecoDaCaixa = caixa?.endereco_entrega
+  if (!caixa || !enderecoDaCaixa || typeof enderecoDaCaixa !== 'object' || Array.isArray(enderecoDaCaixa)) return Boolean(caixa)
+  return !mesmoEndereco(enderecoDaCaixa as CamposEndereco, digitado)
 }
 
 const idPedido = z.uuid()

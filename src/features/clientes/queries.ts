@@ -51,15 +51,70 @@ export async function obterClienteParaEdicao(id: string) {
   return data
 }
 
-export async function pedidosDoCliente(id: string) {
+export type PedidoDoHistorico = Awaited<ReturnType<typeof historicoDoCliente>>['pedidos'][number]
+
+/**
+ * Histórico completo do cliente: TODOS os pedidos, com as cervejas de cada um, de qual
+ * pré-venda vieram (o nome fica guardado mesmo se a pré-venda for excluída) e quanto já foi pago.
+ * Pago = pedido quitado → total; senão, o que entrou pelo PIX + o que foi pago por fora
+ * (mesma regra de saldo_pix_pedido no banco).
+ */
+export async function historicoDoCliente(id: string) {
   const { supabase } = await exigirEquipe()
-  const { data } = await supabase
-    .from('vw_pedidos')
-    .select('*')
+  const { data, error } = await supabase
+    .from('pedidos')
+    .select(
+      `id, numero, criado_em, canal, status, status_pagamento, frete, caixa, subtotal, taxa_entrega, desconto, total, pago_fora_pix,
+       pre_vendas (titulo),
+       pedido_itens (id, descricao, quantidade, total, pre_venda_titulo, pre_vendas (titulo)),
+       cobrancas_pix (valor_pago, status)`,
+    )
     .eq('cliente_id', id)
     .order('criado_em', { ascending: false })
-    .limit(50)
-  return data ?? []
+  if (error) throw error
+
+  const pedidos = (data ?? []).map((p) => {
+    const pagoPix = p.cobrancas_pix.filter((c) => c.status === 'pago').reduce((s, c) => s + Number(c.valor_pago ?? 0), 0)
+    const total = Number(p.total)
+    const pago =
+      p.status_pagamento === 'pago' ? total : p.status_pagamento === 'estornado' ? 0 : Math.min(pagoPix + Number(p.pago_fora_pix ?? 0), total)
+    const itens = p.pedido_itens.map((i) => ({
+      id: i.id,
+      descricao: i.descricao,
+      quantidade: i.quantidade,
+      total: Number(i.total),
+      preVenda: i.pre_vendas?.titulo ?? i.pre_venda_titulo,
+    }))
+    return {
+      id: p.id,
+      numero: p.numero,
+      criadoEm: p.criado_em,
+      canal: p.canal,
+      status: p.status,
+      statusPagamento: p.status_pagamento,
+      frete: p.frete,
+      caixa: p.caixa,
+      taxaEntrega: Number(p.taxa_entrega),
+      desconto: Number(p.desconto),
+      total,
+      pago,
+      falta: p.status === 'cancelado' || p.status_pagamento === 'estornado' ? 0 : Math.max(total - pago, 0),
+      itens,
+      unidades: itens.reduce((s, i) => s + i.quantidade, 0),
+      preVendas: [...new Set([p.pre_vendas?.titulo, ...itens.map((i) => i.preVenda)].filter((t): t is string => Boolean(t)))],
+    }
+  })
+
+  // Pedidos cancelados aparecem no histórico, mas não contam nos totais.
+  const validos = pedidos.filter((p) => p.status !== 'cancelado')
+  const totais = {
+    pedidos: validos.length,
+    comprado: validos.reduce((s, p) => s + p.total, 0),
+    pago: validos.reduce((s, p) => s + p.pago, 0),
+    emAberto: validos.reduce((s, p) => s + p.falta, 0),
+    unidades: validos.reduce((s, p) => s + p.unidades, 0),
+  }
+  return { pedidos, totais }
 }
 
 export async function atividadesDoCliente(id: string) {
@@ -69,7 +124,7 @@ export async function atividadesDoCliente(id: string) {
     .select('*')
     .eq('cliente_id', id)
     .order('criado_em', { ascending: false })
-    .limit(30)
+    .limit(200)
   return data ?? []
 }
 

@@ -37,11 +37,13 @@ type ItemMenu = {
   icone: LucideIcon
   contagem?: number
   destaque?: number
+  /** Subitens mostrados logo abaixo, recuados (ex.: Clientes › Grupo VIP). */
+  filhos?: ItemMenu[]
 }
 
 export type PropsSidebar = {
   perfil: { nome: string; cargo: string | null; papel: string; foto: string | null }
-  contagens: { clientes: number; aReceber: number; preVendasAtivas: number; atendimentos: number; tarefas: number }
+  contagens: { clientes: number; clientesVip: number; aReceber: number; preVendasAtivas: number; atendimentos: number; tarefas: number }
   meuId: string
   avisos: PropsAvisos
 }
@@ -51,12 +53,18 @@ function itensMenu(contagens: PropsSidebar['contagens']): ItemMenu[] {
     { href: '/', rotulo: 'Visão geral', icone: LayoutDashboard },
     { href: '/tarefas', rotulo: 'Tarefas', icone: ListTodo, contagem: contagens.tarefas },
     { href: '/atendimento', rotulo: 'Atendimento', icone: MessagesSquare, destaque: contagens.atendimentos },
-    { href: '/clientes', rotulo: 'Clientes', icone: Users, contagem: contagens.clientes },
+    {
+      href: '/clientes',
+      rotulo: 'Clientes',
+      icone: Users,
+      contagem: contagens.clientes,
+      filhos: [{ href: '/clientes/grupo-vip', rotulo: 'Grupo VIP', icone: Crown, contagem: contagens.clientesVip }],
+    },
     { href: '/leads', rotulo: 'Banco de Leads', icone: BookUser },
     { href: '/campanhas', rotulo: 'Campanhas', icone: Megaphone },
     { href: '/pedidos', rotulo: 'Pedidos', icone: ShoppingBag, contagem: contagens.aReceber },
     { href: '/pre-vendas', rotulo: 'Pré-vendas', icone: Rocket, destaque: contagens.preVendasAtivas },
-    { href: '/grupo-vip', rotulo: 'Grupo VIP', icone: Crown },
+    { href: '/grupo-vip', rotulo: 'Painel VIP', icone: Crown },
     { href: '/produtos', rotulo: 'Produtos', icone: Beer },
     { href: '/fornecedores', rotulo: 'Fornecedores', icone: Building2 },
     { href: '/contas', rotulo: 'Contas a pagar', icone: Wallet },
@@ -70,43 +78,54 @@ export const LINK_MEU_PERFIL = '/configuracoes/perfil'
 
 function Navegacao({ contagens }: { contagens: PropsSidebar['contagens'] }) {
   const caminho = usePathname()
+  const abre = (href: string) => (href === '/' ? caminho === '/' : caminho.startsWith(href))
 
   return (
     <nav aria-label="Menu principal">
       <p className="tipo-rotulo mb-2 px-3 text-white/40">Menu</p>
       <ul className="space-y-0.5">
         {itensMenu(contagens).map((item) => {
-          const ativo = item.href === '/' ? caminho === '/' : caminho.startsWith(item.href)
-          const Icon = item.icone
+          const filhoAtivo = item.filhos?.some((f) => abre(f.href)) ?? false
           return (
             <li key={item.href}>
-              <Link
-                href={item.href}
-                aria-current={ativo ? 'page' : undefined}
-                className={cn(
-                  'flex h-10 items-center gap-3 rounded-xl px-3 text-[14px] font-medium transition-colors',
-                  ativo ? 'bg-ink-700 text-white' : 'text-white/70 hover:bg-ink-800 hover:text-white',
-                )}
-              >
-                {ativo ? (
-                  <span className="size-1.5 rounded-full bg-volt" aria-hidden />
-                ) : (
-                  <Icon className="size-4 text-white/40" aria-hidden />
-                )}
-                <span className="flex-1">{item.rotulo}</span>
-                {item.destaque ? (
-                  <span className="tipo-dado grid h-5 min-w-5 place-items-center rounded-md bg-volt px-1 text-[11px] text-ink">
-                    {item.destaque}
-                  </span>
-                ) : item.contagem ? (
-                  <span className="tipo-dado text-[11px] text-white/40">{formatarNumero(item.contagem)}</span>
-                ) : null}
-              </Link>
+              <LinkDoMenu item={item} ativo={abre(item.href) && !filhoAtivo} />
+              {item.filhos && (
+                <ul className="mt-0.5 space-y-0.5">
+                  {item.filhos.map((filho) => (
+                    <li key={filho.href}>
+                      <LinkDoMenu item={filho} ativo={abre(filho.href)} recuado />
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           )
         })}
       </ul>
     </nav>
+  )
+}
+
+function LinkDoMenu({ item, ativo, recuado = false }: { item: ItemMenu; ativo: boolean; recuado?: boolean }) {
+  const Icon = item.icone
+  return (
+    <Link
+      href={item.href}
+      aria-current={ativo ? 'page' : undefined}
+      className={cn(
+        'flex items-center gap-3 rounded-xl px-3 font-medium transition-colors',
+        recuado ? 'ml-5 h-9 text-[13px]' : 'h-10 text-[14px]',
+        ativo ? 'bg-ink-700 text-white' : 'text-white/70 hover:bg-ink-800 hover:text-white',
+      )}
+    >
+      {ativo ? <span className="size-1.5 rounded-full bg-volt" aria-hidden /> : <Icon className="size-4 text-white/40" aria-hidden />}
+      <span className="flex-1">{item.rotulo}</span>
+      {item.destaque ? (
+        <span className="tipo-dado grid h-5 min-w-5 place-items-center rounded-md bg-volt px-1 text-[11px] text-ink">{item.destaque}</span>
+      ) : item.contagem ? (
+        <span className="tipo-dado text-[11px] text-white/40">{formatarNumero(item.contagem)}</span>
+      ) : null}
+    </Link>
   )
 }
 

@@ -228,17 +228,17 @@ export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/
             titulo="Excluir pré-venda"
             descricao={
               pedidos.length > 0
-                ? `Apaga a pré-venda, o link e as cervejas dela em ${pedidos.length === 1 ? '1 pedido' : `${pedidos.length} pedidos`} (${formatarMoeda(faturado)}), que saem do faturamento do Grupo VIP. Caixas VIP com cervejas de outras pré-vendas continuam, só sem estas. Não dá para desfazer.`
+                ? `Apaga a pré-venda e o link deixa de funcionar. ${pedidos.length === 1 ? 'O pedido dela continua' : `Os ${pedidos.length} pedidos dela continuam`} (${formatarMoeda(faturado)}) no histórico de cada cliente e no faturamento. Para tirar um pedido de teste, exclua o próprio pedido. Não dá para desfazer.`
                 : 'Apaga a pré-venda e o link deixa de funcionar. Não dá para desfazer.'
             }
             acoes={
               <ActionButton
-                acao={excluirPreVenda.bind(null, id, pedidos.length > 0)}
+                acao={excluirPreVenda.bind(null, id)}
                 variante="perigo"
                 tamanho="md"
                 confirmar={
                   pedidos.length > 0
-                    ? `Excluir "${pv.titulo}" e ${pedidos.length === 1 ? 'o pedido' : `os ${pedidos.length} pedidos`} dela (${formatarMoeda(faturado)})? Isso não pode ser desfeito.`
+                    ? `Excluir "${pv.titulo}"? ${pedidos.length === 1 ? 'O pedido continua' : `Os ${pedidos.length} pedidos continuam`} no histórico dos clientes. Isso não pode ser desfeito.`
                     : `Excluir "${pv.titulo}"? Isso não pode ser desfeito.`
                 }
               >

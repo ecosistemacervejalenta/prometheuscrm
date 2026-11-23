@@ -53,12 +53,13 @@ type ItemMais = { href: string; rotulo: string; icone: LucideIcon; cor: string; 
 const TITULOS: Array<[string, string]> = [
   ['/tarefas', 'Tarefas'],
   ['/atendimento', 'Atendimento'],
+  ['/clientes/grupo-vip', 'Clientes do Grupo VIP'],
   ['/clientes', 'Clientes'],
   ['/leads', 'Banco de Leads'],
   ['/campanhas', 'Campanhas'],
   ['/pedidos', 'Pedidos'],
   ['/pre-vendas', 'Pré-vendas'],
-  ['/grupo-vip', 'Grupo VIP'],
+  ['/grupo-vip', 'Painel VIP'],
   ['/produtos', 'Produtos'],
   ['/fornecedores', 'Fornecedores'],
   ['/contas', 'Contas a pagar'],
@@ -78,7 +79,8 @@ export function MobileNav({ perfil, contagens, avisos }: Pick<PropsSidebar, 'per
   const itensMais: ItemMais[] = [
     { href: '/tarefas', rotulo: 'Tarefas', icone: ListTodo, cor: '#5b48d6', contagem: contagens.tarefas },
     { href: '/pedidos', rotulo: 'Pedidos', icone: ShoppingBag, cor: '#2a78d6', contagem: contagens.aReceber },
-    { href: '/grupo-vip', rotulo: 'Grupo VIP', icone: Crown, cor: '#c8930a' },
+    { href: '/clientes/grupo-vip', rotulo: 'Clientes do Grupo VIP', icone: Users, cor: '#c8930a', contagem: contagens.clientesVip },
+    { href: '/grupo-vip', rotulo: 'Painel VIP', icone: Crown, cor: '#c8930a' },
     { href: '/leads', rotulo: 'Banco de Leads', icone: BookUser, cor: '#0f8a8a' },
     { href: '/campanhas', rotulo: 'Campanhas', icone: Megaphone, cor: '#25d366' },
     { href: '/produtos', rotulo: 'Produtos', icone: Beer, cor: '#eda100' },
@@ -159,7 +161,7 @@ export function MobileNav({ perfil, contagens, avisos }: Pick<PropsSidebar, 'per
                 href={aba.href}
                 rotulo={aba.rotulo}
                 icone={aba.icone}
-                ativo={ativo(caminho, aba.href)}
+                ativo={ativo(caminho, aba.href) && !itensMais.some((i) => i.href.startsWith(`${aba.href}/`) && ativo(caminho, i.href))}
                 selo={aba.href === '/pre-vendas' ? contagens.preVendasAtivas : aba.href === '/atendimento' ? contagens.atendimentos : undefined}
               />
             </li>

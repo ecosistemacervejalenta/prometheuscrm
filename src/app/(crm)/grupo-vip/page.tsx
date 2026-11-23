@@ -123,7 +123,7 @@ export default async function PaginaGrupoVip({ searchParams }: PageProps<'/grupo
           descricao="Vendas do grupo, quantidade por cerveja e cobranças."
           acoes={
             <>
-              <ButtonLink href="/clientes?vip=1">
+              <ButtonLink href="/clientes/grupo-vip">
                 <Users /> Membros
               </ButtonLink>
               <PrintButton>

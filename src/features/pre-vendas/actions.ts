@@ -9,7 +9,6 @@ import { slugificar } from '@/lib/utils'
 import type { StatusPreVenda } from '@/types'
 
 import { agendarProcessamentoDeEventos } from '../integracoes/eventos'
-import { agendarEnvioEstoqueOlist } from '../olist/rotina-estoque'
 import { esquemaPreVenda } from './schema'
 
 function atualizarTelas() {
@@ -50,15 +49,14 @@ export async function alterarStatusPreVenda(id: string, status: StatusPreVenda):
 }
 
 /**
- * Exclui a pré-venda (só administradores). Com pedidos, só quando `comPedidos` — eles
- * são excluídos junto e saem do faturamento do Grupo VIP.
+ * Exclui a pré-venda (só administradores). Os pedidos dela NÃO são apagados: continuam no
+ * histórico do cliente, no faturamento e nas Caixas VIP (o nome da pré-venda fica nos itens).
  */
-export async function excluirPreVenda(id: string, comPedidos = false): Promise<EstadoAcao> {
+export async function excluirPreVenda(id: string): Promise<EstadoAcao> {
   const { supabase, perfil } = await exigirEquipe()
   if (perfil.papel !== 'admin') return falha('Só administradores podem excluir pré-vendas.')
-  const { error } = await supabase.rpc('excluir_pre_venda', { p_pre_venda_id: id, p_com_pedidos: comPedidos })
+  const { error } = await supabase.rpc('excluir_pre_venda', { p_pre_venda_id: id })
   if (error) return falha(traduzirErro(error))
-  await agendarEnvioEstoqueOlist() // itens excluídos devolvem o estoque na Olist
   atualizarTelas()
   revalidatePath('/pedidos')
   revalidatePath('/clientes', 'layout')

@@ -22,9 +22,9 @@ import { flushSync } from 'react-dom'
 import { buscarCep, mascararCep } from '@/lib/cep'
 import { formatarData, formatarMoeda } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { linkWhatsapp, mascararWhatsapp, whatsappValido } from '@/lib/whatsapp'
+import { linkWhatsapp, mascararWhatsapp, normalizarWhatsapp, whatsappValido } from '@/lib/whatsapp'
 
-import { confirmarPedidoPreVenda, consultarFreteLink, identificarCaixa } from './actions'
+import { confirmarPedidoPreVenda, consultarFreteLink, identificarCliente, type CadastroDoCliente } from './actions'
 import {
   CLIENTE_VAZIO,
   emailValido,
@@ -69,13 +69,53 @@ const linhasDoEndereco = (c: DadosCliente) => [
   `${c.bairro} · ${c.cidade}/${c.uf} · CEP ${c.cep}`,
 ]
 
+const temLetras = (v: string) => /[a-zA-ZÀ-ÿ]{2,}/.test(v)
+
+/** Tem tudo para entregar? (O e-mail é conferido à parte: cadastros antigos não têm.) */
+const dadosCompletos = (c: DadosCliente) =>
+  temLetras(c.nome) &&
+  temLetras(c.sobrenome) &&
+  c.cep.replace(/\D/g, '').length === 8 &&
+  [c.logradouro, c.numero, c.bairro, c.cidade, c.uf].every((v) => v.trim())
+
+/**
+ * Cadastro do CRM → campos do link. O CRM guarda o nome inteiro: a 1ª palavra vira o nome e o
+ * resto o sobrenome — a não ser que o aparelho lembre o mesmo nome (aí vale a separação que o
+ * próprio cliente digitou, ex.: "Ana Paula" + "Silva"). O endereço vem em bloco: o do CRM ou,
+ * se o CRM não tiver, o que este aparelho lembra da mesma pessoa.
+ */
+function dadosDoCadastro(cadastro: CadastroDoCliente, atual: DadosCliente, mesmaPessoa: boolean): DadosCliente {
+  const nomeDoCrm = cadastro.nome.trim().replace(/\s+/g, ' ')
+  const nomeDoAparelho = `${atual.nome} ${atual.sobrenome}`.trim().replace(/\s+/g, ' ')
+  const [primeiro = '', ...resto] = nomeDoCrm.split(' ')
+  const nome =
+    mesmaPessoa && nomeDoAparelho.toLocaleLowerCase('pt-BR') === nomeDoCrm.toLocaleLowerCase('pt-BR')
+      ? { nome: atual.nome, sobrenome: atual.sobrenome }
+      : { nome: primeiro, sobrenome: resto.join(' ') }
+  const endereco = cadastro.logradouro.trim()
+    ? {
+        cep: mascararCep(cadastro.cep),
+        logradouro: cadastro.logradouro,
+        numero: cadastro.numero,
+        complemento: cadastro.complemento,
+        bairro: cadastro.bairro,
+        cidade: cadastro.cidade,
+        uf: cadastro.uf.toUpperCase(),
+      }
+    : mesmaPessoa
+      ? { cep: atual.cep, logradouro: atual.logradouro, numero: atual.numero, complemento: atual.complemento, bairro: atual.bairro, cidade: atual.cidade, uf: atual.uf }
+      : { cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '' }
+  return { ...nome, ...endereco, whatsapp: atual.whatsapp, email: cadastro.email.trim() || (mesmaPessoa ? atual.email : '') }
+}
+
 /**
  * Link público da pré-venda, no estilo Typeform (mobile first):
  * boas-vindas → cervejas → WhatsApp → (Caixa VIP aberta? mostra a caixa) → nome → sobrenome →
  * e-mail → CEP (endereço automático + frete) → número/complemento → revisão → Caixa VIP.
- * O WhatsApp identifica o cliente: se ele já tem uma caixa em andamento, as cervejas de hoje
- * entram nela (um frete só) e ele não precisa digitar os dados de novo.
- * Quem já comprou neste aparelho só confere os dados.
+ * O WhatsApp identifica o cliente: quem já comprou (em qualquer pré-venda, em qualquer aparelho)
+ * vê os dados do CRM já preenchidos e só confere — ou atualiza. Se ele tem uma caixa em
+ * andamento, as cervejas de hoje entram nela (um frete só).
+ * No aparelho onde já comprou, nem o WhatsApp é perguntado de novo.
  */
 export function CheckoutPreVenda({ dados, whatsappInicial }: { dados: PreVendaPublica; whatsappInicial?: string }) {
   const { noNavegador, cliente, pedido } = useArmazenado(dados.preVenda.slug)
@@ -126,8 +166,12 @@ function Fluxo({
   /** Caixa devolvida ao confirmar (já com as cervejas de hoje). */
   const [caixaFinal, setCaixaFinal] = useState<CaixaPublica | null>(null)
   const [identificando, setIdentificando] = useState(false)
-  /** Cliente com caixa em outro aparelho que pediu para trocar o endereço. */
+  /** Cliente com caixa que pediu para trocar o endereço. */
   const [enderecoNovo, setEnderecoNovo] = useState(false)
+  /** WhatsApp (normalizado) da pessoa cujos dados preenchem o formulário — o aparelho pode lembrar outra pessoa. */
+  const donoDosDados = useRef(clienteSalvo ? normalizarWhatsapp(clienteSalvo.whatsapp) : null)
+  /** CEP do cadastro no CRM: se o cliente com caixa mantém o CEP, o frete da caixa continua o mesmo. */
+  const [cepDoCadastro, setCepDoCadastro] = useState('')
 
   const selecionados = itens.filter((i) => (quantidades[i.produto_id] ?? 0) > 0)
   const unidades = selecionados.reduce((s, i) => s + quantidades[i.produto_id], 0)
@@ -136,7 +180,7 @@ function Fluxo({
   const frete = consulta?.cep === cepDigitos ? consulta : null
   const freteVip = frete?.vip === true
   // Caixa VIP prevista: o que já está na caixa + as cervejas de hoje, com um frete só.
-  const freteNovo = !caixa || enderecoNovo // o frete sai do CEP digitado agora
+  const freteNovo = !caixa || (enderecoNovo && cepDigitos !== cepDoCadastro) // o frete sai do CEP digitado agora
   const valorFrete = !freteNovo && caixa ? caixa.taxaEntrega : freteVip ? loja.freteVip : 0
   const freteACotar = !freteNovo && caixa ? caixa.frete === 'a_cotar' : !freteVip
   const totalPrevisto = (caixa ? caixa.subtotal - caixa.desconto : 0) + subtotal + valorFrete
@@ -165,7 +209,7 @@ function Fluxo({
   const nomeCompleto = `${cliente.nome} ${cliente.sobrenome}`.trim().replace(/\s+/g, ' ')
   const escolha = textosDaEscolha(itens)
   const primeiroNome = cliente.nome.trim().split(/\s+/)[0] || caixa?.cliente.primeiroNome || ''
-  /** Caixa de outro aparelho: vale o cadastro do WhatsApp (o endereço não é exibido nem redigitado). */
+  /** Caixa sem o cadastro em mãos (ex.: falha ao buscar): vale o cadastro do WhatsApp no banco (o endereço não é redigitado). */
   const usandoCadastro = Boolean(caixa) && !lembrado && !enderecoNovo
 
   const alterar = (campo: keyof DadosCliente) => (valor: string) => setCliente((c) => ({ ...c, [campo]: valor }))
@@ -279,28 +323,44 @@ function Fluxo({
   }
 
   /**
-   * WhatsApp → o cliente já tem uma Caixa VIP em andamento? Com caixa: mostra a caixa e as
-   * cervejas de hoje entram nela. Sem caixa: quem é do aparelho confere; quem não é, preenche.
+   * WhatsApp → busca o cadastro no CRM e a Caixa VIP em andamento.
+   * Já comprou: os dados vêm preenchidos (de qualquer aparelho). Com caixa: mostra a caixa e as
+   * cervejas de hoje entram nela. Dados completos: só confere. Faltando algo: as perguntas vêm
+   * com o que já existe e ele completa.
    */
   async function identificar(whatsapp: string) {
     setErro(null)
     setIdentificando(true)
     let achada: CaixaPublica | null = null
+    let cadastro: CadastroDoCliente | null = null
     try {
-      const r = await identificarCaixa(preVenda.slug, whatsapp)
+      const r = await identificarCliente(preVenda.slug, whatsapp)
       if (!r.ok) {
         setIdentificando(false)
         return setErro(r.mensagem)
       }
       achada = r.caixa
+      cadastro = r.cadastro
     } catch {
-      // sem conexão: segue sem a caixa (o banco junta na caixa do mesmo jeito ao confirmar)
+      // sem conexão: segue com o que o aparelho lembra (o banco junta na caixa do mesmo jeito ao confirmar)
     }
     setIdentificando(false)
+
+    const numero = normalizarWhatsapp(whatsapp)
+    const mesmaPessoa = lembrado && donoDosDados.current === numero
+    let dadosAgora = cliente
+    if (cadastro) dadosAgora = dadosDoCadastro(cadastro, cliente, mesmaPessoa)
+    else if (donoDosDados.current && donoDosDados.current !== numero) dadosAgora = { ...CLIENTE_VAZIO, whatsapp: cliente.whatsapp } // dados de outra pessoa
+    const conhecido = Boolean(cadastro) || mesmaPessoa
+    donoDosDados.current = conhecido ? numero : null
+
+    setCliente(dadosAgora)
+    setLembrado(conhecido)
+    setCepDoCadastro(conhecido ? dadosAgora.cep.replace(/\D/g, '') : '')
     setCaixa(achada)
     setEnderecoNovo(false)
     if (achada) ir('caixa')
-    else if (lembrado) ir('conferir')
+    else if (conhecido && dadosCompletos(dadosAgora)) ir('conferir')
     else ir('nome')
   }
 
@@ -315,9 +375,13 @@ function Fluxo({
     identificar(cliente.whatsapp)
   }
 
-  /** "Colocar na minha caixa": quem é do aparelho confere os dados; de outro aparelho, só falta o e-mail (se faltar). */
+  /** "Colocar na minha caixa": com o cadastro em mãos, confere os dados (ou completa o que faltar); sem ele, só falta o e-mail (se faltar). */
   function continuarNaCaixa() {
-    if (lembrado) return continuarConferido()
+    if (lembrado) {
+      if (dadosCompletos(cliente)) return continuarConferido()
+      setEnderecoNovo(true)
+      return ir('nome')
+    }
     if (caixa && !caixa.cliente.temEmail && !emailValido(cliente.email)) {
       soFaltaEmail.current = true
       return ir('email')
@@ -370,6 +434,8 @@ function Fluxo({
     esquecerCliente()
     setCliente(CLIENTE_VAZIO)
     setLembrado(false)
+    donoDosDados.current = null
+    setCepDoCadastro('')
     setCaixa(null)
     setEnderecoNovo(false)
     setConsulta(null)
@@ -417,6 +483,8 @@ function Fluxo({
         if (!usandoCadastro && nomeCompleto) {
           lembrarCliente(cliente)
           setLembrado(true)
+          donoDosDados.current = normalizarWhatsapp(cliente.whatsapp)
+          setCepDoCadastro(cepDigitos)
         }
         lembrarPedido(preVenda.slug, feito)
         setCaixaFinal(r.caixa)
@@ -554,7 +622,11 @@ function Fluxo({
         {/* Quem já comprou neste aparelho só confere ---------------------------- */}
         {etapa === 'conferir' && (
           <>
-            <Titulo rotulo="Seus dados" titulo={`Que bom te ver de novo, ${primeiroNome}!`} descricao="Confira se está tudo certo para a entrega." />
+            <Titulo
+              rotulo="Seus dados"
+              titulo={`Que bom te ver de novo, ${primeiroNome}!`}
+              descricao="Seus dados já estão aqui. Confira se está tudo certo para a entrega."
+            />
             <div className="mt-6 space-y-3 rounded-[24px] border border-linha bg-superficie p-5 text-[16px]">
               <p className="flex items-center gap-3">
                 <User className="size-5 shrink-0 text-suave" aria-hidden /> <span className="font-semibold">{nomeCompleto}</span>
@@ -582,7 +654,7 @@ function Fluxo({
               Está tudo certo <Check aria-hidden />
             </button>
             <button type="button" onClick={corrigirDados} className={classeBotaoGrande('claro', 'mt-3 w-full')}>
-              <Pencil aria-hidden /> Corrigir meus dados
+              <Pencil aria-hidden /> Atualizar meus dados
             </button>
             <button type="button" onClick={naoSouEu} className="mt-4 block w-full py-2 text-center text-[15px] font-semibold text-suave hover:text-ink">
               Não sou {primeiroNome}
@@ -680,7 +752,7 @@ function Fluxo({
             numero={1}
             htmlFor="whatsapp"
             titulo="Qual é o seu WhatsApp?"
-            descricao="Com DDD. Se você já tem uma Caixa VIP aberta com a gente, ela aparece na próxima tela."
+            descricao="Com DDD. Se você já comprou com a gente, seus dados aparecem preenchidos na próxima tela."
             erro={erro}
             aoEnviar={aposWhatsapp}
             ocupado={identificando}

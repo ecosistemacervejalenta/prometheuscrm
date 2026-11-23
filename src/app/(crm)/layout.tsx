@@ -8,8 +8,9 @@ export default async function LayoutCrm({ children }: LayoutProps<'/'>) {
   const { supabase, perfil } = await exigirEquipe()
   const agora = new Date().toISOString()
 
-  const [clientes, aReceber, preVendas, atendimentos, minhasTarefas, avisos] = await Promise.all([
+  const [clientes, clientesVip, aReceber, preVendas, atendimentos, minhasTarefas, avisos] = await Promise.all([
     supabase.from('clientes').select('id', { count: 'exact', head: true }),
+    supabase.from('clientes').select('id', { count: 'exact', head: true }).eq('vip', true),
     supabase
       .from('pedidos')
       .select('id', { count: 'exact', head: true })
@@ -43,6 +44,7 @@ export default async function LayoutCrm({ children }: LayoutProps<'/'>) {
           perfil={{ nome: perfil.nome || perfil.email || 'Equipe', cargo: perfil.cargo, papel: perfil.papel, foto: perfil.foto_url }}
           contagens={{
             clientes: clientes.count ?? 0,
+            clientesVip: clientesVip.count ?? 0,
             aReceber: aReceber.count ?? 0,
             preVendasAtivas: preVendas.count ?? 0,
             atendimentos: atendimentos.count ?? 0,

@@ -1751,6 +1751,7 @@ export type Database = {
           id: string
           pedido_id: string
           pre_venda_id: string | null
+          pre_venda_titulo: string | null
           preco_unitario: number
           produto_id: string | null
           quantidade: number
@@ -1761,6 +1762,7 @@ export type Database = {
           id?: string
           pedido_id: string
           pre_venda_id?: string | null
+          pre_venda_titulo?: string | null
           preco_unitario: number
           produto_id?: string | null
           quantidade: number
@@ -1771,6 +1773,7 @@ export type Database = {
           id?: string
           pedido_id?: string
           pre_venda_id?: string | null
+          pre_venda_titulo?: string | null
           preco_unitario?: number
           produto_id?: string | null
           quantidade?: number
