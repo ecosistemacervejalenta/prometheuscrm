@@ -748,6 +748,19 @@ await db.exec(`reset role;`)
   expectEq('lista do Banco de Leads entra em páginas (números com WhatsApp)', pagina.inseridos, 2)
   const seguinte = (await um(`select adicionar_lista_campanha($1, $2, $3) r`, [daLista.id, lista.id, pagina.ultimo])).r
   expectEq('a página seguinte vem vazia', [seguinte.inseridos, seguinte.ultimo], [0, null])
+  const soDdd = await um(`insert into campanhas (nome, texto, origem, lista_id) values ('Só DDD 11', 'Oi, {nome}!', 'leads', $1) returning id`, [lista.id])
+  expectEq('só alguns DDDs: entra só quem é do DDD (o número estrangeiro fica de fora)', [
+    (await um(`select adicionar_lista_campanha($1, $2, null, '21') r`, [soDdd.id, lista.id])).r,
+    (await um(`select adicionar_lista_campanha($1, $2, null, '11') r`, [soDdd.id, lista.id])).r,
+    (await um(`select contatos_lidos from campanhas where id = $1`, [soDdd.id])).contatos_lidos,
+  ], [{ lidos: 0, ultimo: null, inseridos: 0 }, { lidos: 1, ultimo: '5511987654321', inseridos: 1 }, 1])
+  expectEq('prévia do público com e sem filtro de DDD', [
+    (await um(`select publico_listas_campanha(array[$1]::uuid[]) r`, [lista.id])).r,
+    (await um(`select publico_listas_campanha(array[$1]::uuid[], array['11']) r`, [lista.id])).r,
+    (await um(`select publico_listas_campanha(array[$1]::uuid[], array['21']) r`, [lista.id])).r,
+    (await um(`select publico_listas_campanha(array[$1]::uuid[], '{}') r`, [lista.id])).r,
+  ], [{ soma: 2, unicos: 2 }, { soma: 1, unicos: 1 }, { soma: 0, unicos: 0 }, { soma: 2, unicos: 2 }])
+  await q(`delete from campanhas where id = $1`, [soDdd.id])
 
   await q(`insert into whatsapp_descadastros (whatsapp, origem) values ('5531987654321', 'botao')`)
   expectEq('confirmar tira quem pediu para não receber', (await um(`select confirmar_campanha($1) r`, [campanha.id])).r, { total: 2, ignorados: 1 })

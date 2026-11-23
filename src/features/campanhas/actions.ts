@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
+import { REGIAO_DO_DDD } from '@/features/leads/ddd'
 import { errosDeValidacao, falha, sucesso, traduzirErro, type EstadoAcao } from '@/lib/acoes'
 import { exigirAdmin, exigirEquipe } from '@/lib/auth'
 import { urlDaRequisicao } from '@/lib/url'
@@ -105,26 +106,49 @@ export async function criarCampanha(dados: DadosCampanha): Promise<ResultadoCria
 
   // Listas do Banco de Leads: cada uma em páginas de 5.000 (cada página cabe no tempo limite do banco).
   // Um número que está em mais de uma lista entra uma vez só (o banco ignora o repetido e conta quantos foram).
+  // "Só alguns DDDs": uma passada por lista e DDD, pulando o DDD que a lista não tem (contagem guardada nela).
   const listas = c.origem === 'leads' ? [...new Set(c.lista_ids)] : []
+  const ddds = c.origem === 'leads' ? [...new Set(c.ddds)].sort() : []
+  const dddsDaLista = new Map<string, Record<string, unknown>>()
+  if (ddds.length > 0) {
+    const { data, error } = await supabase.from('leads_listas').select('id, ddds').in('id', listas)
+    if (error) return { ok: false, mensagem: traduzirErro(error) }
+    for (const l of data) dddsDaLista.set(l.id, (l.ddds ?? {}) as Record<string, unknown>)
+  }
   for (const listaId of listas) {
-    let apos: string | undefined
-    do {
-      const { data, error } = await supabase.rpc('adicionar_lista_campanha', { p_campanha_id: c.id, p_lista_id: listaId, p_apos: apos })
-      if (error) return { ok: false, mensagem: traduzirErro(error) }
-      apos = (data as { ultimo: string | null }).ultimo ?? undefined
-    } while (apos)
+    const alvos = ddds.length === 0 ? [undefined] : ddds.filter((d) => Number(dddsDaLista.get(listaId)?.[d]) > 0)
+    for (const ddd of alvos) {
+      let apos: string | undefined
+      do {
+        const { data, error } = await supabase.rpc('adicionar_lista_campanha', {
+          p_campanha_id: c.id,
+          p_lista_id: listaId,
+          p_apos: apos,
+          p_ddd: ddd,
+        })
+        if (error) return { ok: false, mensagem: traduzirErro(error) }
+        apos = (data as { ultimo: string | null }).ultimo ?? undefined
+      } while (apos)
+    }
   }
   return { ok: true }
 }
 
 export type PublicoListas = { soma: number; unicos: number }
 
-/** Prévia do público: quantos números as listas somam e quantos são diferentes (o mesmo número recebe 1 vez). */
-export async function contarPublicoListas(listaIds: string[]): Promise<PublicoListas | null> {
+/**
+ * Prévia do público: quantos números as listas somam e quantos são diferentes (o mesmo número
+ * recebe 1 vez) — só dos DDDs escolhidos, se houver.
+ */
+export async function contarPublicoListas(listaIds: string[], ddds: string[] = []): Promise<PublicoListas | null> {
   const { supabase } = await exigirEquipe()
   const ids = [...new Set(listaIds)].slice(0, 30)
   if (ids.length === 0) return { soma: 0, unicos: 0 }
-  const { data, error } = await supabase.rpc('publico_listas_campanha', { p_lista_ids: ids })
+  const filtro = [...new Set(ddds)].filter((d) => Object.hasOwn(REGIAO_DO_DDD, d))
+  const { data, error } = await supabase.rpc('publico_listas_campanha', {
+    p_lista_ids: ids,
+    ...(filtro.length > 0 && { p_ddds: filtro }),
+  })
   if (error) {
     console.error('Prévia do público das listas:', error)
     return null

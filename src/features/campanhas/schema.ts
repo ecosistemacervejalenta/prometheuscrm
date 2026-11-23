@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { REGIAO_DO_DDD } from '@/features/leads/ddd'
 import { texto } from '@/lib/validacao'
 
 import { REGEX_HORARIO } from './horario'
@@ -43,6 +44,11 @@ export const esquemaCampanha = z
     origem_descricao: opcional(200, 'Descrição grande demais.'),
     // Listas do Banco de Leads (origem 'leads'); números repetidos entre elas entram uma vez só.
     lista_ids: z.array(z.uuid()).max(30, 'Escolha no máximo 30 listas por campanha.'),
+    // "Só alguns DDDs" das listas (origem 'leads'); vazio = todos os números das listas.
+    ddds: z
+      .array(z.string().refine((d) => Object.hasOwn(REGIAO_DO_DDD, d), 'DDD inválido.'))
+      .max(Object.keys(REGIAO_DO_DDD).length)
+      .default([]),
     // Arquivo/colar: linhas com WhatsApp válido antes de tirar os repetidos (só para mostrar quantos saíram).
     contatos_lidos: z.number().int().min(0).max(10_000_000).default(0),
     agendada_para: z.iso.datetime({ offset: true }).nullable(),

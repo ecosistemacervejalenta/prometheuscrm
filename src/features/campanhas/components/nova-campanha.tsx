@@ -57,6 +57,7 @@ import { limiteDiario, rotuloLimite } from '../meta'
 import type { ListaParaCampanha } from '../queries'
 import { HORARIO_PADRAO, REGEX_HORARIO } from '../horario'
 import { CONTATOS_POR_LOTE } from '../schema'
+import { descreverDdds, FiltroDdd } from './filtro-ddd'
 import { PreviaWhatsapp } from './previa-whatsapp'
 
 const MB = 1024 * 1024
@@ -102,21 +103,26 @@ function lerContatos(linhas: string[][], mapeamento: Mapeamento | null): Leitura
   return { colunas, mapeamento: mapa, contatos, resumo }
 }
 
-/** "Lista X (Pasta)" ou "Listas X, Y e mais 2" — cabe nos 200 caracteres da descrição. */
-function descreverListas(listas: ListaParaCampanha[]): string {
+/**
+ * "Lista X (Pasta)" ou "Listas X, Y e mais 2", com "· só DDD 11" no fim quando há filtro —
+ * cabe nos 200 caracteres da descrição (o filtro nunca é cortado).
+ */
+function descreverListas(listas: ListaParaCampanha[], ddds: string[]): string {
   if (listas.length === 0) return ''
-  if (listas.length === 1) return `Lista ${listas[0].nome} (${listas[0].pasta})`.slice(0, 200)
+  const sufixo = ddds.length > 0 ? ` · só ${descreverDdds(ddds)}` : ''
+  const maximo = 200 - sufixo.length
+  if (listas.length === 1) return `Lista ${listas[0].nome} (${listas[0].pasta})`.slice(0, maximo) + sufixo
   let texto = `Listas ${listas[0].nome}`
   let usadas = 1
   for (const l of listas.slice(1)) {
     const resto = listas.length - usadas - 1
     const proximo = `${texto}, ${l.nome}`
-    if ((proximo + (resto > 0 ? ` e mais ${resto + 1}` : '')).length > 200) break
+    if ((proximo + (resto > 0 ? ` e mais ${resto + 1}` : '')).length > maximo) break
     texto = proximo
     usadas++
   }
   const faltam = listas.length - usadas
-  return (faltam > 0 ? `${texto} e mais ${faltam}` : texto).slice(0, 200)
+  return (faltam > 0 ? `${texto} e mais ${faltam}` : texto).slice(0, maximo) + sufixo
 }
 
 function Passo({
@@ -259,6 +265,8 @@ export function NovaCampanha({
   const [arrastando, setArrastando] = useState(false)
   const [erroArquivo, setErroArquivo] = useState<string | null>(null)
   const [listaIds, setListaIds] = useState<string[]>([])
+  const [filtrarDdd, setFiltrarDdd] = useState(false)
+  const [dddsMarcados, setDddsMarcados] = useState<string[]>([])
   const [textoColado, setTextoColado] = useState('')
 
   // Passo 2 — mensagem
@@ -298,37 +306,57 @@ export function NovaCampanha({
   )
   const disponiveis = listas.filter((l) => !listaIds.includes(l.id))
   const pastas = [...new Set(disponiveis.map((l) => l.pasta))]
+  // DDDs das listas escolhidas, pelo que cada lista guarda (em ordem de DDD).
+  const dddsDasListas = useMemo(() => {
+    const soma = new Map<string, number>()
+    for (const l of escolhidas) for (const [ddd, n] of Object.entries(l.ddds)) soma.set(ddd, (soma.get(ddd) ?? 0) + n)
+    return [...soma]
+      .map(([ddd, numeros]) => ({ ddd, numeros }))
+      .filter((d) => d.numeros > 0)
+      .sort((a, b) => a.ddd.localeCompare(b.ddd))
+  }, [escolhidas])
+  // "Só alguns DDDs": vale o que foi marcado e existe nas listas escolhidas agora.
+  const ddds = useMemo(
+    () => (filtrarDdd ? dddsMarcados.filter((d) => dddsDasListas.some((x) => x.ddd === d)) : []),
+    [filtrarDdd, dddsMarcados, dddsDasListas],
+  )
+  const faltaDdd = filtrarDdd && ddds.length === 0
   // Soma das listas: quem está em mais de uma recebe só 1 vez — o banco conta os números diferentes.
-  const somaListas = escolhidas.reduce((total, l) => total + l.comWhatsapp, 0)
+  const somaListas =
+    ddds.length > 0
+      ? dddsDasListas.reduce((total, d) => total + (ddds.includes(d.ddd) ? d.numeros : 0), 0)
+      : escolhidas.reduce((total, l) => total + l.comWhatsapp, 0)
   const chaveListas = [...listaIds].sort().join(',')
+  const chavePublico = ddds.length > 0 ? `${chaveListas}|${ddds.join(',')}` : chaveListas
   const [contagem, setContagem] = useState<{ chave: string; publico: PublicoListas | null } | null>(null)
-  const publicoListas = contagem?.chave === chaveListas ? contagem.publico : null
-  const contandoListas = listaIds.length > 0 && contagem?.chave !== chaveListas
-  const unicosListas = publicoListas?.unicos ?? somaListas
+  const publicoListas = contagem?.chave === chavePublico ? contagem.publico : null
+  const contandoListas = listaIds.length > 0 && !faltaDdd && contagem?.chave !== chavePublico
+  const unicosListas = faltaDdd ? 0 : (publicoListas?.unicos ?? somaListas)
   const repetidosListas = publicoListas ? Math.max(publicoListas.soma - publicoListas.unicos, 0) : 0
 
   useEffect(() => {
-    if (!chaveListas) return
+    if (!chaveListas || faltaDdd) return
     let atual = true
     const espera = setTimeout(() => {
-      contarPublicoListas(chaveListas.split(','))
+      const [idsDaChave, dddsDaChave] = chavePublico.split('|')
+      contarPublicoListas(idsDaChave.split(','), dddsDaChave ? dddsDaChave.split(',') : [])
         .catch(() => null)
         .then((publico) => {
-          if (atual) setContagem({ chave: chaveListas, publico })
+          if (atual) setContagem({ chave: chavePublico, publico })
         })
     }, 300)
     return () => {
       atual = false
       clearTimeout(espera)
     }
-  }, [chaveListas])
+  }, [chaveListas, chavePublico, faltaDdd])
 
   const leitura = origem === 'arquivo' ? leituraArquivo : origem === 'colar' ? leituraColada : null
   const totalPublico = origem === 'leads' ? unicosListas : (leitura?.contatos.length ?? 0)
   const repetidosPublico = origem === 'leads' ? repetidosListas : (leitura?.resumo.duplicados ?? 0)
   const descricaoPublico =
     origem === 'leads'
-      ? descreverListas(escolhidas)
+      ? descreverListas(escolhidas, ddds)
       : origem === 'arquivo'
         ? (arquivo?.nome ?? '')
         : 'Números colados'
@@ -337,7 +365,9 @@ export function NovaCampanha({
   const erros = validarMensagem(mensagem)
   const mensagemPronta = Object.keys(erros).length === 0
   const pendencias = [
-    totalPublico === 0 && 'Escolha para quem enviar (passo 1).',
+    origem === 'leads' && escolhidas.length > 0 && faltaDdd
+      ? 'Marque ao menos um DDD ou desmarque “Só alguns DDDs” (passo 1).'
+      : totalPublico === 0 && 'Escolha para quem enviar (passo 1).',
     !mensagemPronta && 'Revise a mensagem (passo 2).',
     !nome.trim() && 'Dê um nome para a campanha.',
     quando === 'agendar' && !agendarPara && 'Escolha a data e a hora do envio.',
@@ -432,6 +462,7 @@ export function NovaCampanha({
           origem,
           origem_descricao: descricaoPublico,
           lista_ids: origem === 'leads' ? listaIds : [],
+          ddds: origem === 'leads' ? ddds : [],
           contatos_lidos: origem === 'leads' ? 0 : (leitura?.contatos.length ?? 0) + (leitura?.resumo.duplicados ?? 0),
           agendada_para: quando === 'agendar' ? new Date(agendarPara).toISOString() : null,
           horario_envio: quando === 'horario' ? horario : null,
@@ -603,7 +634,7 @@ export function NovaCampanha({
                     <Campo
                       label={escolhidas.length === 0 ? 'Lista' : 'Adicionar outra lista'}
                       htmlFor="lista_id"
-                      dica={escolhidas.length === 0 ? 'Dá para juntar várias listas na mesma campanha.' : undefined}
+                      dica={escolhidas.length === 0 ? 'Dá para juntar várias listas na mesma campanha e enviar só para alguns DDDs.' : undefined}
                     >
                       <Select
                         name="lista_id"
@@ -628,11 +659,21 @@ export function NovaCampanha({
                       </Select>
                     </Campo>
                   )}
-                  {escolhidas.length > 0 && (
+                  {escolhidas.length > 0 && (dddsDasListas.length > 0 || filtrarDdd) && (
+                    <FiltroDdd
+                      contagem={dddsDasListas}
+                      ativo={filtrarDdd}
+                      aoAtivar={setFiltrarDdd}
+                      marcados={dddsMarcados}
+                      aoMarcar={setDddsMarcados}
+                    />
+                  )}
+                  {escolhidas.length > 0 && !faltaDdd && (
                     <div className="flex flex-wrap items-center gap-2" aria-live="polite">
                       <Badge tom="sucesso" ponto>
                         {contandoListas && escolhidas.length > 1 ? 'Até ' : ''}
                         {plural(unicosListas, 'contato com WhatsApp', 'contatos com WhatsApp')}
+                        {ddds.length > 0 && ` ${ddds.length === 1 ? 'no' : 'nos'} ${descreverDdds(ddds)}`}
                       </Badge>
                       {contandoListas ? (
                         <span className="text-[13px] text-suave">Conferindo números repetidos…</span>

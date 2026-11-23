@@ -3346,7 +3346,12 @@ export type Database = {
         Returns: number
       }
       adicionar_lista_campanha: {
-        Args: { p_apos?: string; p_campanha_id: string; p_lista_id: string }
+        Args: {
+          p_apos?: string
+          p_campanha_id: string
+          p_ddd?: string
+          p_lista_id: string
+        }
         Returns: Json
       }
       alterar_status_atendimento: {
@@ -3383,7 +3388,10 @@ export type Database = {
       }
       confirmar_campanha: { Args: { p_campanha_id: string }; Returns: Json }
       contatos_campanha_24h: { Args: never; Returns: number }
-      publico_listas_campanha: { Args: { p_lista_ids: string[] }; Returns: Json }
+      publico_listas_campanha: {
+        Args: { p_ddds?: string[]; p_lista_ids: string[] }
+        Returns: Json
+      }
       cotar_frete_pedido: {
         Args: { p_pedido_id: string; p_valor: number }
         Returns: {

@@ -35,21 +35,44 @@ export async function conexaoMeta(): Promise<ConexaoMeta> {
   return { ...SEM_CONEXAO, ...(data as Partial<ConexaoMeta> | null) }
 }
 
-export type ListaParaCampanha = { id: string; nome: string; pasta: string; comWhatsapp: number }
+export type ListaParaCampanha = {
+  id: string
+  nome: string
+  pasta: string
+  comWhatsapp: number
+  /** Números da lista por DDD ({"11": 97, ...}), guardados ao concluir a importação. */
+  ddds: Record<string, number>
+}
 
 /** Listas do Banco de Leads prontas e com WhatsApp, para escolher o público. */
 export async function listasParaCampanha(): Promise<ListaParaCampanha[]> {
   const { supabase } = await exigirEquipe()
   const { data, error } = await supabase
     .from('leads_listas')
-    .select('id, nome, com_whatsapp, leads_pastas(nome)')
+    .select('id, nome, com_whatsapp, ddds, leads_pastas(nome)')
     .eq('status', 'pronta')
     .gt('com_whatsapp', 0)
     .order('nome')
   if (error) throw error
   return data
-    .map((l) => ({ id: l.id, nome: l.nome, pasta: l.leads_pastas?.nome ?? 'Sem pasta', comWhatsapp: l.com_whatsapp }))
+    .map((l) => ({
+      id: l.id,
+      nome: l.nome,
+      pasta: l.leads_pastas?.nome ?? 'Sem pasta',
+      comWhatsapp: l.com_whatsapp,
+      ddds: contagemPorDdd(l.ddds),
+    }))
     .sort((a, b) => a.pasta.localeCompare(b.pasta, 'pt-BR') || a.nome.localeCompare(b.nome, 'pt-BR'))
+}
+
+/** {"11": 97, ...} guardado na lista → só DDDs com números. */
+function contagemPorDdd(ddds: unknown): Record<string, number> {
+  const mapa = ddds && typeof ddds === 'object' && !Array.isArray(ddds) ? (ddds as Record<string, unknown>) : {}
+  return Object.fromEntries(
+    Object.entries(mapa)
+      .map(([ddd, n]) => [ddd, Number(n) || 0] as const)
+      .filter(([, n]) => n > 0),
+  )
 }
 
 export async function listarCampanhas() {
