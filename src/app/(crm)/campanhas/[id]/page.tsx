@@ -1,11 +1,11 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { Ban, CalendarClock, MessageCircle, Pause, Play, RotateCcw, Send, Trash2 } from 'lucide-react'
+import { Ban, CalendarClock, MessagesSquare, Pause, Play, RotateCcw, Send, Trash2 } from 'lucide-react'
 
 import { ActionButton } from '@/components/ui/action-button'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { ButtonExternal } from '@/components/ui/button'
+import { ButtonLink } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Kpi } from '@/components/ui/kpi'
 import { PageHeader } from '@/components/ui/page-header'
@@ -18,6 +18,7 @@ import {
   retomarCampanha,
 } from '@/features/campanhas/actions'
 import { AtualizacaoAutomatica } from '@/features/campanhas/components/atualizacao-automatica'
+import { ConversarResposta } from '@/features/campanhas/components/conversar-resposta'
 import { HorarioCampanha } from '@/features/campanhas/components/horario-campanha'
 import { custoDaCampanha, formatarCusto, precoDaConexao, type PrecoMensagem } from '@/features/campanhas/custo'
 import { PreviaWhatsapp } from '@/features/campanhas/components/previa-whatsapp'
@@ -35,8 +36,7 @@ import {
   STATUS_MODELO,
 } from '@/features/campanhas/status'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
-import { formatarDataHora, formatarNumero, formatarRelativo, formatarWhatsapp, plural } from '@/lib/format'
-import { linkWhatsapp } from '@/lib/whatsapp'
+import { formatarDataHora, formatarHaQuanto, formatarNumero, formatarRelativo, formatarWhatsapp, plural } from '@/lib/format'
 
 // As ações desta página falam com a Meta (criação do modelo, foto, verificação): até 5 min.
 export const maxDuration = 300
@@ -311,7 +311,7 @@ export default async function PaginaCampanha({ params }: PageProps<'/campanhas/[
             <Card>
               <CardHeader
                 titulo="Respostas"
-                descricao="Os clientes respondem no número das campanhas. Continue a conversa pelo WhatsApp da loja."
+                descricao="Os clientes respondem no número das campanhas. Em “Conversar”, você chama o cliente pelo WhatsApp de atendimento da loja, com a resposta dele na mensagem, e a conversa continua no Atendimento."
               />
               {respostas.length === 0 ? (
                 <p className="px-4 pb-5 text-sm text-suave lg:px-5">Ninguém respondeu ainda.</p>
@@ -329,11 +329,19 @@ export default async function PaginaCampanha({ params }: PageProps<'/campanhas/[
                           {formatarRelativo(r.respondida_em)}
                         </p>
                         {r.resposta && <p className="mt-1 text-[14px] break-words whitespace-pre-wrap">{r.resposta}</p>}
+                        {r.conversa_em && (
+                          <p className="mt-1.5 flex items-center gap-1.5 text-[12px] font-medium text-whatsapp-700">
+                            <MessagesSquare className="size-3.5" aria-hidden />
+                            Chamado pelo WhatsApp da loja{r.chamado_por ? ` por ${r.chamado_por}` : ''} · {formatarHaQuanto(r.conversa_em)}
+                          </p>
+                        )}
                       </div>
-                      {!r.saiu_em && (
-                        <ButtonExternal href={linkWhatsapp(r.whatsapp)} variante="whatsapp" tamanho="sm">
-                          <MessageCircle /> Conversar
-                        </ButtonExternal>
+                      {r.conversa_em && r.conversa_atendimento_id ? (
+                        <ButtonLink href={`/atendimento?aba=abertos&id=${r.conversa_atendimento_id}`} tamanho="sm">
+                          <MessagesSquare /> Ver conversa
+                        </ButtonLink>
+                      ) : (
+                        !r.saiu_em && <ConversarResposta resposta={r} />
                       )}
                     </li>
                   ))}

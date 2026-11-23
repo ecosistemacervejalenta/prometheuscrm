@@ -26,6 +26,7 @@ import {
 import { atualizarFoto, BUCKET_MIDIAS, fotoPrecisaAtualizar, guardarMidia, sincronizarConversa } from './sincronizacao'
 import {
   configurarWebhook,
+  conversaDoNumero,
   enviarMidia,
   enviarTexto,
   ErroUazapi,
@@ -173,6 +174,47 @@ export async function reenviarMensagem(mensagemId: string): Promise<EstadoAcao> 
   await supabase.from('whatsapp_mensagens').update({ status: 'enviando', erro: null }).eq('id', mensagemId)
   const r = await enviarRegistrada(supabase, chatid, msg)
   return r.ok ? sucesso('Mensagem enviada.') : r
+}
+
+/**
+ * Botão "Conversar" das respostas de uma campanha: o número das campanhas só dispara, então
+ * o cliente é chamado pelo WhatsApp da loja. Abre (ou reaproveita) a conversa no Atendimento
+ * com quem clicou e envia o texto (com a resposta do cliente, montado na tela).
+ * texto nulo = só abre a conversa, sem enviar nada.
+ */
+export async function conversarComResposta(
+  envioId: number,
+  texto: string | null,
+): Promise<EstadoAcao & { atendimentoId?: string; registrada?: boolean }> {
+  const { supabase } = await exigirEquipe()
+  if (texto !== null) {
+    const dados = esquemaMensagem.safeParse(texto)
+    if (!dados.success) return falha(dados.error.issues[0]?.message ?? 'Mensagem inválida.')
+  }
+
+  const { data: envio } = await supabase.from('campanha_envios').select('whatsapp, campanha_id').eq('id', envioId).maybeSingle()
+  if (!envio) return falha('Resposta não encontrada.')
+
+  // Número que já conversa com a loja usa a mesma conversa; número novo é conferido na uazapi.
+  const { data: contato } = await supabase.from('whatsapp_contatos').select('id').eq('whatsapp', envio.whatsapp).limit(1).maybeSingle()
+  let chatid: string | null = null
+  if (!contato) {
+    try {
+      chatid = await conversaDoNumero(envio.whatsapp)
+    } catch (e) {
+      return falha(e instanceof Error ? e.message : 'Não foi possível falar com o WhatsApp da loja.')
+    }
+    if (!chatid) return falha('Este número não tem WhatsApp (ou o WhatsApp não o encontrou).')
+  }
+
+  const { data, error } = await supabase.rpc('abrir_conversa_campanha', { p_envio_id: envioId, ...(chatid ? { p_chatid: chatid } : {}) })
+  if (error) return falha(traduzirErro(error))
+  const { atendimento_id: atendimentoId } = data as { atendimento_id: string }
+  revalidatePath(`/campanhas/${envio.campanha_id}`)
+  atualizarTelas()
+
+  if (texto === null) return { ...sucesso(), atendimentoId }
+  return { ...(await enviarMensagem(atendimentoId, texto)), atendimentoId }
 }
 
 /** Nota interna: aparece na conversa para a equipe, o cliente não vê. */

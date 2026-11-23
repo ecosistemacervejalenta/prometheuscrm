@@ -72,17 +72,41 @@ export const obterCampanha = cache(async (id: string) => {
 
 /** Quem respondeu (mais recentes primeiro). */
 export async function respostasDaCampanha(id: string) {
-  const { supabase } = await exigirEquipe()
+  const { supabase, perfil } = await exigirEquipe()
   const { data, error } = await supabase
     .from('campanha_envios')
-    .select('id, whatsapp, nome, resposta, respondida_em, saiu_em')
+    .select('id, whatsapp, nome, resposta, respondida_em, saiu_em, conversa_em, conversa_atendimento_id, chamou:perfis!campanha_envios_conversa_por_fkey(nome)')
     .eq('campanha_id', id)
     .not('respondida_em', 'is', null)
     .order('respondida_em', { ascending: false })
     .limit(100)
   if (error) throw error
-  return data
+
+  // Quem já conversa com a loja (atendimento aberto no WhatsApp de atendimento) e com quem.
+  const numeros = [...new Set(data.map((r) => r.whatsapp))]
+  const { data: abertos, error: erroAbertos } = numeros.length
+    ? await supabase
+        .from('vw_atendimentos')
+        .select('id, whatsapp, responsavel_id, responsavel_nome')
+        .in('whatsapp', numeros)
+        .neq('status', 'resolvido')
+    : { data: [], error: null }
+  if (erroAbertos) throw erroAbertos
+  const porNumero = new Map(abertos.map((a) => [a.whatsapp, a]))
+
+  return data.map(({ chamou, ...r }) => {
+    const aberto = porNumero.get(r.whatsapp)
+    return {
+      ...r,
+      chamado_por: chamou?.nome ?? null,
+      conversa_aberta: aberto?.id
+        ? { id: aberto.id, comigo: aberto.responsavel_id === perfil.id, responsavel: aberto.responsavel_nome }
+        : null,
+    }
+  })
 }
+
+export type RespostaCampanha = Awaited<ReturnType<typeof respostasDaCampanha>>[number]
 
 /** Envios que falharam, agrupados pelo motivo. */
 export async function falhasDaCampanha(id: string) {

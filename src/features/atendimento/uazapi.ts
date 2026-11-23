@@ -132,6 +132,18 @@ export function enviarTexto(chatid: string, texto: string, trackId: string) {
   })
 }
 
+type VerificacaoNumero = { query?: string; jid?: string; isInWhatsapp?: boolean; error?: string }
+
+/**
+ * Conversa (JID) de um número que ainda não falou com a loja: "5511987654321@s.whatsapp.net".
+ * O WhatsApp devolve o número como ele está registrado (celulares antigos ficam sem o 9).
+ * Nulo quando o número não tem WhatsApp.
+ */
+export async function conversaDoNumero(numero: string) {
+  const [r] = await chamar<VerificacaoNumero[]>('/chat/check', { corpo: { numbers: [numero] }, timeoutMs: 15_000 })
+  return r?.isInWhatsapp && r.jid?.endsWith('@s.whatsapp.net') ? r.jid : null
+}
+
 /** image · video (MP4) · document · audio (arquivo) · ptt (mensagem de voz, convertida pela uazapi). */
 export type TipoMidiaUazapi = 'image' | 'video' | 'document' | 'audio' | 'ptt'
 

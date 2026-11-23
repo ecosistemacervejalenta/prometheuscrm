@@ -3,6 +3,7 @@ import 'server-only'
 import type { createAdminClient } from '@/lib/supabase/admin'
 import { whatsappCanonico } from '@/lib/whatsapp'
 
+import { ROTULO_TIPO } from './conversa'
 import { aplicarStatusModelo, conferir, devolverPorFalhaDaConta } from './envio'
 import { classeDoErro, ERRO_SAIU_DO_MARKETING, mensagemDoErro } from './erros-meta'
 import { TEXTO_BOTAO_SAIR } from './mensagem'
@@ -50,17 +51,6 @@ type MensagemRecebida = {
 
 const quando = (timestamp: string | undefined) =>
   timestamp && /^\d+$/.test(timestamp) ? new Date(Number(timestamp) * 1000).toISOString() : new Date().toISOString()
-
-const ROTULO_TIPO: Record<string, string> = {
-  image: '[foto]',
-  audio: '[áudio]',
-  video: '[vídeo]',
-  document: '[documento]',
-  sticker: '[figurinha]',
-  location: '[localização]',
-  contacts: '[contato]',
-  reaction: '[reação]',
-}
 
 function textoDaMensagem(m: MensagemRecebida): string {
   if (m.type === 'text') return m.text?.body ?? ''

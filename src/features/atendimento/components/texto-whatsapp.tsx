@@ -2,7 +2,8 @@ import { Fragment, type ReactNode } from 'react'
 
 /**
  * Texto com a formatação do WhatsApp: *negrito*, _itálico_, ~riscado~,
- * ```monoespaçado``` e links clicáveis. Gera elementos React (sem HTML cru).
+ * ```monoespaçado```, citação ("> " no começo da linha) e links clicáveis.
+ * Gera elementos React (sem HTML cru).
  */
 
 const LINK = /(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g
@@ -24,16 +25,40 @@ function formatar(trecho: string, chave: string): ReactNode[] {
   })
 }
 
+function comLinks(texto: string, chave: string): ReactNode[] {
+  return texto.split(LINK).map((parte, i) =>
+    i % 2 === 1 ? (
+      <a key={`${chave}-${i}`} href={parte} target="_blank" rel="noopener noreferrer" className="break-all text-shopify-700 underline underline-offset-2">
+        {parte}
+      </a>
+    ) : (
+      <Fragment key={`${chave}-${i}`}>{formatar(parte, `${chave}-${i}`)}</Fragment>
+    ),
+  )
+}
+
+/** Linhas seguidas com "> " formam uma citação; o resto fica como texto corrido. */
+function blocos(texto: string) {
+  const lista: { citacao: boolean; linhas: string[] }[] = []
+  for (const linha of texto.split('\n')) {
+    const citacao = linha.startsWith('> ')
+    const ultimo = lista.at(-1)
+    if (ultimo && ultimo.citacao === citacao) ultimo.linhas.push(citacao ? linha.slice(2) : linha)
+    else lista.push({ citacao, linhas: [citacao ? linha.slice(2) : linha] })
+  }
+  return lista
+}
+
 export function TextoWhatsapp({ texto }: { texto: string }) {
   return (
     <span className="break-words whitespace-pre-wrap">
-      {texto.split(LINK).map((parte, i) =>
-        i % 2 === 1 ? (
-          <a key={i} href={parte} target="_blank" rel="noopener noreferrer" className="break-all text-shopify-700 underline underline-offset-2">
-            {parte}
-          </a>
+      {blocos(texto).map((b, i) =>
+        b.citacao ? (
+          <span key={i} className="my-0.5 block border-l-[3px] border-current/25 pl-2 opacity-80">
+            {comLinks(b.linhas.join('\n'), String(i))}
+          </span>
         ) : (
-          <Fragment key={i}>{formatar(parte, String(i))}</Fragment>
+          <Fragment key={i}>{comLinks(b.linhas.join('\n'), String(i))}</Fragment>
         ),
       )}
     </span>

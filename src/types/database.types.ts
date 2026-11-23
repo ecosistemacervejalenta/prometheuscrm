@@ -277,6 +277,9 @@ export type Database = {
       campanha_envios: {
         Row: {
           campanha_id: string
+          conversa_atendimento_id: string | null
+          conversa_em: string | null
+          conversa_por: string | null
           entregue_em: string | null
           enviada_em: string | null
           erro: string | null
@@ -297,6 +300,9 @@ export type Database = {
         }
         Insert: {
           campanha_id: string
+          conversa_atendimento_id?: string | null
+          conversa_em?: string | null
+          conversa_por?: string | null
           entregue_em?: string | null
           enviada_em?: string | null
           erro?: string | null
@@ -317,6 +323,9 @@ export type Database = {
         }
         Update: {
           campanha_id?: string
+          conversa_atendimento_id?: string | null
+          conversa_em?: string | null
+          conversa_por?: string | null
           entregue_em?: string | null
           enviada_em?: string | null
           erro?: string | null
@@ -348,6 +357,27 @@ export type Database = {
             columns: ["campanha_id"]
             isOneToOne: false
             referencedRelation: "vw_campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_envios_conversa_atendimento_id_fkey"
+            columns: ["conversa_atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_envios_conversa_atendimento_id_fkey"
+            columns: ["conversa_atendimento_id"]
+            isOneToOne: false
+            referencedRelation: "vw_atendimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campanha_envios_conversa_por_fkey"
+            columns: ["conversa_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
             referencedColumns: ["id"]
           },
         ]
@@ -3304,6 +3334,10 @@ export type Database = {
         Returns: undefined
       }
       vencer_caixas_vip: { Args: never; Returns: number }
+      abrir_conversa_campanha: {
+        Args: { p_chatid?: string; p_envio_id: number }
+        Returns: Json
+      }
       adicionar_contatos_campanha: {
         Args: { p_campanha_id: string; p_contatos: Json }
         Returns: number
