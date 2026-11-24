@@ -7,7 +7,8 @@ import { Card, CardHeader } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
 import { atualizarCervejaDaOlist, removerCervejaDosLotes } from '@/features/lotes/actions'
 import { FormularioNovosLotes, LinhaLote } from '@/features/lotes/components/lotes-da-cerveja'
-import { obterCervejaDosLotes } from '@/features/lotes/queries'
+import { contarLotes, obterCervejaDosLotes } from '@/features/lotes/queries'
+import { situacaoValidade } from '@/features/lotes/validade'
 import { formatarDataHora, formatarNumero } from '@/lib/format'
 
 export const metadata: Metadata = { title: 'Lotes da cerveja' }
@@ -18,10 +19,16 @@ export default async function PaginaLotesDaCerveja({ params }: PageProps<'/lotes
   if (!cerveja) notFound()
 
   const { lotes } = cerveja
+  const nosLotes = contarLotes(lotes)
+  const semQuantidade = lotes.filter((l) => l.quantidade === null).length
+  const dias = lotes.map((l) => situacaoValidade(l.validade).dias)
+  const vencidos = dias.filter((d) => d < 0).length
+  const vencemLogo = dias.filter((d) => d >= 0 && d <= 30).length
   const resumoLotes = [
     `${lotes.length} lote${lotes.length === 1 ? '' : 's'}`,
-    cerveja.vencidos ? `${cerveja.vencidos} vencido${cerveja.vencidos === 1 ? '' : 's'}` : null,
-    cerveja.venceLogo ? `${cerveja.venceLogo} vence${cerveja.venceLogo === 1 ? '' : 'm'} logo` : null,
+    `${formatarNumero(nosLotes.unidades)} un.`,
+    vencidos ? `${vencidos} vencido${vencidos === 1 ? '' : 's'}` : null,
+    vencemLogo ? `${vencemLogo} vence${vencemLogo === 1 ? '' : 'm'} em até 30 dias` : null,
   ]
     .filter(Boolean)
     .join(' · ')
@@ -76,6 +83,15 @@ export default async function PaginaLotesDaCerveja({ params }: PageProps<'/lotes
               </dd>
             </div>
             <div>
+              <dt className="tipo-rotulo text-suave">Nos lotes cadastrados</dt>
+              <dd className="tipo-dado mt-1 text-[14px]">{lotes.length ? `${formatarNumero(nosLotes.unidades)} un.` : '—'}</dd>
+              {semQuantidade > 0 && (
+                <dd className="mt-1 text-[12px] text-suave">
+                  {semQuantidade} lote{semQuantidade === 1 ? '' : 's'} ainda sem quantidade: edite para informar.
+                </dd>
+              )}
+            </div>
+            <div>
               <dt className="tipo-rotulo text-suave">SKU</dt>
               <dd className="tipo-dado mt-1 break-all text-[14px]">{cerveja.sku}</dd>
             </div>
@@ -86,7 +102,7 @@ export default async function PaginaLotesDaCerveja({ params }: PageProps<'/lotes
         </Card>
 
         <Card>
-          <CardHeader titulo="Lotes e validades" descricao={lotes.length ? resumoLotes : 'Cadastre os lotes desta cerveja. Dá para lançar vários de uma vez.'} />
+          <CardHeader titulo="Lotes e validades" descricao={lotes.length ? resumoLotes : 'Cadastre os lotes desta cerveja, com quantidade e validade. Dá para lançar vários de uma vez.'} />
           <FormularioNovosLotes cervejaId={id} foco={lotes.length === 0} />
           {lotes.length > 0 ? (
             <ul className="divide-y divide-linha border-t border-linha">

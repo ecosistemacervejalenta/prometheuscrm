@@ -1571,6 +1571,7 @@ export type Database = {
           criado_por: string | null
           id: string
           lote: string
+          quantidade: number | null
           validade: string
         }
         Insert: {
@@ -1580,6 +1581,7 @@ export type Database = {
           criado_por?: string | null
           id?: string
           lote: string
+          quantidade?: number | null
           validade: string
         }
         Update: {
@@ -1589,6 +1591,7 @@ export type Database = {
           criado_por?: string | null
           id?: string
           lote?: string
+          quantidade?: number | null
           validade?: string
         }
         Relationships: [

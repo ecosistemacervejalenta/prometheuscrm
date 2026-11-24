@@ -10,7 +10,7 @@ import { exigirEquipe } from '@/lib/auth'
 import { formatarNumero } from '@/lib/format'
 import { agruparLista, formParaObjeto } from '@/lib/validacao'
 
-import { esquemaLote, esquemaSku, MAX_LOTES_POR_VEZ } from './schema'
+import { esquemaLote, esquemaLoteEditado, esquemaSku, MAX_LOTES_POR_VEZ } from './schema'
 
 /**
  * Lotes e validades. A Olist é só consultada (nome, SKU, foto e estoque do produto):
@@ -120,21 +120,25 @@ export async function removerCervejaDosLotes(id: string): Promise<EstadoAcao> {
 }
 
 /**
- * Cadastra um ou vários lotes da cerveja de uma vez (campos "lotes.0.lote", "lotes.0.validade",
- * "lotes.1.lote"...). Linhas totalmente em branco são ignoradas; se alguma linha tiver problema,
- * nada é salvo e o erro aparece no campo dela.
+ * Cadastra um ou vários lotes da cerveja de uma vez (campos "lotes.0.lote", "lotes.0.quantidade",
+ * "lotes.0.validade", "lotes.1.lote"...). Linhas totalmente em branco são ignoradas; se alguma
+ * linha tiver problema, nada é salvo e o erro aparece no campo dela.
  */
 export async function adicionarLotes(cervejaId: string, _: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
   const { supabase } = await exigirEquipe()
   const texto = (valor: unknown) => (typeof valor === 'string' ? valor.trim() : '')
   const linhas = agruparLista(formParaObjeto(formData), 'lotes').lotes.slice(0, MAX_LOTES_POR_VEZ)
-  const preenchidas = linhas.map((linha, indice) => ({ linha, indice })).filter(({ linha }) => texto(linha.lote) || texto(linha.validade))
+  const preenchidas = linhas.map((linha, indice) => ({ linha, indice })).filter(({ linha }) => texto(linha.lote) || texto(linha.quantidade) || texto(linha.validade))
   if (preenchidas.length === 0) {
-    return { ok: false, mensagem: 'Informe o lote e a validade.', erros: { 'lotes.0.lote': ['Informe o lote.'], 'lotes.0.validade': ['Informe a validade.'] } }
+    return {
+      ok: false,
+      mensagem: 'Informe o lote, a quantidade e a validade.',
+      erros: { 'lotes.0.lote': ['Informe o lote.'], 'lotes.0.quantidade': ['Informe a quantidade.'], 'lotes.0.validade': ['Informe a validade.'] },
+    }
   }
 
   const erros: Record<string, string[]> = {}
-  const novos: Array<{ indice: number; lote: string; validade: string }> = []
+  const novos: Array<{ indice: number; lote: string; quantidade: number; validade: string }> = []
   for (const { linha, indice } of preenchidas) {
     const dados = esquemaLote.safeParse(linha)
     if (dados.success) novos.push({ indice, ...dados.data })
@@ -154,7 +158,7 @@ export async function adicionarLotes(cervejaId: string, _: EstadoAcao, formData:
   }
   if (Object.keys(erros).length) return { ok: false, mensagem: 'Revise os campos destacados.', erros }
 
-  const { error } = await supabase.from('lotes').insert(novos.map(({ lote, validade }) => ({ cerveja_id: cervejaId, lote, validade })))
+  const { error } = await supabase.from('lotes').insert(novos.map(({ lote, quantidade, validade }) => ({ cerveja_id: cervejaId, lote, quantidade, validade })))
   if (error) return falha(traduzirErro(error))
   revalidatePath('/lotes', 'layout')
   return sucesso(novos.length === 1 ? `Lote ${novos[0].lote} cadastrado.` : `${novos.length} lotes cadastrados.`)
@@ -162,7 +166,7 @@ export async function adicionarLotes(cervejaId: string, _: EstadoAcao, formData:
 
 export async function editarLote(id: string, _: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
   const { supabase } = await exigirEquipe()
-  const dados = esquemaLote.safeParse(formParaObjeto(formData))
+  const dados = esquemaLoteEditado.safeParse(formParaObjeto(formData))
   if (!dados.success) return errosDeValidacao(dados.error)
 
   const { error } = await supabase.from('lotes').update(dados.data).eq('id', id)

@@ -12,11 +12,11 @@ export function CadastroPorSku({ foco = false }: { foco?: boolean }) {
   return (
     <ActionForm action={cadastrarCervejaPorSku} classeMensagem="mb-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-        <Field label="SKU da cerveja na Olist" name="sku" className="flex-1" dica="É o código (SKU) do produto na Olist, igual ao de lá.">
+        <Field label="SKU da cerveja na Olist" name="sku" rotuloOculto className="flex-1">
           <Input
             name="sku"
             maxLength={60}
-            placeholder="Digite o SKU"
+            placeholder="SKU da cerveja na Olist"
             autoComplete="off"
             autoCapitalize="none"
             spellCheck={false}
@@ -24,7 +24,7 @@ export function CadastroPorSku({ foco = false }: { foco?: boolean }) {
             className="tipo-dado"
           />
         </Field>
-        <SubmitButton className="sm:mt-[26px]">
+        <SubmitButton className="lg:mt-0.5">
           <Search /> Buscar na Olist
         </SubmitButton>
       </div>
