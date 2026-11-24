@@ -37,6 +37,8 @@ export type Tarefa = Tables<'tarefas'>
 export type EventoTarefa = Tables<'tarefa_eventos'>
 export type AnexoTarefa = Tables<'tarefa_anexos'>
 export type Notificacao = Tables<'notificacoes'>
+export type CervejaDosLotes = Tables<'lotes_cervejas'>
+export type Lote = Tables<'lotes'>
 
 // Visões
 export type ClienteResumo = Tables<'vw_clientes'>

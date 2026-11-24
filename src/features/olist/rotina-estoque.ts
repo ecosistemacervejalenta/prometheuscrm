@@ -5,7 +5,7 @@ import { after } from 'next/server'
 import { envServidor } from '@/lib/env.server'
 import { urlDaRequisicao } from '@/lib/url'
 
-import type { ProdutoOlist } from './api'
+import type { ProdutoLoteOlist, ProdutoOlist } from './api'
 import type { DetalheBuscaOlist, PaginaBuscaComEstoque } from './estoque'
 
 /**
@@ -18,11 +18,15 @@ export type PedidoRotinaEstoque =
   | { acao: 'produto'; id: number }
   | { acao: 'detalhes'; ids: number[] }
   | { acao: 'processar' }
+  // Lotes e validades (só consulta): produto pelo SKU, ou pelo id para reler nome e estoque.
+  | { acao: 'lote-sku'; sku: string }
+  | { acao: 'lote-produto'; id: number }
 
 export type RespostaRotinaEstoque =
   | ({ ok: true } & PaginaBuscaComEstoque)
   | { ok: true; produto: ProdutoOlist }
   | { ok: true; detalhes: DetalheBuscaOlist[] }
+  | { ok: true; produtoLote: ProdutoLoteOlist | null }
   | { ok: boolean; mensagem: string }
 
 export async function pedirARotinaEstoque(pedido: PedidoRotinaEstoque, site?: string): Promise<RespostaRotinaEstoque> {

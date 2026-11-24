@@ -314,6 +314,60 @@ export async function obterResumoProdutoOlist(accessToken: string, id: number): 
   }
 }
 
+/** Produto consultado para o módulo Lotes e validades (só leitura). */
+export type ProdutoLoteOlist = {
+  id: number
+  sku: string | null
+  nome: string
+  /** URL da foto principal (1º anexo de imagem), se houver. */
+  foto: string | null
+  /** Unidades em estoque (saldo); null se a Olist não informar. */
+  estoque: number | null
+}
+
+/** Nome, SKU, foto principal e unidades em estoque de um produto (só consulta). */
+export async function obterProdutoLoteOlist(accessToken: string, id: number): Promise<ProdutoLoteOlist> {
+  const p = (await requisicao(`/produtos/${id}`, accessToken, { esperarLimite: false })) as ProdutoDetalheOlist & {
+    estoque?: { quantidade?: number | null } | null
+  }
+  const anexos = (p.anexos ?? []).map((a) => a.url?.trim()).filter((u): u is string => Boolean(u && /^https?:\/\//i.test(u)))
+  const quantidade = p.estoque?.quantidade
+  let estoque = typeof quantidade === 'number' && Number.isFinite(quantidade) ? quantidade : null
+  // O cadastro do produto veio sem a quantidade: lê o saldo no estoque.
+  if (estoque === null) {
+    estoque = await obterEstoqueOlist(accessToken, id, { esperarLimite: false })
+      .then((e) => e.saldo)
+      .catch(() => null)
+  }
+  return {
+    id: p.id ?? id,
+    sku: p.sku?.trim() || null,
+    nome: p.descricao?.trim() || `Produto ${id}`,
+    foto: anexos.find(ehImagem) ?? anexos[0] ?? null,
+    estoque,
+  }
+}
+
+/**
+ * Acha o produto pelo SKU exato (sem diferenciar maiúsculas) e devolve nome, foto e estoque.
+ * Procura nos ativos e, se não achar, nos demais (um produto inativo ainda pode ter lote na
+ * prateleira). Devolve null se nenhum produto da Olist tiver esse SKU.
+ */
+export async function buscarProdutoPorSkuOlist(accessToken: string, sku: string): Promise<ProdutoLoteOlist | null> {
+  const alvo = sku.trim().toLowerCase()
+  const listar = async (situacao?: 'A') => {
+    const params = new URLSearchParams({ codigo: sku.trim(), limit: String(POR_PAGINA) })
+    if (situacao) params.set('situacao', situacao)
+    const pagina = (await requisicao(`/produtos?${params}`, accessToken, { esperarLimite: false })) as { itens?: ProdutoListadoOlist[] } | null
+    return (pagina?.itens ?? []).filter((p) => typeof p.id === 'number' && p.sku?.trim().toLowerCase() === alvo && p.situacao !== 'E')
+  }
+  let iguais = await listar('A')
+  if (iguais.length === 0) iguais = await listar()
+  // Produto "pai" de variações não tem estoque próprio: prefere o item vendável.
+  const achado = iguais.find((p) => p.tipoVariacao !== 'P') ?? iguais[0]
+  return achado ? obterProdutoLoteOlist(accessToken, achado.id) : null
+}
+
 export async function obterEstoqueOlist(accessToken: string, id: number, opcoes: { esperarLimite?: boolean } = {}): Promise<EstoqueOlist> {
   const e = (await requisicao(`/estoque/${id}`, accessToken, opcoes)) as EstoqueRespostaOlist
   const saldo = numeroOuZero(e.saldo)

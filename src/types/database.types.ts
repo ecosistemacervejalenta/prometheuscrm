@@ -1563,6 +1563,98 @@ export type Database = {
         }
         Relationships: []
       }
+      lotes: {
+        Row: {
+          atualizado_em: string
+          cerveja_id: string
+          criado_em: string
+          criado_por: string | null
+          id: string
+          lote: string
+          validade: string
+        }
+        Insert: {
+          atualizado_em?: string
+          cerveja_id: string
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          lote: string
+          validade: string
+        }
+        Update: {
+          atualizado_em?: string
+          cerveja_id?: string
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          lote?: string
+          validade?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lotes_cerveja_id_fkey"
+            columns: ["cerveja_id"]
+            isOneToOne: false
+            referencedRelation: "lotes_cervejas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lotes_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lotes_cervejas: {
+        Row: {
+          atualizado_em: string
+          criado_em: string
+          criado_por: string | null
+          estoque_lido_em: string | null
+          estoque_olist: number | null
+          foto_url: string | null
+          id: string
+          nome: string
+          olist_id: number
+          sku: string
+        }
+        Insert: {
+          atualizado_em?: string
+          criado_em?: string
+          criado_por?: string | null
+          estoque_lido_em?: string | null
+          estoque_olist?: number | null
+          foto_url?: string | null
+          id?: string
+          nome: string
+          olist_id: number
+          sku: string
+        }
+        Update: {
+          atualizado_em?: string
+          criado_em?: string
+          criado_por?: string | null
+          estoque_lido_em?: string | null
+          estoque_olist?: number | null
+          foto_url?: string | null
+          id?: string
+          nome?: string
+          olist_id?: number
+          sku?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lotes_cervejas_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       movimentos_estoque_olist: {
         Row: {
           criado_em: string

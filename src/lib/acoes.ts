@@ -63,6 +63,12 @@ const RESTRICOES: Record<string, string> = {
   tarefa_anexos_mime_check: 'Só imagens JPG, PNG, WEBP ou GIF podem ser anexadas.',
   tarefa_anexos_tamanho_check: 'Cada imagem pode ter no máximo 10 MB.',
   tarefa_anexos_path_key: 'Esta imagem já foi anexada.',
+  lotes_cervejas_sku_key: 'Esta cerveja já está no controle de lotes.',
+  lotes_cervejas_olist_id_key: 'Esta cerveja já está no controle de lotes.',
+  lotes_cervejas_sku_check: 'O SKU deve ter de 1 a 60 caracteres.',
+  lotes_cerveja_lote_key: 'Esta cerveja já tem um lote com este código.',
+  lotes_lote_check: 'O lote deve ter de 1 a 60 caracteres.',
+  lotes_cerveja_id_fkey: 'Esta cerveja não está mais no controle de lotes.',
 }
 
 /** Traduz erros do Supabase/Postgres em mensagens claras em português. */

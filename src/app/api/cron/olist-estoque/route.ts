@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
 import { verificarChave } from '@/features/integracoes/api-auth'
+import { atualizarEstoqueDasCervejasDosLotes, consultarProdutoLoteNaOlist, consultarSkuNaOlist } from '@/features/lotes/olist'
 import { buscarNaOlist, detalhesNaOlist, prepararProdutoOlist, processarFilaEstoqueOlist, rotinaEstoqueOlist } from '@/features/olist/estoque'
 import type { PedidoRotinaEstoque, RespostaRotinaEstoque } from '@/features/olist/rotina-estoque'
 import { OlistNaoConectado } from '@/features/olist/token'
@@ -11,15 +12,24 @@ export const maxDuration = 300
 /**
  * Estoque da Olist nas pré-vendas (única rota da tela que usa os tokens da Olist).
  *   GET  → Vercel Cron a cada 5 min (vercel.ts): vence caixas sem pagamento, envia a fila de
- *          lançamentos e atualiza o estoque das pré-vendas ativas.
+ *          lançamentos e atualiza o estoque das pré-vendas ativas. No fim, relê o estoque de
+ *          algumas cervejas do módulo Lotes e validades (só consulta).
  *   POST → pedidos da tela: { acao: 'buscar', termo, offset? } | { acao: 'detalhes', ids } | { acao: 'produto', id } |
- *          { acao: 'processar' }.
+ *          { acao: 'processar' } | { acao: 'lote-sku', sku } | { acao: 'lote-produto', id }.
  */
 export async function GET(request: NextRequest) {
   const negado = verificarChave(request, envServidor.cronSecret, 'CRON_SECRET')
   if (negado) return negado
   try {
-    return NextResponse.json(await rotinaEstoqueOlist())
+    const rotina = await rotinaEstoqueOlist()
+    // Só depois das pré-vendas, e só se a Olist estiver respondendo: é o menos urgente.
+    const lotes = rotina.ok
+      ? await atualizarEstoqueDasCervejasDosLotes().catch((e) => {
+          if (!(e instanceof OlistNaoConectado)) console.error('[lotes] leitura do estoque', e)
+          return 0
+        })
+      : 0
+    return NextResponse.json({ ...rotina, lotes })
   } catch (e) {
     console.error('[olist-estoque] rotina falhou', e)
     return NextResponse.json({ ok: false, motivo: e instanceof Error ? e.message : 'erro' }, { status: 502 })
@@ -54,6 +64,16 @@ export async function POST(request: NextRequest) {
         resposta = { ok: fila.ok, mensagem: fila.motivo ?? `${fila.lancamentos} lançamento(s) enviados à Olist.` }
         break
       }
+      case 'lote-sku': {
+        const sku = String(pedido.sku ?? '').trim().slice(0, 60)
+        if (!sku) return NextResponse.json({ ok: false, mensagem: 'Informe o SKU.' }, { status: 400 })
+        resposta = { ok: true, produtoLote: await consultarSkuNaOlist(sku) }
+        break
+      }
+      case 'lote-produto':
+        if (!Number.isSafeInteger(pedido.id) || pedido.id <= 0) return NextResponse.json({ ok: false, mensagem: 'Produto inválido.' }, { status: 400 })
+        resposta = { ok: true, produtoLote: await consultarProdutoLoteNaOlist(pedido.id) }
+        break
       default:
         return NextResponse.json({ ok: false, mensagem: 'Pedido inválido.' }, { status: 400 })
     }

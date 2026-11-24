@@ -1305,6 +1305,44 @@ await db.exec(`reset role;`)
   await db.exec(`reset role;`)
 }
 
+// -----------------------------------------------------------------------------
+// Lotes e validades: cadastro pelo SKU (só leitura da Olist), lotes e RLS
+// -----------------------------------------------------------------------------
+{
+  const como = (id) => `reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${id}', false);`
+  await db.exec(`reset role; update perfis set ativo = true where id in ('${uid}', '${uid2}');`)
+  const fila = async () => (await um(`select count(*)::int n from movimentos_estoque_olist`)).n
+  const filaAntes = await fila()
+
+  await db.exec(como(uid2))
+  const cerveja = await um(`insert into lotes_cervejas (sku, olist_id, nome, estoque_olist, estoque_lido_em) values ('IPA-473', 7001, 'IPA Lata 473 ml', 48, now()) returning id, criado_por`)
+  expectEq('equipe cadastra a cerveja no controle de lotes', cerveja.criado_por, uid2)
+  await expectError('mesmo SKU não entra duas vezes (maiúsculas ou não)', `insert into lotes_cervejas (sku, olist_id, nome) values ('ipa-473', 7002, 'Outra')`)
+  await expectError('mesmo produto da Olist não entra duas vezes', `insert into lotes_cervejas (sku, olist_id, nome) values ('IPA-OUTRO', 7001, 'Outra')`)
+  await expectError('SKU com espaço nas pontas é recusado', `insert into lotes_cervejas (sku, olist_id, nome) values (' X ', 7003, 'Outra')`)
+
+  await q(`insert into lotes (cerveja_id, lote, validade) values ($1, 'L2411A', current_date + 20), ($1, 'L2409B', current_date - 3)`, [cerveja.id])
+  await expectError('lote repetido na mesma cerveja', `insert into lotes (cerveja_id, lote, validade) values ($1, 'l2411a', current_date + 90)`, [cerveja.id])
+  await expectError('lote sem validade é recusado', `insert into lotes (cerveja_id, lote) values ($1, 'L0001')`, [cerveja.id])
+  await q(`update lotes set validade = current_date + 200 where cerveja_id = $1 and lote = 'L2411A'`, [cerveja.id])
+  expectEq('equipe edita a validade do lote', (await um(`select (validade - current_date) dias from lotes where cerveja_id = $1 and lote = 'L2411A'`, [cerveja.id])).dias, 200)
+  await db.exec(`reset role;`)
+  expectEq('lotes e validades não geram lançamento para a Olist', await fila(), filaAntes)
+
+  await db.exec(`reset role; set role anon; select set_config('request.jwt.claim.sub', '', false);`)
+  await expectError('visitante não vê as cervejas dos lotes', `select count(*) from lotes_cervejas`)
+  await expectError('visitante não vê os lotes', `select count(*) from lotes`)
+  await db.exec(`reset role; update perfis set ativo = false where id = '${uid2}';`)
+  await db.exec(como(uid2))
+  expectEq('quem saiu da equipe não vê os lotes', (await um(`select count(*)::int n from lotes`)).n, 0)
+  await db.exec(`reset role; update perfis set ativo = true where id = '${uid2}';`)
+
+  await db.exec(como(uid))
+  await q(`delete from lotes_cervejas where id = $1`, [cerveja.id])
+  await db.exec(`reset role;`)
+  expectEq('remover a cerveja do controle apaga os lotes dela', (await um(`select count(*)::int n from lotes where cerveja_id = $1`, [cerveja.id])).n, 0)
+}
+
 if (falhas > 0) {
   console.error(`\n✗ ${falhas} verificação(ões) falharam`)
   process.exit(1)
