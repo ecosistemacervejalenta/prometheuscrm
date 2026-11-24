@@ -6,7 +6,7 @@ import { ActionButton } from '@/components/ui/action-button'
 import { Card, CardHeader } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
 import { atualizarCervejaDaOlist, removerCervejaDosLotes } from '@/features/lotes/actions'
-import { FormularioNovoLote, LinhaLote } from '@/features/lotes/components/lotes-da-cerveja'
+import { FormularioNovosLotes, LinhaLote } from '@/features/lotes/components/lotes-da-cerveja'
 import { obterCervejaDosLotes } from '@/features/lotes/queries'
 import { formatarDataHora, formatarNumero } from '@/lib/format'
 
@@ -86,8 +86,8 @@ export default async function PaginaLotesDaCerveja({ params }: PageProps<'/lotes
         </Card>
 
         <Card>
-          <CardHeader titulo="Lotes e validades" descricao={lotes.length ? resumoLotes : 'Cadastre o primeiro lote desta cerveja.'} />
-          <FormularioNovoLote cervejaId={id} foco={lotes.length === 0} />
+          <CardHeader titulo="Lotes e validades" descricao={lotes.length ? resumoLotes : 'Cadastre os lotes desta cerveja. Dá para lançar vários de uma vez.'} />
+          <FormularioNovosLotes cervejaId={id} foco={lotes.length === 0} />
           {lotes.length > 0 ? (
             <ul className="divide-y divide-linha border-t border-linha">
               {lotes.map((lote) => (

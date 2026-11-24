@@ -15,6 +15,9 @@ export const esquemaSku = z.object({
   sku: texto('Informe o SKU da cerveja.').max(60, 'O SKU pode ter no máximo 60 caracteres.'),
 })
 
+/** Quantos lotes dá para cadastrar de uma vez na mesma cerveja. */
+export const MAX_LOTES_POR_VEZ = 30
+
 export const esquemaLote = z.object({
   lote: texto('Informe o lote.').max(60, 'O lote pode ter no máximo 60 caracteres.'),
   validade: z.string({ error: 'Informe a validade.' }).refine(dataValida, 'Informe a validade.'),
