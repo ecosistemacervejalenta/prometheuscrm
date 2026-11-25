@@ -6,33 +6,33 @@ import { ActionButton } from '@/components/ui/action-button'
 import { Card, CardHeader } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
 import { atualizarCervejaDaOlist, removerCervejaDosLotes } from '@/features/lotes/actions'
+import { HistoricoLotes } from '@/features/lotes/components/historico-lotes'
 import { FormularioNovosLotes, LinhaLote } from '@/features/lotes/components/lotes-da-cerveja'
-import { contarLotes, obterCervejaDosLotes } from '@/features/lotes/queries'
-import { quandoLeu, RELER_A_CADA_MIN } from '@/features/lotes/leitura'
+import { FREQUENCIA_LEITURA, quandoLeu } from '@/features/lotes/leitura'
+import { listarMovimentosDaCerveja, obterCervejaDosLotes } from '@/features/lotes/queries'
 import { situacaoValidade } from '@/features/lotes/validade'
 import { formatarNumero } from '@/lib/format'
+import { cn } from '@/lib/utils'
 
 export const metadata: Metadata = { title: 'Lotes da cerveja' }
 
 export default async function PaginaLotesDaCerveja({ params }: PageProps<'/lotes/[id]'>) {
   const { id } = await params
-  const cerveja = await obterCervejaDosLotes(id)
+  const [cerveja, movimentos] = await Promise.all([obterCervejaDosLotes(id), listarMovimentosDaCerveja(id)])
   if (!cerveja) notFound()
 
-  const { lotes } = cerveja
-  const nosLotes = contarLotes(lotes)
-  const variosLotes = lotes.length > 1
-  const semQuantidade = variosLotes ? lotes.filter((l) => l.quantidade === null).length : 0
-  // Com todos os lotes informados, a soma deles deve bater com o estoque da Olist.
-  const diferenca = variosLotes && semQuantidade === 0 && cerveja.estoque_olist !== null ? nosLotes.unidades - cerveja.estoque_olist : 0
-  const dias = lotes.map((l) => situacaoValidade(l.validade).dias)
+  const { lotes, nosLotes, semLote } = cerveja
+  // Lote esgotado (0 un.) não entra na conta de vencidos.
+  const dias = lotes.filter((l) => l.quantidade !== 0).map((l) => situacaoValidade(l.validade).dias)
+  const esgotados = lotes.filter((l) => l.quantidade === 0).length
   const vencidos = dias.filter((d) => d < 0).length
   const vencemLogo = dias.filter((d) => d >= 0 && d <= 30).length
   const resumoLotes = [
     `${lotes.length} lote${lotes.length === 1 ? '' : 's'}`,
-    `${formatarNumero(nosLotes.unidades)} un.`,
+    `${formatarNumero(nosLotes)} un.`,
     vencidos ? `${vencidos} vencido${vencidos === 1 ? '' : 's'}` : null,
     vencemLogo ? `${vencemLogo} vence${vencemLogo === 1 ? '' : 'm'} em até 30 dias` : null,
+    esgotados ? `${esgotados} esgotado${esgotados === 1 ? '' : 's'}` : null,
   ]
     .filter(Boolean)
     .join(' · ')
@@ -84,20 +84,24 @@ export default async function PaginaLotesDaCerveja({ params }: PageProps<'/lotes
               <dd className="mt-1 text-[12px] text-suave">
                 {cerveja.estoque_olist === null ? 'A Olist não informou o estoque deste produto. ' : ''}
                 {cerveja.estoque_lido_em ? `Atualizado em ${quandoLeu(cerveja.estoque_lido_em)}` : 'Ainda não lido'}
-                <span className="block text-sutil">Atualiza sozinho a cada {RELER_A_CADA_MIN / 60} h.</span>
+                <span className="block text-sutil">Atualiza sozinho {FREQUENCIA_LEITURA} e quando a Olist avisa.</span>
               </dd>
             </div>
-            {variosLotes && (
-              <div>
-                <dt className="tipo-rotulo text-suave">Soma dos lotes</dt>
-                <dd className="tipo-dado mt-1 text-[14px]">{formatarNumero(nosLotes.unidades)} un.</dd>
-                {semQuantidade > 0 ? (
-                  <dd className="mt-1 text-[12px] font-medium text-alerta">
-                    {semQuantidade} lote{semQuantidade === 1 ? '' : 's'} sem quantidade: informe para a soma fechar.
+            {lotes.length > 0 && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <dt className="tipo-rotulo text-suave">Nos lotes</dt>
+                  <dd className="tipo-dado mt-1 text-[14px]">{formatarNumero(nosLotes)} un.</dd>
+                </div>
+                <div>
+                  <dt className="tipo-rotulo text-suave">Sem lote</dt>
+                  <dd className={cn('tipo-dado mt-1 text-[14px]', semLote ? 'font-semibold text-alerta' : '')}>
+                    {semLote === null ? '—' : `${formatarNumero(semLote)} un.`}
                   </dd>
-                ) : diferenca !== 0 ? (
-                  <dd className="mt-1 text-[12px] text-suave">
-                    {formatarNumero(Math.abs(diferenca))} un. a {diferenca > 0 ? 'mais' : 'menos'} que o estoque da Olist.
+                </div>
+                {semLote ? (
+                  <dd className="col-span-2 -mt-1 text-[12px] leading-[18px] font-medium text-alerta">
+                    Entraram na Olist e ainda não têm lote: cadastre o lote delas.
                   </dd>
                 ) : null}
               </div>
@@ -107,18 +111,24 @@ export default async function PaginaLotesDaCerveja({ params }: PageProps<'/lotes
               <dd className="tipo-dado mt-1 break-all text-[14px]">{cerveja.sku}</dd>
             </div>
             <p className="border-t border-linha pt-3 text-[12px] leading-[18px] text-suave">
-              Foto, nome e estoque vêm da Olist só para consulta. Lote e validade ficam apenas aqui no CRM.
+              Cada venda na Olist baixa sozinha do lote que vence primeiro. Nada é enviado à Olist: lote e validade ficam só aqui no CRM.
             </p>
           </dl>
         </Card>
 
         <Card>
           <CardHeader titulo="Lotes e validades" descricao={lotes.length ? resumoLotes : 'Cadastre o lote e a validade desta cerveja. Dá para lançar vários lotes de uma vez.'} />
-          <FormularioNovosLotes cervejaId={id} lotesExistentes={lotes.length} estoqueOlist={cerveja.estoque_olist} foco={lotes.length === 0} />
+          <FormularioNovosLotes
+            cervejaId={id}
+            temLotes={lotes.length > 0}
+            estoqueOlist={cerveja.estoque_olist}
+            semLote={semLote}
+            foco={lotes.length === 0 || Boolean(semLote)}
+          />
           {lotes.length > 0 ? (
             <ul className="divide-y divide-linha border-t border-linha">
               {lotes.map((lote) => (
-                <LinhaLote key={lote.id} lote={lote} variosLotes={variosLotes} />
+                <LinhaLote key={lote.id} lote={lote} />
               ))}
             </ul>
           ) : (
@@ -126,6 +136,11 @@ export default async function PaginaLotesDaCerveja({ params }: PageProps<'/lotes
           )}
         </Card>
       </div>
+
+      <Card className="mt-4 lg:mt-6 lg:ml-[324px]">
+        <CardHeader titulo="Histórico dos lotes" descricao="Cadastros, ajustes e as baixas automáticas feitas a partir do estoque da Olist." />
+        <HistoricoLotes movimentos={movimentos} />
+      </Card>
     </>
   )
 }

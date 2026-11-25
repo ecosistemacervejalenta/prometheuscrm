@@ -44,7 +44,9 @@ export async function atualizarEstoqueDasCervejasDosLotes(): Promise<number> {
   const { data: cervejas, error } = await supabase
     .from('lotes_cervejas')
     .select('id, olist_id')
-    .or(`estoque_lido_em.is.null,estoque_lido_em.lt."${limite}"`)
+    .or(`releitura_pedida_em.not.is.null,estoque_lido_em.is.null,estoque_lido_em.lt."${limite}"`)
+    // Primeiro as que a Olist avisou que mudaram; depois as de leitura mais antiga.
+    .order('releitura_pedida_em', { ascending: true, nullsFirst: false })
     .order('estoque_lido_em', { ascending: true, nullsFirst: true })
     .limit(CERVEJAS_POR_RODADA)
   if (error) throw error
@@ -59,13 +61,14 @@ export async function atualizarEstoqueDasCervejasDosLotes(): Promise<number> {
       const produto = await obterProdutoLoteOlist(token, cerveja.olist_id)
       await supabase
         .from('lotes_cervejas')
-        .update({ nome: produto.nome.slice(0, 200), estoque_olist: produto.estoque, estoque_lido_em: lidoEm })
+        // Se o estoque caiu, o banco baixa dos lotes na mesma hora (do que vence primeiro).
+        .update({ nome: produto.nome.slice(0, 200), estoque_olist: produto.estoque, estoque_lido_em: lidoEm, releitura_pedida_em: null })
         .eq('id', cerveja.id)
       atualizadas++
     } catch (erro) {
       // Produto apagado na Olist: fica sem estoque informado (e sai da frente da fila).
       if (erro instanceof ErroApiOlist && erro.status === 404) {
-        await supabase.from('lotes_cervejas').update({ estoque_olist: null, estoque_lido_em: lidoEm }).eq('id', cerveja.id)
+        await supabase.from('lotes_cervejas').update({ estoque_olist: null, estoque_lido_em: lidoEm, releitura_pedida_em: null }).eq('id', cerveja.id)
         continue
       }
       // Limite de chamadas, acesso negado ou rede: o resto fica para a próxima rodada.
@@ -73,4 +76,19 @@ export async function atualizarEstoqueDasCervejasDosLotes(): Promise<number> {
     }
   }
   return atualizadas
+}
+
+/**
+ * A Olist avisou que o estoque destes produtos mudou: as cervejas do controle com esses ids ou
+ * SKUs são relidas na próxima rodada da rotina (até 5 min), antes das outras. Não chama a Olist
+ * aqui: o aviso pode citar muitos produtos de uma vez, e a rotina respeita o limite.
+ */
+export async function pedirReleituraDosLotes(ids: number[], skus: string[]): Promise<number> {
+  if (ids.length === 0 && skus.length === 0) return 0
+  const supabase = createAdminClient()
+  const agora = new Date().toISOString()
+  const marcar = (coluna: 'olist_id' | 'sku', valores: Array<number | string>) =>
+    supabase.from('lotes_cervejas').update({ releitura_pedida_em: agora }).in(coluna, valores).is('releitura_pedida_em', null).select('id')
+  const [porId, porSku] = await Promise.all([ids.length ? marcar('olist_id', ids) : null, skus.length ? marcar('sku', skus) : null])
+  return (porId?.data?.length ?? 0) + (porSku?.data?.length ?? 0)
 }

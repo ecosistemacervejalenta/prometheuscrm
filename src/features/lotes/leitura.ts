@@ -8,18 +8,20 @@ import { formatarDataHora, formatarHaQuanto } from '@/lib/format'
  */
 
 /** Uma cerveja é relida quando a última leitura passa disto. */
-export const RELER_A_CADA_MIN = 60
+export const RELER_A_CADA_MIN = 30
+/** "a cada 30 min" / "a cada 1 h" — o texto que a tela mostra. */
+export const FREQUENCIA_LEITURA = `a cada ${RELER_A_CADA_MIN % 60 === 0 ? `${RELER_A_CADA_MIN / 60} h` : `${RELER_A_CADA_MIN} min`}`
 /** Cervejas lidas por rodada (a rotina roda a cada 5 min: até 120 cervejas por hora). */
 export const CERVEJAS_POR_RODADA = 10
 /** Pausa entre uma cerveja e a próxima, dentro da rodada. */
 export const PAUSA_ENTRE_LEITURAS_MS = 500
 /** Passou disto sem ler: a leitura está atrasada (a Olist recusou, desconectou...). */
-const ATRASADA_MIN = 3 * RELER_A_CADA_MIN
+export const ATRASADA_MIN = 3 * 60
 
 export type ResumoLeituras = {
   /** Leitura mais recente entre todas as cervejas. */
   ultima: string | null
-  /** Cervejas sem leitura há mais de 3 h (ou nunca lidas). */
+  /** Cervejas sem leitura há mais de ATRASADA_MIN (ou nunca lidas). */
   atrasadas: number
 }
 

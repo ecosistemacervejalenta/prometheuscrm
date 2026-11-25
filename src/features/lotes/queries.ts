@@ -8,16 +8,11 @@ export type LoteDaCerveja = {
   id: string
   lote: string
   validade: string
-  /** Quantidade digitada no CRM (null = não informada). Só é preciso quando a cerveja tem mais de um lote. */
-  quantidade: number | null
   /**
-   * Unidades que valem para o lote: a quantidade digitada ou, se ele for o único lote da cerveja,
-   * o estoque da Olist. null = falta informar (mais de um lote e este sem quantidade) ou a Olist
-   * não informou o estoque.
+   * Unidades do lote. Baixa sozinha quando o estoque da Olist cai (do lote que vence primeiro).
+   * null = falta informar (a Olist não deu o estoque quando o lote foi cadastrado).
    */
-  unidades: number | null
-  /** As unidades vêm do estoque da Olist (lote único, sem quantidade digitada). */
-  daOlist: boolean
+  quantidade: number | null
 }
 
 export type CervejaComLotes = {
@@ -30,6 +25,15 @@ export type CervejaComLotes = {
   estoque_lido_em: string | null
   /** Da validade mais próxima para a mais distante. */
   lotes: LoteDaCerveja[]
+  /** Soma das quantidades dos lotes. */
+  nosLotes: number
+  /**
+   * Unidades da Olist que ainda não estão em lote nenhum (entrou mercadoria). null = não dá
+   * para saber (a Olist não informou o estoque, ou há lote sem quantidade).
+   */
+  semLote: number | null
+  /** Lotes ainda sem quantidade. */
+  lotesSemQuantidade: number
 }
 
 /** Um lote com a cerveja dele — a linha da lista do módulo. */
@@ -43,24 +47,20 @@ export type FiltroLotes = (typeof FILTROS_LOTES)[number]
 
 const CAMPOS = 'id, sku, nome, foto_url, estoque_olist, estoque_lido_em, lotes(id, lote, validade, quantidade)'
 
-type Linha = Omit<CervejaComLotes, 'lotes'> & { lotes: Array<Pick<LoteDaCerveja, 'id' | 'lote' | 'validade' | 'quantidade'>> }
+type Linha = Omit<CervejaComLotes, 'nosLotes' | 'semLote' | 'lotesSemQuantidade'>
 
-/**
- * Com um lote só, a quantidade dele é o estoque da Olist (não precisa digitar). Com mais de um,
- * vale a quantidade digitada em cada lote.
- */
+/** Soma dos lotes e unidades sem lote (o banco garante que a soma dos lotes não passa do estoque). */
 function paraCerveja(linha: Linha): CervejaComLotes {
   const estoque = linha.estoque_olist === null ? null : Number(linha.estoque_olist)
-  const unico = linha.lotes.length === 1
+  const nosLotes = linha.lotes.reduce((soma, l) => soma + (l.quantidade ?? 0), 0)
+  const lotesSemQuantidade = linha.lotes.filter((l) => l.quantidade === null).length
   return {
     ...linha,
     estoque_olist: estoque,
-    lotes: linha.lotes
-      .map((lote) => {
-        const daOlist = unico && lote.quantidade === null
-        return { ...lote, daOlist, unidades: daOlist ? estoque : lote.quantidade }
-      })
-      .sort((a, b) => a.validade.localeCompare(b.validade) || a.lote.localeCompare(b.lote)),
+    lotes: [...linha.lotes].sort((a, b) => a.validade.localeCompare(b.validade) || a.lote.localeCompare(b.lote)),
+    nosLotes,
+    lotesSemQuantidade,
+    semLote: estoque === null || lotesSemQuantidade > 0 ? null : Math.max(Math.floor(estoque) - nosLotes, 0),
   }
 }
 
@@ -78,11 +78,14 @@ export async function obterCervejaDosLotes(id: string): Promise<CervejaComLotes 
   return data ? paraCerveja(data) : null
 }
 
-/** Todos os lotes, do que vence primeiro para o que vence por último. */
+/**
+ * Lotes que ainda têm unidades (ou sem quantidade informada), do que vence primeiro para o que
+ * vence por último. Lote esgotado (0 un.) fica só na tela da cerveja: não corre risco de vencer.
+ */
 export function lotesPorValidade(cervejas: CervejaComLotes[]): LoteComCerveja[] {
   return cervejas
     .flatMap(({ lotes, id, sku, nome, foto_url, estoque_olist, estoque_lido_em }) =>
-      lotes.map((lote) => ({
+      lotes.filter((lote) => lote.quantidade !== 0).map((lote) => ({
         ...lote,
         situacao: situacaoValidade(lote.validade).situacao,
         cerveja: { id, sku, nome, foto_url, estoque_olist, estoque_lido_em },
@@ -94,13 +97,16 @@ export function lotesPorValidade(cervejas: CervejaComLotes[]): LoteComCerveja[] 
 export type ContagemLotes = { lotes: number; unidades: number }
 
 /** Soma lotes e unidades (lote com a quantidade por informar conta como lote, com 0 unidade). */
-export function contarLotes(lotes: Array<{ unidades: number | null }>): ContagemLotes {
-  return { lotes: lotes.length, unidades: lotes.reduce((soma, l) => soma + (l.unidades ?? 0), 0) }
+export function contarLotes(lotes: Array<{ quantidade: number | null }>): ContagemLotes {
+  return { lotes: lotes.length, unidades: lotes.reduce((soma, l) => soma + (l.quantidade ?? 0), 0) }
 }
 
 export type ResumoDosLotes = {
   cervejas: number
+  /** Cervejas com unidades sem lote (ou sem nenhum lote cadastrado). */
   semLote: number
+  /** Unidades da Olist que ainda não estão em lote nenhum, somando todas as cervejas. */
+  unidadesSemLote: number
   total: ContagemLotes
   porSituacao: Record<SituacaoValidade, ContagemLotes>
 }
@@ -110,7 +116,8 @@ export function resumoDosLotes(cervejas: CervejaComLotes[]): ResumoDosLotes {
   const lotes = lotesPorValidade(cervejas)
   return {
     cervejas: cervejas.length,
-    semLote: cervejas.filter((c) => c.lotes.length === 0).length,
+    semLote: cervejas.filter(precisaDeLote).length,
+    unidadesSemLote: cervejas.reduce((soma, c) => soma + (c.semLote ?? 0), 0),
     total: contarLotes(lotes),
     porSituacao: Object.fromEntries(
       SITUACOES_VALIDADE.map(({ chave }) => [chave, contarLotes(lotes.filter((l) => l.situacao === chave))]),
@@ -133,7 +140,52 @@ export function filtrarLotes(lotes: LoteComCerveja[], { busca, situacao }: { bus
   return lotes.filter((l) => (!situacao || l.situacao === situacao) && contem(busca, l.cerveja.nome, l.cerveja.sku, l.lote))
 }
 
-/** Cervejas cadastradas que ainda não têm nenhum lote. */
+/** A cerveja não tem lote nenhum, ou tem unidades na Olist que ainda não estão em lote. */
+function precisaDeLote(c: CervejaComLotes) {
+  return c.lotes.length === 0 || (c.semLote ?? 0) > 0
+}
+
+/** Cervejas sem lote nenhum ou com unidades da Olist ainda sem lote. */
 export function cervejasSemLote(cervejas: CervejaComLotes[], busca?: string) {
-  return cervejas.filter((c) => c.lotes.length === 0 && contem(busca, c.nome, c.sku))
+  return cervejas.filter((c) => precisaDeLote(c) && contem(busca, c.nome, c.sku))
+}
+
+export type MovimentoDoLote = {
+  id: number
+  lote: string
+  tipo: 'cadastro' | 'ajuste' | 'baixa_olist' | 'exclusao'
+  quantidade: number
+  saldo: number | null
+  estoque_antes: number | null
+  estoque_depois: number | null
+  criado_em: string
+  autor: string | null
+}
+
+/** Últimos movimentos dos lotes da cerveja (cadastro, ajuste, baixa pela Olist, exclusão). */
+export async function listarMovimentosDaCerveja(cervejaId: string, limite = 20): Promise<MovimentoDoLote[]> {
+  const { supabase } = await exigirEquipe()
+  const { data, error } = await supabase
+    .from('lote_movimentos')
+    .select('id, lote, tipo, quantidade, saldo, estoque_antes, estoque_depois, criado_em, perfis(nome)')
+    .eq('cerveja_id', cervejaId)
+    .order('criado_em', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limite)
+  // Sem o histórico (ex.: migration ainda não aplicada) a tela continua funcionando.
+  if (error) {
+    console.error('[lotes] histórico', error.message)
+    return []
+  }
+  return data.map((m) => ({
+    id: m.id,
+    lote: m.lote,
+    tipo: m.tipo as MovimentoDoLote['tipo'],
+    quantidade: m.quantidade,
+    saldo: m.saldo,
+    estoque_antes: m.estoque_antes === null ? null : Number(m.estoque_antes),
+    estoque_depois: m.estoque_depois === null ? null : Number(m.estoque_depois),
+    criado_em: m.criado_em,
+    autor: m.perfis?.nome ?? null,
+  }))
 }

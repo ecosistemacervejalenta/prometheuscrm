@@ -11,24 +11,23 @@ function dataValida(valor: string) {
   return ano >= 2000 && ano <= 2100
 }
 
-/**
- * Unidades do lote: número inteiro ("1200" ou "1.200"). Só é obrigatória quando a cerveja tem
- * mais de um lote; com um lote só, em branco = o estoque da Olist.
- */
-function quantidade({ minimo, obrigatoria }: { minimo: number; obrigatoria: boolean }) {
-  const numero = z
-    .number({ error: obrigatoria ? 'Com mais de um lote, informe a quantidade.' : 'Use só números.' })
-    .min(minimo, 'A quantidade deve ser maior que zero.')
-    .max(1_000_000, 'Quantidade alta demais.')
-  return z.preprocess(
-    (v) => {
-      const digitado = typeof v === 'string' ? v.trim().replace(/\./g, '') : ''
-      if (digitado === '') return obrigatoria ? undefined : null
-      return /^\d+$/.test(digitado) ? Number(digitado) : undefined
-    },
-    obrigatoria ? numero : numero.nullable(),
-  )
+/** "1200" ou "1.200" → 1200; vazio → null; outra coisa → undefined (inválido). */
+function lerQuantidade(v: unknown): number | null | undefined {
+  const digitado = typeof v === 'string' ? v.trim().replace(/\./g, '') : ''
+  if (digitado === '') return null
+  return /^\d+$/.test(digitado) ? Number(digitado) : undefined
 }
+
+const unidades = (minimo: number, mensagem: string) =>
+  z
+    .number({ error: mensagem })
+    .min(minimo, minimo > 0 ? 'A quantidade deve ser maior que zero.' : 'A quantidade não pode ser negativa.')
+    .max(1_000_000, 'Quantidade alta demais.')
+
+/** Cadastro: em branco = o lote recebe as unidades da Olist que ainda não têm lote. */
+const quantidadeOpcional = z.preprocess(lerQuantidade, unidades(1, 'Use só números.').nullable())
+/** Edição: obrigatória e aceita zero (o lote acabou, mas o registro fica). */
+const quantidadeObrigatoria = z.preprocess((v) => lerQuantidade(v) ?? undefined, unidades(0, 'Informe a quantidade.'))
 
 export const esquemaSku = z.object({
   sku: texto('Informe o SKU da cerveja.').max(60, 'O SKU pode ter no máximo 60 caracteres.'),
@@ -42,10 +41,8 @@ const camposDoLote = {
   validade: z.string({ error: 'Informe a validade.' }).refine(dataValida, 'Informe a validade.'),
 }
 
-/**
- * Lote + validade (+ quantidade).
- *   • variosLotes: a cerveja fica com mais de um lote → a quantidade de cada um é obrigatória.
- *   • edicao: aceita zero (o lote acabou, mas o registro fica).
- */
-export const esquemaLote = ({ variosLotes, edicao = false }: { variosLotes: boolean; edicao?: boolean }) =>
-  z.object({ ...camposDoLote, quantidade: quantidade({ minimo: edicao ? 0 : 1, obrigatoria: variosLotes }) })
+/** Lote novo: quantidade em branco = as unidades da Olist que ainda não estão em lote nenhum. */
+export const esquemaLoteNovo = z.object({ ...camposDoLote, quantidade: quantidadeOpcional })
+
+/** Edição: a quantidade é obrigatória e aceita zero (o lote acabou, mas o registro fica). */
+export const esquemaLoteEditado = z.object({ ...camposDoLote, quantidade: quantidadeObrigatoria })

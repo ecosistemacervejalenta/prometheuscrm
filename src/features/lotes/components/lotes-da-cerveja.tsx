@@ -17,23 +17,53 @@ import type { LoteDaCerveja } from '../queries'
 import { MAX_LOTES_POR_VEZ } from '../schema'
 import { SeloValidade } from './selo-validade'
 
+const un = (n: number) => `${formatarNumero(n)} un.`
+
+/** O aviso do formulário: de onde vem a quantidade em cada caso. */
+function TextoDaQuantidade({ temLotes, estoque, semLote }: { temLotes: boolean; estoque: number | null; semLote: number | null }) {
+  if (estoque === null) {
+    return <>A Olist não informou o estoque desta cerveja, então informe a quantidade de cada lote.</>
+  }
+  if (!temLotes) {
+    return (
+      <>
+        Com um lote só, preencha apenas lote e validade: ele recebe as {un(estoque)} da Olist. Com mais de um lote, informe quanto é de cada um
+        (por exemplo, 10 de um e 20 de outro); um deles pode ficar em branco e recebe o restante.
+      </>
+    )
+  }
+  if (semLote) {
+    return (
+      <>
+        Há <strong>{un(semLote)}</strong> na Olist ainda sem lote. Deixe a quantidade em branco para o lote novo receber todas, ou informe quanto é de
+        cada lote.
+      </>
+    )
+  }
+  return (
+    <>
+      Todas as {un(estoque)} da Olist já estão nos lotes. Se chegou mercadoria, dê entrada na Olist primeiro: o CRM lê o estoque na hora de salvar.
+    </>
+  )
+}
+
 /**
- * Cadastro de um ou vários lotes de uma vez: cada linha é um lote + validade (+ quantidade),
- * "Outro lote" abre mais uma linha e tudo é salvo junto.
- *
- * Quantidade: com um lote só não precisa (vale o estoque da Olist). Ela passa a ser pedida
- * quando a cerveja fica com mais de um lote, para dizer quantas unidades há de cada um.
+ * Cadastro de um ou vários lotes de uma vez: cada linha é lote + quantidade + validade, "Outro
+ * lote" abre mais uma linha e tudo é salvo junto. Quantidade em branco = as unidades da Olist
+ * que ainda não estão em lote nenhum (só uma linha pode ficar em branco).
  */
 export function FormularioNovosLotes({
   cervejaId,
-  lotesExistentes,
+  temLotes,
   estoqueOlist,
+  semLote,
   foco = false,
 }: {
   cervejaId: string
-  /** Quantos lotes a cerveja já tem cadastrados. */
-  lotesExistentes: number
+  temLotes: boolean
   estoqueOlist: number | null
+  /** Unidades da Olist ainda sem lote (null = não dá para saber). */
+  semLote: number | null
   foco?: boolean
 }) {
   const avisar = useAvisos()
@@ -42,9 +72,7 @@ export function FormularioNovosLotes({
   /** Linha recém-aberta por "Outro lote": o cursor já vai para ela. */
   const [nova, setNova] = useState<number | null>(null)
   const varias = linhas.length > 1
-  /** A cerveja vai ficar com mais de um lote: a quantidade de cada um passa a ser obrigatória. */
-  const variosLotes = lotesExistentes + linhas.length > 1
-  const estoque = estoqueOlist === null ? null : `${formatarNumero(estoqueOlist)} un.`
+  const podeFicarEmBranco = estoqueOlist !== null && semLote !== null
 
   function abrirLinha() {
     const id = proxima.current++
@@ -90,17 +118,12 @@ export function FormularioNovosLotes({
                 className="tipo-dado"
               />
             </Field>
-            <Field
-              label={i === 0 ? 'Quantidade' : `Quantidade do lote ${i + 1}`}
-              name={`lotes.${i}.quantidade`}
-              rotuloOculto={i > 0}
-              obrigatorio={variosLotes}
-            >
+            <Field label={i === 0 ? 'Quantidade' : `Quantidade do lote ${i + 1}`} name={`lotes.${i}.quantidade`} rotuloOculto={i > 0}>
               <Input
                 name={`lotes.${i}.quantidade`}
                 inputMode="numeric"
                 maxLength={9}
-                placeholder={variosLotes ? 'Unidades' : 'Opcional'}
+                placeholder={podeFicarEmBranco ? 'Restante' : 'Unidades'}
                 autoComplete="off"
                 className="tipo-dado"
               />
@@ -123,28 +146,9 @@ export function FormularioNovosLotes({
           </div>
         ))}
       </div>
-      <Alert
-        tom="info"
-        titulo={
-          !variosLotes
-            ? 'Um lote só? Preencha apenas lote e validade'
-            : lotesExistentes > 0
-              ? 'Esta cerveja já tem lote: informe a quantidade do novo'
-              : 'Mais de um lote: informe a quantidade de cada um'
-        }
-        className="mt-3"
-      >
-        {variosLotes ? (
-          <>
-            Com mais de um lote, diga quantas unidades há em cada um (por exemplo, 10 de um e 20 de outro).
-            {estoque && <> Estoque desta cerveja na Olist: {estoque}</>}
-          </>
-        ) : (
-          <>
-            A quantidade já vem do estoque da Olist{estoque && <> ({estoque})</>}, não precisa digitar. O campo Quantidade só é usado quando a cerveja tem mais
-            de um lote: clique em “Outro lote” e informe quantas unidades há de cada um (por exemplo, 10 de um e 20 de outro).
-          </>
-        )}
+      <Alert tom="info" titulo="Quantidade" className="mt-3">
+        <TextoDaQuantidade temLotes={temLotes} estoque={estoqueOlist} semLote={semLote} />{' '}
+        Depois, cada venda na Olist baixa sozinha do lote que vence primeiro.
       </Alert>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <Button variante="secundario" onClick={abrirLinha} disabled={linhas.length >= MAX_LOTES_POR_VEZ}>
@@ -156,8 +160,7 @@ export function FormularioNovosLotes({
   )
 }
 
-/** `variosLotes`: a cerveja tem mais de um lote, então a quantidade de cada um é obrigatória. */
-export function LinhaLote({ lote, variosLotes }: { lote: LoteDaCerveja; variosLotes: boolean }) {
+export function LinhaLote({ lote }: { lote: LoteDaCerveja }) {
   const [editando, setEditando] = useState(false)
 
   if (editando) {
@@ -168,16 +171,8 @@ export function LinhaLote({ lote, variosLotes }: { lote: LoteDaCerveja; variosLo
             <Field label="Lote" name="lote" className="col-span-full sm:col-span-1">
               <Input name="lote" defaultValue={lote.lote} maxLength={60} autoComplete="off" spellCheck={false} autoFocus className="tipo-dado" />
             </Field>
-            <Field label="Quantidade" name="quantidade" obrigatorio={variosLotes} dica={variosLotes ? undefined : 'Em branco = estoque da Olist.'}>
-              <Input
-                name="quantidade"
-                defaultValue={lote.quantidade ?? ''}
-                inputMode="numeric"
-                maxLength={9}
-                placeholder={variosLotes ? 'Unidades' : 'Opcional'}
-                autoComplete="off"
-                className="tipo-dado"
-              />
+            <Field label="Quantidade" name="quantidade" obrigatorio>
+              <Input name="quantidade" defaultValue={lote.quantidade ?? ''} inputMode="numeric" maxLength={9} placeholder="Unidades" autoComplete="off" className="tipo-dado" />
             </Field>
             <Field label="Validade" name="validade">
               <Input name="validade" type="date" defaultValue={lote.validade} min="2000-01-01" max="2100-12-31" />
@@ -195,23 +190,21 @@ export function LinhaLote({ lote, variosLotes }: { lote: LoteDaCerveja; variosLo
   }
 
   return (
-    <li className="flex min-h-[60px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 lg:px-5">
+    <li className={cn('flex min-h-[60px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 lg:px-5', lote.quantidade === 0 && 'opacity-60')}>
       <div className="min-w-0 flex-1">
         <p className="tipo-dado truncate text-[15px] font-semibold">{lote.lote}</p>
         <p className="mt-0.5 text-[13px] text-suave">Validade {formatarData(lote.validade)}</p>
       </div>
       {/* Larguras fixas a partir do tablet: quantidade e selo ficam alinhados em coluna entre as linhas. */}
-      <div className="shrink-0 sm:w-36 sm:text-right">
-        {lote.unidades !== null ? (
-          <p className="tipo-dado">{formatarNumero(lote.unidades)} un.</p>
-        ) : lote.daOlist ? (
-          <p className="tipo-dado text-sutil">—</p>
-        ) : (
+      <div className="shrink-0 sm:w-32 sm:text-right">
+        {lote.quantidade === null ? (
           <button type="button" onClick={() => setEditando(true)} className="text-[13px] font-semibold text-alerta underline underline-offset-2">
             Informar quantidade
           </button>
+        ) : (
+          <p className="tipo-dado">{un(lote.quantidade)}</p>
         )}
-        {lote.daOlist && <p className="text-[11px] leading-4 text-suave">estoque da Olist</p>}
+        {lote.quantidade === 0 && <p className="text-[11px] leading-4 text-suave">esgotado</p>}
       </div>
       <span className="flex shrink-0 sm:w-44">
         <SeloValidade validade={lote.validade} />
@@ -220,7 +213,15 @@ export function LinhaLote({ lote, variosLotes }: { lote: LoteDaCerveja; variosLo
         <Button tamanho="sm" variante="secundario" onClick={() => setEditando(true)} title="Editar" aria-label={`Editar o lote ${lote.lote}`}>
           <Pencil />
         </Button>
-        <ActionButton acao={excluirLote.bind(null, lote.id)} titulo={`Excluir o lote ${lote.lote}`} confirmar={`Excluir o lote ${lote.lote}?`}>
+        <ActionButton
+          acao={excluirLote.bind(null, lote.id)}
+          titulo={`Excluir o lote ${lote.lote}`}
+          confirmar={
+            lote.quantidade
+              ? `Excluir o lote ${lote.lote}? As ${lote.quantidade} un. dele passam a contar como "sem lote".`
+              : `Excluir o lote ${lote.lote}?`
+          }
+        >
           <Trash2 />
         </ActionButton>
       </div>

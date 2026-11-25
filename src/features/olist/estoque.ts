@@ -4,6 +4,7 @@ import { createHmac } from 'node:crypto'
 import { after } from 'next/server'
 
 import { envServidor } from '@/lib/env.server'
+import { pedirReleituraDosLotes } from '@/features/lotes/olist'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { Database } from '@/types/database.types'
 
@@ -379,6 +380,8 @@ function lerAviso(corpo: unknown): { ids: Set<number>; skus: Set<string> } {
 export async function receberAvisoEstoqueOlist(corpo: unknown): Promise<{ produtos: number }> {
   const supabase = createAdminClient()
   const { ids, skus } = lerAviso(corpo)
+  // Lotes e validades: as cervejas citadas são relidas na próxima rodada (e os lotes baixam).
+  await pedirReleituraDosLotes([...ids], [...skus]).catch((e) => console.error('[olist-estoque] releitura dos lotes', mensagemDe(e)))
   let alvo: number[] = []
   if (ids.size || skus.size) {
     const [{ data: porId }, { data: porSku }] = await Promise.all([

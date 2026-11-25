@@ -12,7 +12,7 @@ import { Pagination } from '@/components/ui/pagination'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { CadastroPorSku } from '@/features/lotes/components/cadastro-por-sku'
 import { PainelValidades } from '@/features/lotes/components/painel-validades'
-import { quandoLeu, RELER_A_CADA_MIN, resumoLeituras } from '@/features/lotes/leitura'
+import { FREQUENCIA_LEITURA, quandoLeu, resumoLeituras } from '@/features/lotes/leitura'
 import { SeloValidade } from '@/features/lotes/components/selo-validade'
 import {
   cervejasSemLote,
@@ -56,10 +56,10 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
   const lotesDaPagina = lotes.slice(inicio, inicio + POR_PAGINA)
   const semLoteDaPagina = semLote.slice(inicio, inicio + POR_PAGINA)
 
-  const tituloDaLista = verSemLote ? 'Cervejas sem lote' : faixa ? `${faixa.rotulo} · ${faixa.faixa.toLowerCase()}` : 'Todos os lotes'
+  const tituloDaLista = verSemLote ? 'Sem lote · entraram na Olist e falta cadastrar o lote' : faixa ? `${faixa.rotulo} · ${faixa.faixa.toLowerCase()}` : 'Todos os lotes'
   const contagem = contarLotes(lotes)
   const resumoDaLista = verSemLote
-    ? plural(semLote.length, 'cerveja', 'cervejas')
+    ? `${plural(semLote.length, 'cerveja', 'cervejas')} · ${formatarNumero(resumo.unidadesSemLote)} un. sem lote`
     : `${plural(contagem.lotes, 'lote', 'lotes')} · ${formatarNumero(contagem.unidades)} un.`
   const linkSemLote = (() => {
     const params = new URLSearchParams()
@@ -84,7 +84,7 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
                 </span>
               </p>
               <p className="pl-5 text-sutil">
-                Atualiza sozinho a cada {RELER_A_CADA_MIN / 60} h, dentro do limite da Olist.
+                Atualiza sozinho {FREQUENCIA_LEITURA} e quando a Olist avisa, dentro do limite dela. As vendas baixam do lote que vence primeiro.
                 {leituras.atrasadas > 0 && (
                   <span className="font-semibold text-alerta">
                     {' '}
@@ -150,12 +150,12 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
             {totalDaLista === 0 ? (
               <EmptyState
                 icone={SearchX}
-                titulo={verSemLote ? 'Nenhuma cerveja sem lote' : 'Nenhum lote aqui'}
+                titulo={verSemLote ? 'Tudo com lote' : 'Nenhum lote aqui'}
                 descricao={
                   q
                     ? 'Nada bate com a busca nesta faixa.'
                     : verSemLote
-                      ? 'Todas as cervejas do controle já têm lote cadastrado.'
+                      ? 'Todas as unidades da Olist estão em algum lote.'
                       : faixa
                         ? `Nenhum lote na faixa “${faixa.rotulo.toLowerCase()}” hoje.`
                         : 'Abra uma cerveja e cadastre o primeiro lote.'
@@ -171,7 +171,7 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
                       href={`/lotes/${c.id}`}
                       inicio={<FotoProduto url={c.foto_url} nome={c.nome} />}
                       titulo={c.nome}
-                      subtitulo={`SKU ${c.sku} · ${unidades(c.estoque_olist)} na Olist`}
+                      subtitulo={`SKU ${c.sku} · ${c.lotes.length ? `${unidades(c.semLote)} sem lote` : `${unidades(c.estoque_olist)} na Olist, nenhum lote`}`}
                     />
                   ))}
                 </ListaMobile>
@@ -181,6 +181,7 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
                       <TH>Cerveja</TH>
                       <TH>SKU</TH>
                       <TH className="text-right">Estoque na Olist</TH>
+                      <TH className="text-right">Sem lote</TH>
                     </TR>
                   </THead>
                   <TBody>
@@ -197,6 +198,10 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
                           <span className="tipo-dado">{unidades(c.estoque_olist)}</span>
                           {c.estoque_lido_em && <span className="block text-[11px] leading-4 text-suave">{formatarHaQuanto(c.estoque_lido_em)}</span>}
                         </TD>
+                        <TD className="text-right">
+                          <span className="tipo-dado font-semibold text-alerta">{unidades(c.lotes.length ? c.semLote : c.estoque_olist)}</span>
+                          {c.lotes.length === 0 && <span className="block text-[11px] leading-4 text-suave">nenhum lote</span>}
+                        </TD>
                       </TR>
                     ))}
                   </TBody>
@@ -211,7 +216,7 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
                       href={`/lotes/${l.cerveja.id}`}
                       inicio={<FotoProduto url={l.cerveja.foto_url} nome={l.cerveja.nome} />}
                       titulo={l.cerveja.nome}
-                      subtitulo={`Lote ${l.lote} · ${l.unidades !== null ? `${unidades(l.unidades)}${l.daOlist ? ' (Olist)' : ''}` : l.daOlist ? 'estoque da Olist' : 'falta a quantidade'}`}
+                      subtitulo={`Lote ${l.lote} · ${l.quantidade === null ? 'falta a quantidade' : unidades(l.quantidade)}`}
                       extra={
                         <span className="flex flex-wrap items-center gap-2">
                           <SeloValidade validade={l.validade} />
@@ -245,17 +250,10 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
                         </TD>
                         <TD className="tipo-dado whitespace-nowrap">{l.lote}</TD>
                         <TD className="text-right whitespace-nowrap">
-                          {l.unidades !== null ? (
-                            <span className="tipo-dado">{unidades(l.unidades)}</span>
-                          ) : l.daOlist ? (
-                            <span className="tipo-dado text-sutil">—</span>
-                          ) : (
+                          {l.quantidade === null ? (
                             <span className="text-[13px] font-semibold text-alerta">Informar</span>
-                          )}
-                          {l.daOlist && (
-                            <span className="block text-[11px] leading-4 text-suave">
-                              Olist{l.cerveja.estoque_lido_em ? ` · ${formatarHaQuanto(l.cerveja.estoque_lido_em)}` : ''}
-                            </span>
+                          ) : (
+                            <span className={cn('tipo-dado', l.quantidade === 0 && 'text-sutil')}>{unidades(l.quantidade)}</span>
                           )}
                         </TD>
                         <TD className="tipo-dado text-[13px] whitespace-nowrap text-suave">{formatarData(l.validade)}</TD>

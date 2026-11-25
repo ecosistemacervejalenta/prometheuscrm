@@ -1563,6 +1563,70 @@ export type Database = {
         }
         Relationships: []
       }
+      lote_movimentos: {
+        Row: {
+          autor_id: string | null
+          cerveja_id: string
+          criado_em: string
+          estoque_antes: number | null
+          estoque_depois: number | null
+          id: number
+          lote: string
+          lote_id: string | null
+          quantidade: number
+          saldo: number | null
+          tipo: string
+        }
+        Insert: {
+          autor_id?: string | null
+          cerveja_id: string
+          criado_em?: string
+          estoque_antes?: number | null
+          estoque_depois?: number | null
+          id?: never
+          lote: string
+          lote_id?: string | null
+          quantidade: number
+          saldo?: number | null
+          tipo: string
+        }
+        Update: {
+          autor_id?: string | null
+          cerveja_id?: string
+          criado_em?: string
+          estoque_antes?: number | null
+          estoque_depois?: number | null
+          id?: never
+          lote?: string
+          lote_id?: string | null
+          quantidade?: number
+          saldo?: number | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lote_movimentos_autor_id_fkey"
+            columns: ["autor_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lote_movimentos_cerveja_id_fkey"
+            columns: ["cerveja_id"]
+            isOneToOne: false
+            referencedRelation: "lotes_cervejas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lote_movimentos_lote_id_fkey"
+            columns: ["lote_id"]
+            isOneToOne: false
+            referencedRelation: "lotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lotes: {
         Row: {
           atualizado_em: string
@@ -1622,6 +1686,7 @@ export type Database = {
           id: string
           nome: string
           olist_id: number
+          releitura_pedida_em: string | null
           sku: string
         }
         Insert: {
@@ -1634,6 +1699,7 @@ export type Database = {
           id?: string
           nome: string
           olist_id: number
+          releitura_pedida_em?: string | null
           sku: string
         }
         Update: {
@@ -1646,6 +1712,7 @@ export type Database = {
           id?: string
           nome?: string
           olist_id?: number
+          releitura_pedida_em?: string | null
           sku?: string
         }
         Relationships: [
@@ -1729,6 +1796,7 @@ export type Database = {
           criado_em: string
           id: string
           lida_em: string | null
+          lote_cerveja_id: string | null
           pedido_id: string | null
           perfil_id: string
           quantidade: number
@@ -1744,6 +1812,7 @@ export type Database = {
           criado_em?: string
           id?: string
           lida_em?: string | null
+          lote_cerveja_id?: string | null
           pedido_id?: string | null
           perfil_id: string
           quantidade?: number
@@ -1759,6 +1828,7 @@ export type Database = {
           criado_em?: string
           id?: string
           lida_em?: string | null
+          lote_cerveja_id?: string | null
           pedido_id?: string | null
           perfil_id?: string
           quantidade?: number
@@ -1780,6 +1850,13 @@ export type Database = {
             columns: ["campanha_id"]
             isOneToOne: false
             referencedRelation: "vw_campanhas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificacoes_lote_cerveja_id_fkey"
+            columns: ["lote_cerveja_id"]
+            isOneToOne: false
+            referencedRelation: "lotes_cervejas"
             referencedColumns: ["id"]
           },
           {
@@ -3528,6 +3605,7 @@ export type Database = {
       caixa_do_whatsapp: { Args: { p_whatsapp: string }; Returns: Json }
       caixa_publica: { Args: { p_pedido_id: string }; Returns: Json }
       fechar_caixa: { Args: { p_pedido_id: string }; Returns: undefined }
+      conciliar_lotes: { Args: { p_cerveja_id: string }; Returns: number }
       concluir_cobranca_pix: {
         Args: { p_cobranca_id: string; p_dados: Json }
         Returns: undefined

@@ -19,6 +19,7 @@ function destinoDoAviso(a: Aviso) {
   if (a.atendimento_id) return `/atendimento?aba=abertos&id=${a.atendimento_id}`
   if (a.pedido_id) return `/pedidos/${a.pedido_id}`
   if (a.campanha_id) return `/campanhas/${a.campanha_id}`
+  if (a.lote_cerveja_id) return `/lotes/${a.lote_cerveja_id}`
   if (a.tipo === 'estoque_olist') return '/configuracoes/olist#estoque-olist'
   if (a.tipo === 'caixa_vencida') return '/pedidos'
   return null
@@ -119,7 +120,7 @@ export function SinoAvisos({ itens, naoLidos, variante }: PropsAvisos & { varian
                 {itens.map((a) => {
                   const mensagem = a.tipo === 'whatsapp_mensagem'
                   const pix = a.tipo === 'pix_recebido'
-                  const estoque = a.tipo === 'estoque_olist' || a.tipo === 'caixa_vencida'
+                  const estoque = a.tipo === 'estoque_olist' || a.tipo === 'caixa_vencida' || a.tipo === 'lote_sem_registro'
                   const campanha = a.tipo === 'campanha_aprovada'
                   const destino = destinoDoAviso(a)
                   const conteudo = (
