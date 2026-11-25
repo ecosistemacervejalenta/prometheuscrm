@@ -11,18 +11,24 @@ function dataValida(valor: string) {
   return ano >= 2000 && ano <= 2100
 }
 
-/** Unidades do lote: número inteiro ("1200" ou "1.200"). */
-const quantidade = (minimo: number) =>
-  z.preprocess(
+/**
+ * Unidades do lote: número inteiro ("1200" ou "1.200"). Só é obrigatória quando a cerveja tem
+ * mais de um lote; com um lote só, em branco = o estoque da Olist.
+ */
+function quantidade({ minimo, obrigatoria }: { minimo: number; obrigatoria: boolean }) {
+  const numero = z
+    .number({ error: obrigatoria ? 'Com mais de um lote, informe a quantidade.' : 'Use só números.' })
+    .min(minimo, 'A quantidade deve ser maior que zero.')
+    .max(1_000_000, 'Quantidade alta demais.')
+  return z.preprocess(
     (v) => {
       const digitado = typeof v === 'string' ? v.trim().replace(/\./g, '') : ''
+      if (digitado === '') return obrigatoria ? undefined : null
       return /^\d+$/.test(digitado) ? Number(digitado) : undefined
     },
-    z
-      .number({ error: 'Informe a quantidade.' })
-      .min(minimo, 'A quantidade deve ser maior que zero.')
-      .max(1_000_000, 'Quantidade alta demais.'),
+    obrigatoria ? numero : numero.nullable(),
   )
+}
 
 export const esquemaSku = z.object({
   sku: texto('Informe o SKU da cerveja.').max(60, 'O SKU pode ter no máximo 60 caracteres.'),
@@ -36,8 +42,10 @@ const camposDoLote = {
   validade: z.string({ error: 'Informe a validade.' }).refine(dataValida, 'Informe a validade.'),
 }
 
-/** Lote novo: a quantidade é obrigatória e maior que zero. */
-export const esquemaLote = z.object({ ...camposDoLote, quantidade: quantidade(1) })
-
-/** Edição: aceita zero (o lote acabou, mas o registro fica). */
-export const esquemaLoteEditado = z.object({ ...camposDoLote, quantidade: quantidade(0) })
+/**
+ * Lote + validade (+ quantidade).
+ *   • variosLotes: a cerveja fica com mais de um lote → a quantidade de cada um é obrigatória.
+ *   • edicao: aceita zero (o lote acabou, mas o registro fica).
+ */
+export const esquemaLote = ({ variosLotes, edicao = false }: { variosLotes: boolean; edicao?: boolean }) =>
+  z.object({ ...camposDoLote, quantidade: quantidade({ minimo: edicao ? 0 : 1, obrigatoria: variosLotes }) })

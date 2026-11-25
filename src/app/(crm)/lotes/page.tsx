@@ -90,7 +90,7 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
           <EmptyState
             icone={CalendarClock}
             titulo="Nenhuma cerveja no controle"
-            descricao="Digite acima o SKU de uma cerveja para puxá-la da Olist. Depois é só cadastrar os lotes, com quantidade e validade."
+            descricao="Digite acima o SKU de uma cerveja para puxá-la da Olist. Depois é só cadastrar o lote e a validade."
           />
         </Card>
       ) : (
@@ -184,7 +184,7 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
                       href={`/lotes/${l.cerveja.id}`}
                       inicio={<FotoProduto url={l.cerveja.foto_url} nome={l.cerveja.nome} />}
                       titulo={l.cerveja.nome}
-                      subtitulo={`Lote ${l.lote} · ${l.quantidade === null ? 'sem quantidade' : unidades(l.quantidade)}`}
+                      subtitulo={`Lote ${l.lote} · ${l.unidades !== null ? `${unidades(l.unidades)}${l.daOlist ? ' (Olist)' : ''}` : l.daOlist ? 'estoque da Olist' : 'falta a quantidade'}`}
                       extra={
                         <span className="flex flex-wrap items-center gap-2">
                           <SeloValidade validade={l.validade} />
@@ -217,8 +217,15 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
                           </Link>
                         </TD>
                         <TD className="tipo-dado whitespace-nowrap">{l.lote}</TD>
-                        <TD className="tipo-dado text-right whitespace-nowrap">
-                          {l.quantidade === null ? <span className="text-sutil">—</span> : unidades(l.quantidade)}
+                        <TD className="text-right whitespace-nowrap">
+                          {l.unidades !== null ? (
+                            <span className="tipo-dado">{unidades(l.unidades)}</span>
+                          ) : l.daOlist ? (
+                            <span className="tipo-dado text-sutil">—</span>
+                          ) : (
+                            <span className="text-[13px] font-semibold text-alerta">Informar</span>
+                          )}
+                          {l.daOlist && <span className="block text-[11px] leading-4 text-suave">estoque da Olist</span>}
                         </TD>
                         <TD className="tipo-dado text-[13px] whitespace-nowrap text-suave">{formatarData(l.validade)}</TD>
                         <TD>

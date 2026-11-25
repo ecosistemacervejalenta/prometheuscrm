@@ -8,8 +8,16 @@ export type LoteDaCerveja = {
   id: string
   lote: string
   validade: string
-  /** Unidades do lote (null = lote antigo, cadastrado antes de existir a quantidade). */
+  /** Quantidade digitada no CRM (null = não informada). Só é preciso quando a cerveja tem mais de um lote. */
   quantidade: number | null
+  /**
+   * Unidades que valem para o lote: a quantidade digitada ou, se ele for o único lote da cerveja,
+   * o estoque da Olist. null = falta informar (mais de um lote e este sem quantidade) ou a Olist
+   * não informou o estoque.
+   */
+  unidades: number | null
+  /** As unidades vêm do estoque da Olist (lote único, sem quantidade digitada). */
+  daOlist: boolean
 }
 
 export type CervejaComLotes = {
@@ -35,11 +43,24 @@ export type FiltroLotes = (typeof FILTROS_LOTES)[number]
 
 const CAMPOS = 'id, sku, nome, foto_url, estoque_olist, estoque_lido_em, lotes(id, lote, validade, quantidade)'
 
-function paraCerveja(linha: CervejaComLotes): CervejaComLotes {
+type Linha = Omit<CervejaComLotes, 'lotes'> & { lotes: Array<Pick<LoteDaCerveja, 'id' | 'lote' | 'validade' | 'quantidade'>> }
+
+/**
+ * Com um lote só, a quantidade dele é o estoque da Olist (não precisa digitar). Com mais de um,
+ * vale a quantidade digitada em cada lote.
+ */
+function paraCerveja(linha: Linha): CervejaComLotes {
+  const estoque = linha.estoque_olist === null ? null : Number(linha.estoque_olist)
+  const unico = linha.lotes.length === 1
   return {
     ...linha,
-    estoque_olist: linha.estoque_olist === null ? null : Number(linha.estoque_olist),
-    lotes: [...linha.lotes].sort((a, b) => a.validade.localeCompare(b.validade) || a.lote.localeCompare(b.lote)),
+    estoque_olist: estoque,
+    lotes: linha.lotes
+      .map((lote) => {
+        const daOlist = unico && lote.quantidade === null
+        return { ...lote, daOlist, unidades: daOlist ? estoque : lote.quantidade }
+      })
+      .sort((a, b) => a.validade.localeCompare(b.validade) || a.lote.localeCompare(b.lote)),
   }
 }
 
@@ -68,9 +89,9 @@ export function lotesPorValidade(cervejas: CervejaComLotes[]): LoteComCerveja[] 
 
 export type ContagemLotes = { lotes: number; unidades: number }
 
-/** Soma lotes e unidades (lote sem quantidade informada conta como lote, com 0 unidade). */
-export function contarLotes(lotes: Array<{ quantidade: number | null }>): ContagemLotes {
-  return { lotes: lotes.length, unidades: lotes.reduce((soma, l) => soma + (l.quantidade ?? 0), 0) }
+/** Soma lotes e unidades (lote com a quantidade por informar conta como lote, com 0 unidade). */
+export function contarLotes(lotes: Array<{ unidades: number | null }>): ContagemLotes {
+  return { lotes: lotes.length, unidades: lotes.reduce((soma, l) => soma + (l.unidades ?? 0), 0) }
 }
 
 export type ResumoDosLotes = {

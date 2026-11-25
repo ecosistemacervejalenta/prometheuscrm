@@ -10,7 +10,7 @@ import { exigirEquipe } from '@/lib/auth'
 import { formatarNumero } from '@/lib/format'
 import { agruparLista, formParaObjeto } from '@/lib/validacao'
 
-import { esquemaLote, esquemaLoteEditado, esquemaSku, MAX_LOTES_POR_VEZ } from './schema'
+import { esquemaLote, esquemaSku, MAX_LOTES_POR_VEZ } from './schema'
 
 /**
  * Lotes e validades. A Olist é só consultada (nome, SKU, foto e estoque do produto):
@@ -123,6 +123,9 @@ export async function removerCervejaDosLotes(id: string): Promise<EstadoAcao> {
  * Cadastra um ou vários lotes da cerveja de uma vez (campos "lotes.0.lote", "lotes.0.quantidade",
  * "lotes.0.validade", "lotes.1.lote"...). Linhas totalmente em branco são ignoradas; se alguma
  * linha tiver problema, nada é salvo e o erro aparece no campo dela.
+ *
+ * Quantidade: com um lote só, fica em branco (vale o estoque da Olist). Se a cerveja ficar com
+ * mais de um lote, a quantidade de cada lote novo é obrigatória.
  */
 export async function adicionarLotes(cervejaId: string, _: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
   const { supabase } = await exigirEquipe()
@@ -130,25 +133,23 @@ export async function adicionarLotes(cervejaId: string, _: EstadoAcao, formData:
   const linhas = agruparLista(formParaObjeto(formData), 'lotes').lotes.slice(0, MAX_LOTES_POR_VEZ)
   const preenchidas = linhas.map((linha, indice) => ({ linha, indice })).filter(({ linha }) => texto(linha.lote) || texto(linha.quantidade) || texto(linha.validade))
   if (preenchidas.length === 0) {
-    return {
-      ok: false,
-      mensagem: 'Informe o lote, a quantidade e a validade.',
-      erros: { 'lotes.0.lote': ['Informe o lote.'], 'lotes.0.quantidade': ['Informe a quantidade.'], 'lotes.0.validade': ['Informe a validade.'] },
-    }
+    return { ok: false, mensagem: 'Informe o lote e a validade.', erros: { 'lotes.0.lote': ['Informe o lote.'], 'lotes.0.validade': ['Informe a validade.'] } }
   }
 
+  const { data: existentes, error: erroLeitura } = await supabase.from('lotes').select('lote, quantidade').eq('cerveja_id', cervejaId)
+  if (erroLeitura) return falha(traduzirErro(erroLeitura))
+  const esquema = esquemaLote({ variosLotes: existentes.length + preenchidas.length > 1 })
+
   const erros: Record<string, string[]> = {}
-  const novos: Array<{ indice: number; lote: string; quantidade: number; validade: string }> = []
+  const novos: Array<{ indice: number; lote: string; quantidade: number | null; validade: string }> = []
   for (const { linha, indice } of preenchidas) {
-    const dados = esquemaLote.safeParse(linha)
+    const dados = esquema.safeParse(linha)
     if (dados.success) novos.push({ indice, ...dados.data })
     else for (const problema of dados.error.issues) (erros[`lotes.${indice}.${String(problema.path[0])}`] ??= []).push(problema.message)
   }
 
   // O mesmo código duas vezes na lista, ou já cadastrado nesta cerveja.
-  const { data: existentes, error: erroLeitura } = await supabase.from('lotes').select('lote').eq('cerveja_id', cervejaId)
-  if (erroLeitura) return falha(traduzirErro(erroLeitura))
-  const cadastrados = new Set((existentes ?? []).map((l) => l.lote.toLowerCase()))
+  const cadastrados = new Set(existentes.map((l) => l.lote.toLowerCase()))
   const naLista = new Set<string>()
   for (const { indice, lote } of novos) {
     const codigo = lote.toLowerCase()
@@ -161,12 +162,20 @@ export async function adicionarLotes(cervejaId: string, _: EstadoAcao, formData:
   const { error } = await supabase.from('lotes').insert(novos.map(({ lote, quantidade, validade }) => ({ cerveja_id: cervejaId, lote, quantidade, validade })))
   if (error) return falha(traduzirErro(error))
   revalidatePath('/lotes', 'layout')
-  return sucesso(novos.length === 1 ? `Lote ${novos[0].lote} cadastrado.` : `${novos.length} lotes cadastrados.`)
+
+  // Lote que estava sozinho (valia o estoque da Olist) agora divide o estoque com os novos.
+  const semQuantidade = existentes.filter((l) => l.quantidade === null).map((l) => l.lote)
+  const cadastrado = novos.length === 1 ? `Lote ${novos[0].lote} cadastrado.` : `${novos.length} lotes cadastrados.`
+  return sucesso(semQuantidade.length ? `${cadastrado} Agora informe também a quantidade do lote ${semQuantidade.join(', ')}.` : cadastrado)
 }
 
 export async function editarLote(id: string, _: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
   const { supabase } = await exigirEquipe()
-  const dados = esquemaLoteEditado.safeParse(formParaObjeto(formData))
+  const { data: atual } = await supabase.from('lotes').select('cerveja_id').eq('id', id).maybeSingle()
+  if (!atual) return falha('Lote não encontrado.')
+  const { count } = await supabase.from('lotes').select('id', { count: 'exact', head: true }).eq('cerveja_id', atual.cerveja_id)
+
+  const dados = esquemaLote({ variosLotes: (count ?? 0) > 1, edicao: true }).safeParse(formParaObjeto(formData))
   if (!dados.success) return errosDeValidacao(dados.error)
 
   const { error } = await supabase.from('lotes').update(dados.data).eq('id', id)
