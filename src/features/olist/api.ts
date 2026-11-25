@@ -87,8 +87,40 @@ type OpcoesRequisicao = {
   esperarLimite?: boolean
 }
 
+/**
+ * TRAVA DE ESCRITA — a Olist é o ERP da empresa. O CRM só LÊ a Olist, com UMA exceção: lançar
+ * entrada/saída de estoque (POST /estoque/{id}, o mesmo que "Lançar estoque" na tela da Olist).
+ * Nada de cadastro de produto (descrição, peso, EAN, preços, custo...), pedidos ou notas.
+ * Qualquer outra escrita é barrada aqui, antes de sair do servidor. Não afrouxe esta trava.
+ */
+const ESCRITA_PERMITIDA = /^\/estoque\/\d+$/
+const CAMPOS_DO_LANCAMENTO = new Set(['tipo', 'quantidade', 'precoUnitario', 'observacoes'])
+
+export class EscritaBloqueadaOlist extends Error {}
+
+function conferirEscritaOlist(metodo: string, caminho: string, corpo: unknown) {
+  if (metodo === 'GET') {
+    if (corpo !== undefined) throw new EscritaBloqueadaOlist('Bloqueado: leitura na Olist não leva corpo.')
+    return
+  }
+  const bloquear = (motivo: string) => {
+    throw new EscritaBloqueadaOlist(`Bloqueado pela trava de escrita da Olist (${metodo} ${caminho.split('?')[0]}): ${motivo}`)
+  }
+  if (metodo !== 'POST' || !ESCRITA_PERMITIDA.test(caminho)) bloquear('o CRM só pode lançar estoque.')
+  if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo)) bloquear('lançamento sem dados.')
+  const dados = corpo as Record<string, unknown>
+  const extras = Object.keys(dados).filter((campo) => !CAMPOS_DO_LANCAMENTO.has(campo))
+  if (extras.length) bloquear(`campo não permitido: ${extras.join(', ')}.`)
+  // "B" (balanço) troca o saldo inteiro por um número: proibido. Só entrada ou saída.
+  if (dados.tipo !== 'S' && dados.tipo !== 'E') bloquear('tipo precisa ser S (saída) ou E (entrada).')
+  const { quantidade, precoUnitario } = dados
+  if (typeof quantidade !== 'number' || !Number.isInteger(quantidade) || quantidade <= 0 || quantidade > 1000) bloquear('quantidade inválida.')
+  if (typeof precoUnitario !== 'number' || !Number.isFinite(precoUnitario) || precoUnitario < 0) bloquear('preço unitário inválido.')
+}
+
 async function requisicao(caminho: string, accessToken: string, opcoes: OpcoesRequisicao = {}): Promise<unknown> {
   const { metodo = 'GET', corpo, esperarLimite = true } = opcoes
+  conferirEscritaOlist(metodo, caminho, corpo)
   // Escrita não é repetida às cegas: um lançamento de estoque em dobro é pior que um atraso.
   const podeRepetir = metodo === 'GET'
   for (let tentativa = 1; ; tentativa++) {
@@ -382,16 +414,39 @@ export async function obterEstoqueOlist(accessToken: string, id: number, opcoes:
   }
 }
 
-/** Lançamento avulso de estoque (S = saída, E = entrada) no depósito padrão. Devolve o id do lançamento. */
+/**
+ * Custo unitário que acompanha o lançamento de estoque: SEMPRE o custo médio atual do produto
+ * na Olist, exato — inclusive 0. Lançar pelo mesmo valor da média não muda a média (nem na
+ * saída da venda, nem na entrada da devolução). Nunca usar o preço de custo nem o de venda aqui:
+ * com média 0, uma entrada pelo preço de custo puxaria a média para cima.
+ */
+async function custoUnitarioOlist(accessToken: string, id: number): Promise<number> {
+  const p = (await requisicao(`/produtos/${id}`, accessToken, { esperarLimite: false })) as {
+    precos?: { precoCustoMedio?: number | null } | null
+  } | null
+  const medio = p?.precos?.precoCustoMedio
+  return typeof medio === 'number' && Number.isFinite(medio) && medio >= 0 ? medio : 0
+}
+
+/**
+ * Lançamento avulso de estoque (S = saída, E = entrada) no depósito padrão. Devolve o id do lançamento.
+ * A Olist exige `precoUnitario` (sem ele responde 400 "Este valor não deve ser vazio").
+ */
 export async function lancarEstoqueOlist(
   accessToken: string,
   id: number,
   lancamento: { tipo: 'S' | 'E'; quantidade: number; observacoes: string },
 ): Promise<number | null> {
+  const precoUnitario = await custoUnitarioOlist(accessToken, id)
   const r = (await requisicao(`/estoque/${id}`, accessToken, {
     metodo: 'POST',
     esperarLimite: false,
-    corpo: { tipo: lancamento.tipo, quantidade: lancamento.quantidade, observacoes: lancamento.observacoes.slice(0, 250) },
+    corpo: {
+      tipo: lancamento.tipo,
+      quantidade: lancamento.quantidade,
+      precoUnitario,
+      observacoes: lancamento.observacoes.slice(0, 250),
+    },
   })) as { idLancamento?: number } | null
   return typeof r?.idLancamento === 'number' ? r.idLancamento : null
 }

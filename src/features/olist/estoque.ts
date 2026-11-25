@@ -158,13 +158,29 @@ export type ResultadoFilaEstoque = {
   motivo?: string
 }
 
-/** Texto do lançamento na Olist (aparece no histórico do estoque do produto). */
+/** Por que o banco criou o lançamento (coluna motivo), em palavras para o histórico da Olist. */
+const MOTIVO_NA_OLIST: Record<string, string> = {
+  venda: 'venda no link da pré-venda',
+  item_alterado: 'quantidade alterada na caixa',
+  reabertura: 'pedido reaberto',
+  cancelamento: 'pedido cancelado',
+  caixa_vencida: 'caixa vencida sem pagamento',
+  item_removido: 'item removido da caixa',
+  pedido_excluido: 'pedido excluído',
+}
+
+/**
+ * Texto do lançamento na Olist (aparece no histórico do estoque do produto). Deixa claro que
+ * foi o CRM, que foi AUTOMÁTICO e por quê — a devolução manual (botão da pré-venda) tem texto
+ * próprio, gravado no movimento, e nunca é somada a estes.
+ */
 function observacaoDoLote(movimentos: Movimento[], tipo: 'S' | 'E', lote: string): string {
   const numeros = [...new Set(movimentos.map((m) => m.pedido_numero).filter((n): n is number => typeof n === 'number'))].sort((a, b) => a - b)
   const lista = numeros.slice(0, 8).map((n) => `#${n}`).join(', ')
   const resto = numeros.length > 8 ? ` e mais ${numeros.length - 8}` : ''
-  const acao = tipo === 'S' ? 'venda na pré-venda' : 'devolução (cancelada/vencida)'
-  return `Prometheus CRM · ${acao}${lista ? ` · Caixa VIP ${lista}${resto}` : ''} · ref ${lote.slice(0, 8)}`
+  const motivos = [...new Set(movimentos.map((m) => MOTIVO_NA_OLIST[m.motivo] ?? m.motivo))].join(', ')
+  const acao = tipo === 'S' ? 'BAIXA AUTOMÁTICA' : 'DEVOLUÇÃO AUTOMÁTICA'
+  return `Prometheus CRM · ${acao} (${motivos})${lista ? ` · Caixa VIP ${lista}${resto}` : ''} · ref ${lote.slice(0, 8)}`
 }
 
 async function devolverParaFila(supabase: Admin, ids: number[], segundos: number, erro?: string) {
