@@ -558,6 +558,7 @@ export type Database = {
       }
       clientes: {
         Row: {
+          anonimizado_em: string | null
           app_usuario_id: string | null
           atualizado_em: string
           bairro: string | null
@@ -582,6 +583,7 @@ export type Database = {
           whatsapp: string | null
         }
         Insert: {
+          anonimizado_em?: string | null
           app_usuario_id?: string | null
           atualizado_em?: string
           bairro?: string | null
@@ -606,6 +608,7 @@ export type Database = {
           whatsapp?: string | null
         }
         Update: {
+          anonimizado_em?: string | null
           app_usuario_id?: string | null
           atualizado_em?: string
           bairro?: string | null
@@ -1560,6 +1563,66 @@ export type Database = {
           id?: boolean
           pendente?: boolean
           whatsapp_unicos?: number
+        }
+        Relationships: []
+      }
+      link_codigos: {
+        Row: {
+          codigo_hash: string
+          confirmado_em: string | null
+          criado_em: string
+          expira_em: string
+          id: string
+          ip_hash: string | null
+          tentativas: number
+          whatsapp: string
+        }
+        Insert: {
+          codigo_hash: string
+          confirmado_em?: string | null
+          criado_em?: string
+          expira_em: string
+          id?: string
+          ip_hash?: string | null
+          tentativas?: number
+          whatsapp: string
+        }
+        Update: {
+          codigo_hash?: string
+          confirmado_em?: string | null
+          criado_em?: string
+          expira_em?: string
+          id?: string
+          ip_hash?: string | null
+          tentativas?: number
+          whatsapp?: string
+        }
+        Relationships: []
+      }
+      link_sessoes: {
+        Row: {
+          criado_em: string
+          expira_em: string
+          id: string
+          token_hash: string
+          usado_em: string
+          whatsapp: string
+        }
+        Insert: {
+          criado_em?: string
+          expira_em: string
+          id?: string
+          token_hash: string
+          usado_em?: string
+          whatsapp: string
+        }
+        Update: {
+          criado_em?: string
+          expira_em?: string
+          id?: string
+          token_hash?: string
+          usado_em?: string
+          whatsapp?: string
         }
         Relationships: []
       }
@@ -3604,6 +3667,24 @@ export type Database = {
       }
       caixa_do_whatsapp: { Args: { p_whatsapp: string }; Returns: Json }
       caixa_publica: { Args: { p_pedido_id: string }; Returns: Json }
+      anonimizar_cliente: { Args: { p_cliente_id: string }; Returns: Json }
+      conferir_codigo_link: {
+        Args: {
+          p_codigo_hash: string
+          p_dias?: number
+          p_token_hash: string
+          p_whatsapp: string
+        }
+        Returns: Json
+      }
+      descartar_codigo_link: { Args: { p_id: string }; Returns: undefined }
+      emitir_codigo_link: {
+        Args: { p_codigo_hash: string; p_ip_hash?: string; p_whatsapp: string }
+        Returns: Json
+      }
+      encerrar_sessao_link: { Args: { p_token_hash: string }; Returns: undefined }
+      whatsapp_da_sessao_link: { Args: { p_token_hash: string }; Returns: string }
+      whatsapp_do_pedido: { Args: { p_pedido_id: string }; Returns: string }
       fechar_caixa: { Args: { p_pedido_id: string }; Returns: undefined }
       conciliar_lotes: { Args: { p_cerveja_id: string }; Returns: number }
       concluir_cobranca_pix: {

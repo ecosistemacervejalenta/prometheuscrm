@@ -10,11 +10,13 @@ import { normalizarWhatsapp, whatsappValido } from '@/lib/whatsapp'
 import { agendarProcessamentoDeEventos } from '../../integracoes/eventos'
 import { agendarFilaEstoqueOlist } from '../../olist/estoque'
 import { lerCaixa, type CaixaPublica } from './caixa-dados'
+import { aparelhoConfirmou, conferirCodigo, enviarCodigo, esquecerAparelho, mesmoNumero, whatsappConfirmado } from './verificacao'
 
 /**
  * Ações do link PÚBLICO de pré-venda (sem login).
  * Rodam no servidor com a chave secreta e chamam funções do banco que
  * validam tudo (pré-venda ativa, preços, limites, estoque, frete e a Caixa VIP).
+ * Cadastro, caixa e compra exigem o WhatsApp confirmado por código neste aparelho (./verificacao).
  */
 
 /** O CEP tem frete fixo (lista de CEPs VIP)? Só responde para pré-vendas ativas. */
@@ -66,7 +68,7 @@ const esquemaConfirmacao = z.object({
 
 export type ResultadoConfirmacao =
   | { ok: true; pedidoId: string; numero: number; total: number; subtotal: number; taxaEntrega: number; frete: 'vip' | 'a_cotar'; caixa: CaixaPublica | null }
-  | { ok: false; mensagem: string }
+  | { ok: false; mensagem: string; precisaCodigo?: boolean }
 
 export async function confirmarPedidoPreVenda(entrada: z.input<typeof esquemaConfirmacao>): Promise<ResultadoConfirmacao> {
   const dados = esquemaConfirmacao.safeParse(entrada)
@@ -74,6 +76,11 @@ export async function confirmarPedidoPreVenda(entrada: z.input<typeof esquemaCon
 
   const { slug, whatsapp, itens, observacoes, cliente, email } = dados.data
   if (cliente && !email) return { ok: false, mensagem: 'Informe o seu e-mail.' }
+
+  // Só compra quem confirmou o WhatsApp neste aparelho: ninguém mexe na caixa nem no endereço de outra pessoa.
+  if (!(await aparelhoConfirmou(whatsapp))) {
+    return { ok: false, precisaCodigo: true, mensagem: 'Confirme o seu WhatsApp com o código para continuar.' }
+  }
 
   const db = createAdminClient()
   const numeroWhatsapp = normalizarWhatsapp(whatsapp) ?? ''
@@ -130,26 +137,66 @@ export async function confirmarPedidoPreVenda(entrada: z.input<typeof esquemaCon
 // -----------------------------------------------------------------------------
 
 export type ResultadoIdentificacao =
-  | { ok: true; cadastro: CadastroDoCliente | null; caixa: CaixaPublica | null }
+  | { ok: true; precisaCodigo: false; cadastro: CadastroDoCliente | null; caixa: CaixaPublica | null }
+  /** Mandamos um código no WhatsApp: o link pede o código antes de mostrar qualquer dado. */
+  | { ok: true; precisaCodigo: true; enviado: boolean; espera: number; aviso?: string }
   | { ok: false; mensagem: string }
 
+async function preVendaAtiva(slug: string) {
+  const { data } = await createAdminClient().from('vw_pre_vendas').select('status_efetivo').eq('slug', slug).maybeSingle()
+  return data?.status_efetivo === 'ativa'
+}
+
 /**
- * O cliente digitou o WhatsApp: devolve o cadastro dele no CRM (para o link vir preenchido em
- * qualquer pré-venda e em qualquer aparelho) e a Caixa VIP em andamento, se houver.
- * Decisão do dono da loja (2026-11-19): mostrar o cadastro inteiro só pelo WhatsApp, sem código.
+ * O cliente digitou o WhatsApp. Aparelho já confirmado para esse número → devolve o cadastro do
+ * CRM (o link vem preenchido) e a Caixa VIP em andamento. Senão → manda um código no WhatsApp
+ * e não diz nada sobre o número (nem se ele já é cliente).
+ * Decisão do dono da loja (2026-11-25, LGPD): nada do cadastro aparece sem o código.
  */
 export async function identificarCliente(slug: string, whatsapp: string): Promise<ResultadoIdentificacao> {
   if (!whatsappValido(whatsapp)) return { ok: false, mensagem: 'Confira o número: DDD + celular.' }
-  const db = createAdminClient()
-  const { data: preVenda } = await db.from('vw_pre_vendas').select('status_efetivo').eq('slug', slug).maybeSingle()
-  if (preVenda?.status_efetivo !== 'ativa') return { ok: false, mensagem: 'Esta pré-venda não está mais disponível.' }
+  if (!(await preVendaAtiva(slug))) return { ok: false, mensagem: 'Esta pré-venda não está mais disponível.' }
 
-  const numero = normalizarWhatsapp(whatsapp) ?? ''
+  if (!(await aparelhoConfirmou(whatsapp))) {
+    const r = await enviarCodigo(whatsapp)
+    return r.ok ? { ok: true, precisaCodigo: true, enviado: r.enviado, espera: r.espera, aviso: r.aviso } : r
+  }
+  return { ok: true, precisaCodigo: false, ...(await dadosDoWhatsapp(normalizarWhatsapp(whatsapp) ?? '')) }
+}
+
+/** "Reenviar código". */
+export async function reenviarCodigo(slug: string, whatsapp: string): Promise<ResultadoIdentificacao> {
+  if (!whatsappValido(whatsapp)) return { ok: false, mensagem: 'Confira o número: DDD + celular.' }
+  if (!(await preVendaAtiva(slug))) return { ok: false, mensagem: 'Esta pré-venda não está mais disponível.' }
+  const r = await enviarCodigo(whatsapp)
+  return r.ok ? { ok: true, precisaCodigo: true, enviado: r.enviado, espera: r.espera, aviso: r.aviso } : r
+}
+
+export type ResultadoCodigo =
+  | { ok: true; cadastro: CadastroDoCliente | null; caixa: CaixaPublica | null }
+  | { ok: false; mensagem: string; pedirOutro?: boolean }
+
+/** O cliente digitou o código: confirma o aparelho e devolve o cadastro e a caixa. */
+export async function confirmarCodigoWhatsapp(slug: string, whatsapp: string, codigo: string): Promise<ResultadoCodigo> {
+  if (!whatsappValido(whatsapp)) return { ok: false, mensagem: 'Confira o número: DDD + celular.' }
+  if (!(await preVendaAtiva(slug))) return { ok: false, mensagem: 'Esta pré-venda não está mais disponível.' }
+  const r = await conferirCodigo(whatsapp, codigo)
+  if (!r.ok) return r
+  return { ok: true, ...(await dadosDoWhatsapp(normalizarWhatsapp(whatsapp) ?? '')) }
+}
+
+/** "Não sou eu" / trocar de número: este aparelho deixa de ver os dados do número confirmado. */
+export async function sairDoAparelho(): Promise<void> {
+  await esquecerAparelho()
+}
+
+/** Cadastro do CRM + Caixa VIP em andamento de um WhatsApp JÁ confirmado neste aparelho. */
+async function dadosDoWhatsapp(numero: string): Promise<{ cadastro: CadastroDoCliente | null; caixa: CaixaPublica | null }> {
+  const db = createAdminClient()
   const [cadastro, { data, error }] = await Promise.all([lerCadastro(db, numero), db.rpc('caixa_do_whatsapp', { p_whatsapp: numero })])
   if (error) console.error('[pre-venda] identificar caixa', error.message)
   const r = (data ?? {}) as { caixa?: unknown }
   return {
-    ok: true,
     cadastro: cadastro && {
       nome: cadastro.nome,
       email: cadastro.email ?? '',
@@ -236,11 +283,16 @@ export async function minhaCaixa(pedidoId: string): Promise<CaixaPublica | null>
   return lerCaixa(data)
 }
 
-/** O cliente escolheu "fechar a caixa e pagar agora". */
+/** O cliente escolheu "fechar a caixa e pagar agora" (só do aparelho que confirmou o WhatsApp do dono da caixa). */
 export async function fecharMinhaCaixa(pedidoId: string): Promise<CaixaPublica | null> {
   const id = idPedido.safeParse(pedidoId)
   if (!id.success) return null
   const db = createAdminClient()
+  const [confirmado, { data: dono }] = await Promise.all([whatsappConfirmado(), db.rpc('whatsapp_do_pedido', { p_pedido_id: id.data })])
+  if (!mesmoNumero(confirmado, dono)) {
+    const { data } = await db.rpc('caixa_publica', { p_pedido_id: id.data })
+    return lerCaixa(data)
+  }
   const { error } = await db.rpc('fechar_caixa', { p_pedido_id: id.data })
   if (error) console.error('[pre-venda] fechar caixa', error.message)
   const { data } = await db.rpc('caixa_publica', { p_pedido_id: id.data })

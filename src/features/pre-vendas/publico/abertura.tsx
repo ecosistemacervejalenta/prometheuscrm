@@ -7,6 +7,7 @@ import type { ReactNode } from 'react'
 import { formatarData, formatarDataHora, formatarMoeda } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
+import { AvisoPrivacidade } from './aviso-privacidade'
 import { detalhesDa, Miniatura, TextoWhatsapp, type CervejaDoLink } from './cartao-cerveja'
 import { classeBotaoGrande } from './estilos'
 
@@ -123,6 +124,7 @@ export function AberturaPreVenda({
         Começar <ArrowRight aria-hidden />
       </button>
       <p className="mt-3 text-center text-[13px] text-suave">Leva menos de 1 minuto.</p>
+      <AvisoPrivacidade curto className="mt-6" />
     </>
   )
 }

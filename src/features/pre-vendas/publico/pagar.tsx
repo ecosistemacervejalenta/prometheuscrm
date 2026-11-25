@@ -2,6 +2,7 @@ import { CircleX, Heart, Truck } from 'lucide-react'
 
 import { formatarData, formatarMoeda, numeroPedido } from '@/lib/format'
 
+import { AvisoPrivacidade } from './aviso-privacidade'
 import { CaixaIlustracao, ConteudoDaCaixa } from './caixa'
 import { caixaQuitada, gruposDaCaixa } from './caixa-dados'
 import { PixChaveLoja } from './pagamento'
@@ -102,6 +103,8 @@ export function PaginaPagarPedido({ dados }: { dados: PedidoParaPagar }) {
           Sua caixa é fechada e enviada com todo o carinho até você.
         </p>
       )}
+
+      <AvisoPrivacidade curto className="pt-2" />
     </div>
   )
 }

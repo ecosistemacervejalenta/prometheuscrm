@@ -2,6 +2,8 @@ import 'server-only'
 
 import { envServidor } from '@/lib/env.server'
 
+import { ORIGEM_MENSAGEM_DE_SISTEMA } from './normalizacao'
+
 /**
  * Cliente da uazapi (WhatsApp Web da loja) — só o que o Atendimento usa.
  * Doc: https://docs.uazapi.com · autenticação pelo header "token" (token da instância).
@@ -129,6 +131,14 @@ export function enviarTexto(chatid: string, texto: string, trackId: string) {
   return chamar<MensagemUazapi>('/send/text', {
     corpo: { number: chatid, text: texto, track_source: 'prometheus', track_id: trackId, readchat: true },
     timeoutMs: 25_000,
+  })
+}
+
+/** Envia uma mensagem automática que fica fora do Atendimento (não abre conversa nem mexe na fila). */
+export function enviarTextoDeSistema(chatid: string, texto: string, trackId: string) {
+  return chamar<MensagemUazapi>('/send/text', {
+    corpo: { number: chatid, text: texto, track_source: ORIGEM_MENSAGEM_DE_SISTEMA, track_id: trackId },
+    timeoutMs: 20_000,
   })
 }
 

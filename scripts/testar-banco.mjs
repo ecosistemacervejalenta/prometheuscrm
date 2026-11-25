@@ -465,17 +465,17 @@ const vendaTeste = await um(`select id, numero, total, cliente_id from registrar
   JSON.stringify({ whatsapp: '11955550009', nome: 'Teste Exclusão', cep: '01310-100', logradouro: 'Rua A', numero: '1', bairro: 'B', cidade: 'São Paulo', uf: 'SP' }),
   JSON.stringify([{ produto_id: itens[0].produto_id, quantidade: 1 }])])
 await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${uid}', false);`)
-await expectError('pré-venda com pedidos não é excluída sem confirmar', `select excluir_pre_venda($1)`, [pvExcluir.id])
 await q(`select excluir_pedido($1)`, [vendaTeste.id])
 expectEq('admin exclui a venda (sai do faturamento)', Number((await um(`select count(*) n from pedidos where id = $1`, [vendaTeste.id])).n), 0)
 expectEq('linha do tempo do cliente registra a exclusão', (await um(`select descricao from atividades where cliente_id = $1 and tipo = 'pedido_excluido'`, [vendaTeste.cliente_id]))?.descricao?.startsWith(`Pedido #${vendaTeste.numero} excluído`), true)
 await db.exec(`reset role;`)
-await q(`select registrar_pedido_pre_venda($1, $2::jsonb, $3::jsonb, true)`, [slugExcluir,
+const vendaFica = await um(`select id from registrar_pedido_pre_venda($1, $2::jsonb, $3::jsonb, true)`, [slugExcluir,
   JSON.stringify({ whatsapp: '11955550009', cep: '01310-100', logradouro: 'Rua A', numero: '1', bairro: 'B', cidade: 'São Paulo', uf: 'SP' }),
   JSON.stringify([{ produto_id: itens[0].produto_id, quantidade: 2 }])])
 await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${uid}', false);`)
-expectEq('admin exclui a pré-venda junto com os pedidos', (await um(`select excluir_pre_venda($1, true) n`, [pvExcluir.id])).n, 1)
-expectEq('pré-venda e pedidos somem', await um(`select (select count(*)::int from pre_vendas where id = $1) pv, (select count(*)::int from pedidos where pre_venda_id = $1) pe`, [pvExcluir.id]), { pv: 0, pe: 0 })
+// Desde 2026-11-19 excluir a pré-venda NÃO apaga os pedidos (histórico do cliente para sempre).
+expectEq('admin exclui a pré-venda e os pedidos ficam no histórico', (await um(`select excluir_pre_venda($1) n`, [pvExcluir.id])).n, 1)
+expectEq('a pré-venda some e o pedido fica', await um(`select (select count(*)::int from pre_vendas where id = $1) pv, (select count(*)::int from pedidos where id = $2) pe`, [pvExcluir.id, vendaFica.id]), { pv: 0, pe: 1 })
 const recMembro = await um(`insert into contas_receber (descricao, categoria, competencia, vencimento, valor)
   values ('Lançada pela equipe', 'Categoria da equipe', hoje_brasilia(), hoje_brasilia() + 5, 99.9) returning id`).catch((e) => ({ erro: e.message }))
 expectEq('membro lança conta a receber com categoria nova', recMembro.erro ?? Boolean(recMembro.id), true)
@@ -1403,6 +1403,103 @@ await db.exec(`reset role;`)
   expectEq('remover a cerveja do controle apaga os lotes e o histórico dela',
     (await um(`select (select count(*)::int from lotes where cerveja_id in ($1, $2)) + (select count(*)::int from lote_movimentos where cerveja_id in ($1, $2)) n`, [cerveja.id, ipa.id])).n, 0)
   expectEq('o aviso da cerveja removida sai do sino', (await um(`select count(*)::int n from notificacoes where tipo = 'lote_sem_registro'`)).n, 0)
+}
+
+// -----------------------------------------------------------------------------
+// Privacidade (LGPD): código no WhatsApp do link da pré-venda e anonimização do cliente
+// -----------------------------------------------------------------------------
+{
+  const como = (id) => `reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${id}', false);`
+  const servidor = `reset role; set role service_role;`
+  const atrasarCodigos = async () => {
+    await db.exec(`reset role;`)
+    await q(`update link_codigos set criado_em = criado_em - interval '2 minutes'`)
+    await db.exec(servidor)
+  }
+
+  await db.exec(servidor)
+  expectEq('link: emite código', (await um(`select emitir_codigo_link('(11) 98888-7777', 'hashA', 'ip1') r`)).r.ok, true)
+  const espera = (await um(`select emitir_codigo_link('11988887777', 'hashB', 'ip1') r`)).r
+  expectEq('link: outro código em menos de 45 s espera', [espera.ok, espera.motivo, espera.segundos > 0], [false, 'aguarde', true])
+  expectEq('link: código errado', (await um(`select conferir_codigo_link('11988887777', 'errado', 'tok1') r`)).r, { ok: false, motivo: 'errado', restantes: 4 })
+  expectEq('link: código certo confirma o aparelho', (await um(`select conferir_codigo_link('11988887777', 'hashA', 'tok1') r`)).r, { ok: true })
+  expectEq('link: aparelho devolve o número confirmado', (await um(`select whatsapp_da_sessao_link('tok1') r`)).r, '5511988887777')
+  expectEq('link: aparelho desconhecido', (await um(`select whatsapp_da_sessao_link('outro') r`)).r, null)
+  expectEq('link: código usado não vale de novo', (await um(`select conferir_codigo_link('11988887777', 'hashA', 'tok2') r`)).r.motivo, 'expirado')
+  await atrasarCodigos()
+  expectEq('link: novo código depois de 45 s', (await um(`select emitir_codigo_link('11988887777', 'hashC', 'ip1') r`)).r.ok, true)
+  for (let i = 0; i < 5; i++) await q(`select conferir_codigo_link('11988887777', 'x', 'tok3')`)
+  expectEq('link: 5 erros bloqueiam o código', (await um(`select conferir_codigo_link('11988887777', 'hashC', 'tok3') r`)).r.motivo, 'tentativas')
+  await atrasarCodigos()
+  expectEq('link: terceiro código na hora', (await um(`select emitir_codigo_link('11988887777', 'hashD', 'ip1') r`)).r.ok, true)
+  await atrasarCodigos()
+  expectEq('link: no máximo 3 códigos por hora por número', (await um(`select emitir_codigo_link('11988887777', 'hashE', 'ip1') r`)).r.motivo, 'limite')
+  const descartado = (await um(`select emitir_codigo_link('11977776666', 'h5', 'ip2') r`)).r
+  await q(`select descartar_codigo_link($1)`, [descartado.id])
+  expectEq('link: código que não saiu no WhatsApp não conta', (await um(`select emitir_codigo_link('11977776666', 'h6', 'ip2') r`)).r.ok, true)
+  for (let i = 0; i < 10; i++) await q(`select emitir_codigo_link($1, 'h', 'ip3')`, [`119555500${String(i).padStart(2, '0')}`])
+  expectEq('link: no máximo 10 códigos por hora por IP', (await um(`select emitir_codigo_link('11955558888', 'h', 'ip3') r`)).r.motivo, 'limite')
+  await q(`select encerrar_sessao_link('tok1')`)
+  expectEq('link: "Não sou eu" esquece o aparelho', (await um(`select whatsapp_da_sessao_link('tok1') r`)).r, null)
+
+  await db.exec(`reset role; set role anon;`)
+  await expectError('visitante não lê os códigos', `select * from link_codigos`)
+  await expectError('visitante não pede código direto no banco', `select emitir_codigo_link('11988887777', 'h', null)`)
+  await db.exec(como(uid))
+  await expectError('equipe não lê os aparelhos confirmados', `select * from link_sessoes`)
+  await expectError('equipe não confere código', `select conferir_codigo_link('1', '2', '3')`)
+  await db.exec(`reset role;`)
+
+  // Anonimizar: cliente com pedido, conversa, lead, campanhas e aparelho confirmado.
+  const titular = await um(`insert into clientes (nome, whatsapp, email, cpf, cep, logradouro, numero, bairro, cidade, uf, vip)
+    values ('Titular LGPD', '31977001122', 'titular@email.com', '12345678900', '30130010', 'Rua X', '10', 'Centro', 'Belo Horizonte', 'MG', true) returning id, whatsapp`)
+  const pedidoTitular = await um(`insert into pedidos (cliente_id, status, observacoes, endereco_entrega)
+    values ($1, 'confirmado', 'Interfone 32', '{"cep":"30130010","logradouro":"Rua X","numero":"10","bairro":"Centro","cidade":"Belo Horizonte","uf":"MG"}') returning id`, [titular.id])
+  const contato = await um(`insert into whatsapp_contatos (chatid, whatsapp, nome) values ('5531977001122@s.whatsapp.net', '5531977001122', 'Titular') returning id`)
+  const atend = await um(`insert into atendimentos (contato_id) values ($1) returning id`, [contato.id])
+  await q(`insert into whatsapp_mensagens (contato_id, atendimento_id, wa_id, direcao, tipo, texto, midia_path, enviada_em)
+    values ($1, $2, 'lgpd-1', 'entrada', 'imagem', 'foto', $3, now())`, [contato.id, atend.id, `${contato.id}/lgpd-1.jpg`])
+  const pastaLgpd = await um(`insert into leads_pastas (nome) values ('Pasta LGPD') returning id`)
+  const listaLgpd = await um(`insert into leads_listas (pasta_id, nome, total, com_whatsapp, com_email, ddds)
+    values ($1, 'Lista LGPD', 10, 8, 5, '{"31": 3, "11": 5}') returning id`, [pastaLgpd.id])
+  await q(`insert into leads (lista_id, linha, nome, whatsapp, email, dados) values ($1, 1, 'Titular', $2, 'titular@email.com', '{}')`, [listaLgpd.id, titular.whatsapp])
+  const campEnviada = await um(`insert into campanhas (nome, texto, origem) values ('Campanha LGPD', 'Oi', 'leads') returning id`)
+  const campPendente = await um(`insert into campanhas (nome, texto, origem) values ('Campanha LGPD 2', 'Oi', 'leads') returning id`)
+  await q(`insert into campanha_envios (campanha_id, whatsapp, nome, status, resposta) values ($1, '5531977001122', 'Titular', 'enviada', 'quero!')`, [campEnviada.id])
+  await q(`insert into campanha_envios (campanha_id, whatsapp, nome, status) values ($1, '5531977001122', 'Titular', 'pendente')`, [campPendente.id])
+  await q(`insert into link_sessoes (token_hash, whatsapp, expira_em) values ('tok-titular', $1, now() + interval '1 day')`, [titular.whatsapp])
+
+  await db.exec(como(uid))
+  await expectError('não anonimiza com pedido em andamento', `select anonimizar_cliente($1)`, [titular.id])
+  await db.exec(`reset role;`)
+  await q(`update pedidos set status = 'entregue' where id = $1`, [pedidoTitular.id])
+  await db.exec(como(uid2))
+  await expectError('membro (não admin) não anonimiza', `select anonimizar_cliente($1)`, [titular.id])
+  await db.exec(como(uid))
+  const anon = (await um(`select anonimizar_cliente($1) r`, [titular.id])).r
+  expectEq('anonimizar devolve o resumo e as mídias a apagar', anon, { leads: 1, envios: 2, midias: [`${contato.id}/lgpd-1.jpg`], pedidos: 1, conversas: 1 })
+  await expectError('não anonimiza duas vezes', `select anonimizar_cliente($1)`, [titular.id])
+  await db.exec(`reset role;`)
+  expectEq('cadastro sem dados pessoais (fica cidade/UF)',
+    await um(`select nome, whatsapp, email, cpf, cep, logradouro, cidade, uf, vip, anonimizado_em is not null anonimizado from clientes where id = $1`, [titular.id]),
+    { nome: 'Cliente anonimizado', whatsapp: null, email: null, cpf: null, cep: null, logradouro: null, cidade: 'Belo Horizonte', uf: 'MG', vip: false, anonimizado: true })
+  expectEq('pedido fica no histórico só com cidade/UF',
+    await um(`select endereco_entrega, observacoes from pedidos where id = $1`, [pedidoTitular.id]),
+    { endereco_entrega: { uf: 'MG', cidade: 'Belo Horizonte' }, observacoes: null })
+  expectEq('conversa e mensagens apagadas', await um(`select
+    (select count(*)::int from whatsapp_contatos where id = $1) contatos,
+    (select count(*)::int from whatsapp_mensagens where wa_id = 'lgpd-1') mensagens`, [contato.id]), { contatos: 0, mensagens: 0 })
+  expectEq('lead apagado e contadores da lista acertados',
+    await um(`select total, com_whatsapp, com_email, (ddds->>'31')::int d31, (select count(*)::int from leads where lista_id = $1) leads from leads_listas where id = $1`, [listaLgpd.id]),
+    { total: 9, com_whatsapp: 7, com_email: 4, d31: 2, leads: 0 })
+  expectEq('campanhas: pendente cancelado, enviado vira só estatística', await um(`select
+    (select count(*)::int from campanha_envios where whatsapp = '5531977001122') com_numero,
+    (select count(*)::int from campanha_envios where campanha_id = $2) pendentes,
+    (select nome is null and resposta is null and whatsapp like 'anonimizado-%' from campanha_envios where campanha_id = $1) anonimo`, [campEnviada.id, campPendente.id]),
+    { com_numero: 0, pendentes: 0, anonimo: true })
+  expectEq('número vai para a lista de descadastro', (await um(`select origem from whatsapp_descadastros where whatsapp = '5531977001122'`))?.origem, 'equipe')
+  expectEq('aparelho confirmado do titular esquecido', (await um(`select count(*)::int n from link_sessoes where token_hash = 'tok-titular'`)).n, 0)
+  expectEq('linha do tempo registra a anonimização', (await um(`select tipo from atividades where cliente_id = $1 order by criado_em desc limit 1`, [titular.id])).tipo, 'cliente_anonimizado')
 }
 
 if (falhas > 0) {

@@ -13,6 +13,8 @@ import {
   PackageOpen,
   Pencil,
   Phone,
+  RotateCw,
+  ShieldCheck,
   Truck,
   User,
 } from 'lucide-react'
@@ -24,7 +26,15 @@ import { formatarData, formatarMoeda } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { linkWhatsapp, mascararWhatsapp, normalizarWhatsapp, whatsappValido } from '@/lib/whatsapp'
 
-import { confirmarPedidoPreVenda, consultarFreteLink, identificarCliente, type CadastroDoCliente } from './actions'
+import {
+  confirmarCodigoWhatsapp,
+  confirmarPedidoPreVenda,
+  consultarFreteLink,
+  identificarCliente,
+  reenviarCodigo,
+  sairDoAparelho,
+  type CadastroDoCliente,
+} from './actions'
 import {
   CLIENTE_VAZIO,
   emailValido,
@@ -41,15 +51,16 @@ import { CaixaIlustracao, ConteudoDaCaixa } from './caixa'
 import { gruposDaCaixa, type CaixaPublica, type GrupoDaCaixa } from './caixa-dados'
 import { TelaCaixa } from './final-caixa'
 import { AberturaPreVenda, PerfilDaLoja } from './abertura'
+import { AvisoPrivacidade } from './aviso-privacidade'
 import { CartaoCervejaLink, textosDaEscolha } from './cartao-cerveja'
 import type { PreVendaPublica } from './queries'
 
-type Etapa = 'inicio' | 'cervejas' | 'whatsapp' | 'caixa' | 'conferir' | 'nome' | 'sobrenome' | 'email' | 'cep' | 'numero' | 'revisao' | 'pago'
+type Etapa = 'inicio' | 'cervejas' | 'whatsapp' | 'codigo' | 'caixa' | 'conferir' | 'nome' | 'sobrenome' | 'email' | 'cep' | 'numero' | 'revisao' | 'pago'
 type Item = PreVendaPublica['itens'][number]
 type ConsultaCep = { cep: string; buscando: boolean; naoEncontrado: boolean; vip: boolean | null }
 
 /** Etapas que entram no histórico do navegador (#passo-nome...): o "voltar" do Android e o gesto do iPhone voltam uma pergunta. */
-const NO_HISTORICO: Etapa[] = ['cervejas', 'whatsapp', 'caixa', 'conferir', 'nome', 'sobrenome', 'email', 'cep', 'numero', 'revisao']
+const NO_HISTORICO: Etapa[] = ['cervejas', 'whatsapp', 'codigo', 'caixa', 'conferir', 'nome', 'sobrenome', 'email', 'cep', 'numero', 'revisao']
 
 /** Etapas que contam na barra de progresso. */
 const PROGRESSO: Etapa[] = ['cervejas', 'whatsapp', 'nome', 'sobrenome', 'email', 'cep', 'numero', 'revisao']
@@ -110,12 +121,13 @@ function dadosDoCadastro(cadastro: CadastroDoCliente, atual: DadosCliente, mesma
 
 /**
  * Link público da pré-venda, no estilo Typeform (mobile first):
- * boas-vindas → cervejas → WhatsApp → (Caixa VIP aberta? mostra a caixa) → nome → sobrenome →
- * e-mail → CEP (endereço automático + frete) → número/complemento → revisão → Caixa VIP.
- * O WhatsApp identifica o cliente: quem já comprou (em qualquer pré-venda, em qualquer aparelho)
- * vê os dados do CRM já preenchidos e só confere — ou atualiza. Se ele tem uma caixa em
- * andamento, as cervejas de hoje entram nela (um frete só).
- * No aparelho onde já comprou, nem o WhatsApp é perguntado de novo.
+ * boas-vindas → cervejas → WhatsApp → código no WhatsApp → (Caixa VIP aberta? mostra a caixa) →
+ * nome → sobrenome → e-mail → CEP (endereço automático + frete) → número/complemento → revisão → Caixa VIP.
+ * O WhatsApp identifica o cliente, mas só depois do código de 6 dígitos que chega nele (LGPD:
+ * ninguém vê nem mexe no cadastro ou na caixa de outra pessoa). Confirmado, quem já comprou vê os
+ * dados do CRM preenchidos e só confere — ou atualiza. Se ele tem uma caixa em andamento, as
+ * cervejas de hoje entram nela (um frete só). O aparelho confirmado fica lembrado por 90 dias:
+ * nele, nem o WhatsApp nem o código são pedidos de novo.
  */
 export function CheckoutPreVenda({ dados, whatsappInicial }: { dados: PreVendaPublica; whatsappInicial?: string }) {
   const { noNavegador, cliente, pedido } = useArmazenado(dados.preVenda.slug)
@@ -172,6 +184,15 @@ function Fluxo({
   const donoDosDados = useRef(clienteSalvo ? normalizarWhatsapp(clienteSalvo.whatsapp) : null)
   /** CEP do cadastro no CRM: se o cliente com caixa mantém o CEP, o frete da caixa continua o mesmo. */
   const [cepDoCadastro, setCepDoCadastro] = useState('')
+  /** Código de confirmação do WhatsApp. */
+  const [codigo, setCodigo] = useState('')
+  const [esperaCodigo, setEsperaCodigo] = useState(0)
+  const [avisoCodigo, setAvisoCodigo] = useState<string | null>(null)
+  const [conferindo, setConferindo] = useState(false)
+  const [reenviando, setReenviando] = useState(false)
+  /** WhatsApp (normalizado) que recebeu o código; null = nenhum código pendente. */
+  const codigoPara = useRef<string | null>(null)
+  const conferindoAgora = useRef(false)
 
   const selecionados = itens.filter((i) => (quantidades[i.produto_id] ?? 0) > 0)
   const unidades = selecionados.reduce((s, i) => s + quantidades[i.produto_id], 0)
@@ -245,12 +266,20 @@ function Fluxo({
       else if (!NO_HISTORICO.includes(alvo)) setEtapa('inicio')
       else if (alvo === 'conferir' && !atual.current.lembrado) setEtapa('whatsapp')
       else if (alvo === 'caixa' && !atual.current.caixa) setEtapa('whatsapp')
+      else if (alvo === 'codigo' && !codigoPara.current) setEtapa('whatsapp')
       else setEtapa(alvo)
       window.scrollTo({ top: 0 })
     }
     window.addEventListener('popstate', aoNavegar)
     return () => window.removeEventListener('popstate', aoNavegar)
   }, [])
+
+  // Contagem para poder pedir outro código.
+  useEffect(() => {
+    if (esperaCodigo <= 0) return
+    const t = window.setTimeout(() => setEsperaCodigo((s) => Math.max(s - 1, 0)), 1000)
+    return () => window.clearTimeout(t)
+  }, [esperaCodigo])
 
   // Android: "puxar para atualizar" recarregaria a página no meio do pedido.
   useEffect(() => {
@@ -323,29 +352,87 @@ function Fluxo({
   }
 
   /**
-   * WhatsApp → busca o cadastro no CRM e a Caixa VIP em andamento.
-   * Já comprou: os dados vêm preenchidos (de qualquer aparelho). Com caixa: mostra a caixa e as
-   * cervejas de hoje entram nela. Dados completos: só confere. Faltando algo: as perguntas vêm
-   * com o que já existe e ele completa.
+   * WhatsApp → o servidor manda um código nesse número (ou, se este aparelho já confirmou o
+   * número, devolve direto o cadastro do CRM e a Caixa VIP em andamento).
    */
   async function identificar(whatsapp: string) {
     setErro(null)
     setIdentificando(true)
-    let achada: CaixaPublica | null = null
-    let cadastro: CadastroDoCliente | null = null
     try {
       const r = await identificarCliente(preVenda.slug, whatsapp)
+      setIdentificando(false)
+      if (!r.ok) return setErro(r.mensagem)
+      if (r.precisaCodigo) {
+        codigoPara.current = normalizarWhatsapp(whatsapp)
+        setCodigo('')
+        setEsperaCodigo(r.espera)
+        setAvisoCodigo(r.aviso ?? (r.enviado ? null : 'Já mandamos um código para este número há pouco. Use o que chegou no seu WhatsApp.'))
+        return ir('codigo')
+      }
+      aplicarIdentificacao(whatsapp, r.cadastro, r.caixa)
+    } catch {
+      setIdentificando(false)
+      setErro('Sem conexão com a internet. Confira e tente de novo.')
+    }
+  }
+
+  /** Código digitado (o 6º número já envia). */
+  async function conferirCodigoDigitado(valor: string) {
+    const digitos = valor.replace(/\D/g, '')
+    if (digitos.length !== 6) return setErro('Digite os 6 números do código.')
+    if (conferindoAgora.current) return
+    conferindoAgora.current = true
+    setErro(null)
+    setConferindo(true)
+    try {
+      const r = await confirmarCodigoWhatsapp(preVenda.slug, cliente.whatsapp, digitos)
+      conferindoAgora.current = false
+      setConferindo(false)
       if (!r.ok) {
-        setIdentificando(false)
+        setCodigo('')
+        if (r.pedirOutro) setEsperaCodigo(0)
         return setErro(r.mensagem)
       }
-      achada = r.caixa
-      cadastro = r.cadastro
+      codigoPara.current = null
+      aplicarIdentificacao(cliente.whatsapp, r.cadastro, r.caixa, { substituir: true })
     } catch {
-      // sem conexão: segue com o que o aparelho lembra (o banco junta na caixa do mesmo jeito ao confirmar)
+      conferindoAgora.current = false
+      setConferindo(false)
+      setErro('Sem conexão com a internet. Confira e tente de novo.')
     }
-    setIdentificando(false)
+  }
 
+  async function pedirOutroCodigo() {
+    setErro(null)
+    setAvisoCodigo(null)
+    setReenviando(true)
+    try {
+      const r = await reenviarCodigo(preVenda.slug, cliente.whatsapp)
+      if (!r.ok) setErro(r.mensagem)
+      else if (r.precisaCodigo) {
+        setCodigo('')
+        setEsperaCodigo(r.espera)
+        setAvisoCodigo(r.aviso ?? (r.enviado ? 'Pronto! Mandamos um código novo no seu WhatsApp.' : null))
+      }
+    } catch {
+      setErro('Sem conexão com a internet. Confira e tente de novo.')
+    }
+    setReenviando(false)
+  }
+
+  function trocarNumero() {
+    codigoPara.current = null
+    setCodigo('')
+    ir('whatsapp')
+  }
+
+  /**
+   * WhatsApp confirmado → dados do CRM e Caixa VIP em andamento.
+   * Já comprou: os dados vêm preenchidos (de qualquer aparelho). Com caixa: mostra a caixa e as
+   * cervejas de hoje entram nela. Dados completos: só confere. Faltando algo: as perguntas vêm
+   * com o que já existe e ele completa.
+   */
+  function aplicarIdentificacao(whatsapp: string, cadastro: CadastroDoCliente | null, achada: CaixaPublica | null, opcoes?: { substituir?: boolean }) {
     const numero = normalizarWhatsapp(whatsapp)
     const mesmaPessoa = lembrado && donoDosDados.current === numero
     let dadosAgora = cliente
@@ -359,9 +446,9 @@ function Fluxo({
     setCepDoCadastro(conhecido ? dadosAgora.cep.replace(/\D/g, '') : '')
     setCaixa(achada)
     setEnderecoNovo(false)
-    if (achada) ir('caixa')
-    else if (conhecido && dadosCompletos(dadosAgora)) ir('conferir')
-    else ir('nome')
+    if (achada) ir('caixa', opcoes)
+    else if (conhecido && dadosCompletos(dadosAgora)) ir('conferir', opcoes)
+    else ir('nome', opcoes)
   }
 
   function continuarDasCervejas() {
@@ -431,6 +518,8 @@ function Fluxo({
 
   function naoSouEu() {
     soFaltaEmail.current = false
+    sairDoAparelho().catch(() => {})
+    codigoPara.current = null
     esquecerCliente()
     setCliente(CLIENTE_VAZIO)
     setLembrado(false)
@@ -467,7 +556,14 @@ function Fluxo({
                 uf: cliente.uf,
               },
         })
-        if (!r.ok) return setErro(r.mensagem)
+        if (!r.ok) {
+          // O aparelho não está confirmado (ex.: o cookie venceu no meio do pedido): pede o código de novo.
+          if (r.precisaCodigo) {
+            ir('whatsapp')
+            return setErro(r.mensagem)
+          }
+          return setErro(r.mensagem)
+        }
 
         const feito: PedidoFeito = {
           pedidoId: r.pedidoId,
@@ -532,7 +628,7 @@ function Fluxo({
 
   if (!preVenda.ativa) return <PreVendaEncerrada dados={dados} />
 
-  const indice = PROGRESSO.indexOf(etapa === 'conferir' ? 'numero' : etapa)
+  const indice = PROGRESSO.indexOf(etapa === 'conferir' ? 'numero' : etapa === 'codigo' ? 'whatsapp' : etapa)
 
   return (
     <Moldura
@@ -752,10 +848,11 @@ function Fluxo({
             numero={1}
             htmlFor="whatsapp"
             titulo="Qual é o seu WhatsApp?"
-            descricao="Com DDD. Se você já comprou com a gente, seus dados aparecem preenchidos na próxima tela."
+            descricao="Com DDD. Vamos mandar um código nesse número para confirmar que é você."
             erro={erro}
             aoEnviar={aposWhatsapp}
             ocupado={identificando}
+            rodape={<AvisoPrivacidade />}
           >
             <input
               id="whatsapp"
@@ -770,6 +867,80 @@ function Fluxo({
               onChange={(e) => alterar('whatsapp')(mascararWhatsapp(e.target.value))}
               className={cn(CLASSE_RESPOSTA, 'tipo-dado')}
             />
+          </Pergunta>
+        )}
+
+        {/* 1 · Código no WhatsApp: só depois dele o link mostra o cadastro e a caixa ---------- */}
+        {etapa === 'codigo' && (
+          <Pergunta
+            numero={1}
+            rotulo="Confirmação"
+            htmlFor="codigo"
+            titulo="Digite o código que mandamos no seu WhatsApp"
+            descricao={`Enviamos para ${cliente.whatsapp}. Ele tem 6 números e vale por 10 minutos.`}
+            erro={erro}
+            aoEnviar={(e) => {
+              e.preventDefault()
+              conferirCodigoDigitado(codigo)
+            }}
+            ocupado={conferindo}
+            rodape={
+              <div className="space-y-3 text-[15px]">
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                  <button
+                    type="button"
+                    onClick={pedirOutroCodigo}
+                    disabled={esperaCodigo > 0 || reenviando || conferindo}
+                    className="inline-flex items-center gap-1.5 font-semibold text-volt-700 hover:text-ink disabled:text-suave"
+                  >
+                    {reenviando ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : <RotateCw className="size-4" aria-hidden />}
+                    {esperaCodigo > 0 ? `Reenviar em ${esperaCodigo}s` : 'Reenviar código'}
+                  </button>
+                  <button type="button" onClick={trocarNumero} className="font-semibold text-suave hover:text-ink">
+                    Trocar número
+                  </button>
+                </div>
+                {loja.whatsapp && (
+                  <a
+                    href={linkWhatsapp(loja.whatsapp, `Oi! Não recebi o código da pré-venda "${preVenda.titulo}" no meu WhatsApp.`)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-suave hover:text-ink"
+                  >
+                    <MessageCircle className="size-4" aria-hidden /> Não chegou? Fale com a loja
+                  </a>
+                )}
+              </div>
+            }
+          >
+            <input
+              id="codigo"
+              autoFocus
+              data-foco
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              enterKeyHint="done"
+              maxLength={6}
+              placeholder="000000"
+              value={codigo}
+              readOnly={conferindo}
+              onChange={(e) => {
+                const digitos = e.target.value.replace(/\D/g, '').slice(0, 6)
+                setCodigo(digitos)
+                if (digitos.length === 6) conferirCodigoDigitado(digitos)
+              }}
+              className={cn(CLASSE_RESPOSTA, 'tipo-dado tracking-[0.3em]')}
+            />
+            {avisoCodigo && (
+              <p className="mt-4 flex items-start gap-2 rounded-2xl bg-volt-50 px-4 py-3 text-[15px] text-ink" role="status">
+                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-volt-700" aria-hidden /> {avisoCodigo}
+              </p>
+            )}
+            {conferindo && (
+              <p className="mt-4 flex items-center gap-2 text-[15px] text-suave" role="status">
+                <LoaderCircle className="size-4 animate-spin" aria-hidden /> Conferindo…
+              </p>
+            )}
           </Pergunta>
         )}
 
@@ -1066,27 +1237,33 @@ function Titulo({ rotulo, titulo, descricao }: { rotulo: string; titulo: string;
 /** Uma pergunta por tela, com letra grande; Enter (ou OK) avança. */
 function Pergunta({
   numero,
+  rotulo,
   htmlFor,
   titulo,
   descricao,
   erro,
   aoEnviar,
   ocupado,
+  rodape,
   children,
 }: {
   numero: number
+  /** Substitui "Pergunta X de 6" (ex.: "Confirmação"). */
+  rotulo?: string
   htmlFor: string
   titulo: string
   descricao?: string
   erro: string | null
   aoEnviar: (evento: FormEvent) => void
   ocupado?: boolean
+  /** Abaixo do botão OK (links e avisos pequenos). */
+  rodape?: ReactNode
   children: ReactNode
 }) {
   return (
     <form onSubmit={aoEnviar} noValidate className="pt-[4vh] lg:pt-[10vh]">
       <p className="tipo-rotulo flex items-center gap-1.5 text-volt-700">
-        Pergunta {numero} de {TOTAL_PERGUNTAS}
+        {rotulo ?? `Pergunta ${numero} de ${TOTAL_PERGUNTAS}`}
       </p>
       <h1 className="tipo-h2 mt-3 text-balance sm:tipo-h1">
         <label htmlFor={htmlFor}>{titulo}</label>
@@ -1102,9 +1279,11 @@ function Pergunta({
           ou aperte <b className="text-ink">Enter ↵</b>
         </span>
       </div>
+      {rodape && <div className="mt-6">{rodape}</div>}
     </form>
   )
 }
+
 
 function MensagemErro({ erro, className }: { erro: string | null; className?: string }) {
   if (!erro) return null

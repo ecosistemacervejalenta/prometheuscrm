@@ -3,6 +3,12 @@ import type { StatusMensagemWhatsapp } from '@/types'
 import type { ChatUazapi, MensagemUazapi } from './uazapi'
 
 /**
+ * Mensagens automáticas que NÃO entram no Atendimento (ex.: código de confirmação do link da
+ * pré-venda): o eco volta no webhook com esta origem e é ignorado em mensagemParaCrm.
+ */
+export const ORIGEM_MENSAGEM_DE_SISTEMA = 'prometheus-sistema'
+
+/**
  * Converte o formato da uazapi no formato de registrar_mensagem_whatsapp.
  * Sem dependências de servidor: usado pelo webhook, pela sincronização e pelos testes.
  */
@@ -136,6 +142,8 @@ export function mensagemParaCrm(m: MensagemUazapi | null | undefined, chat?: Cha
   if (!m || !m.id || !chatid || m.isGroup || chatIgnorado(chatid)) return null
   // Conversa da loja com ela mesma ("Você" no WhatsApp) não é atendimento.
   if (m.owner && chatid.split('@')[0] === m.owner) return null
+  // Mensagem automática (código de confirmação do link): não guarda o código nem mexe na fila.
+  if (m.track_source === ORIGEM_MENSAGEM_DE_SISTEMA) return null
 
   const c = conteudo(m)
   const tipo = TIPOS[m.messageType ?? ''] ?? 'outro'
