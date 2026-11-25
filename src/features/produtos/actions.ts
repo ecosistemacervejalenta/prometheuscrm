@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
-import { errosDeValidacao, falha, traduzirErro, type EstadoAcao } from '@/lib/acoes'
+import { errosDeValidacao, falha, sucesso, traduzirErro, type EstadoAcao } from '@/lib/acoes'
 import { exigirEquipe } from '@/lib/auth'
 import { envPublico } from '@/lib/env'
 import { formParaObjeto } from '@/lib/validacao'
@@ -54,18 +54,63 @@ export async function salvarProduto(id: string | null, _: EstadoAcao, formData: 
   redirect('/produtos')
 }
 
+/**
+ * Tira a cerveja do catálogo SÓ no CRM (na Olist nada muda — cadastro e estoque de lá ficam
+ * intactos). Sem nenhuma venda nem pré-venda: apaga de vez. Com histórico: desativa (some das
+ * listas). Apagar uma cerveja vendida soltaria os pedidos dela e, numa Caixa VIP cancelada
+ * depois, o estoque da Olist não voltaria — por isso desativa.
+ */
+async function tirarDoCatalogo(supabase: Supabase, id: string): Promise<'excluida' | 'desativada' | { erro: string }> {
+  const [{ count: emPedidos, error: e1 }, { count: emPreVendas, error: e2 }] = await Promise.all([
+    supabase.from('pedido_itens').select('id', { count: 'exact', head: true }).eq('produto_id', id),
+    supabase.from('pre_venda_itens').select('id', { count: 'exact', head: true }).eq('produto_id', id),
+  ])
+  if (e1 || e2) return { erro: traduzirErro((e1 ?? e2)!) }
+
+  if (!emPedidos && !emPreVendas) {
+    const { error } = await supabase.from('produtos').delete().eq('id', id)
+    if (!error) return 'excluida'
+    if (error.code !== '23503') return { erro: traduzirErro(error) }
+  }
+  const { error } = await supabase.from('produtos').update({ ativo: false }).eq('id', id)
+  return error ? { erro: traduzirErro(error) } : 'desativada'
+}
+
 export async function excluirProduto(id: string): Promise<EstadoAcao> {
   const { supabase } = await exigirEquipe()
-  const { error } = await supabase.from('produtos').delete().eq('id', id)
-  if (error) {
-    return falha(
-      error.code === '23503'
-        ? 'Este produto está em pré-vendas. Desative-o em vez de excluir.'
-        : traduzirErro(error),
-    )
-  }
+  const resultado = await tirarDoCatalogo(supabase, id)
+  if (typeof resultado === 'object') return falha(resultado.erro)
   revalidatePath('/produtos')
-  redirect('/produtos')
+  revalidatePath('/pre-vendas', 'layout')
+  redirect(resultado === 'desativada' ? '/produtos?inativos=1' : '/produtos')
+}
+
+/**
+ * Botão "Tirar da lista" no formulário da pré-venda. Recusa se a cerveja estiver em outra
+ * pré-venda ativa (o link de lá continuaria vendendo); a pré-venda em edição não conta —
+ * ao salvar sem ela, ela sai dali também.
+ */
+export async function tirarCervejaDaLista(id: string, preVendaAtual: string | null): Promise<EstadoAcao> {
+  const { supabase } = await exigirEquipe()
+
+  const { data: itens } = await supabase.from('pre_venda_itens').select('pre_venda_id').eq('produto_id', id)
+  const outras = (itens ?? []).map((i) => i.pre_venda_id).filter((pv) => pv !== preVendaAtual)
+  if (outras.length) {
+    const { data: ativas } = await supabase.from('vw_pre_vendas').select('titulo').in('id', outras).eq('status_efetivo', 'ativa').limit(3)
+    if (ativas?.length) {
+      return falha(`Ela está na pré-venda ativa “${ativas.map((a) => a.titulo).join('”, “')}”. Tire de lá (ou encerre a pré-venda) antes.`)
+    }
+  }
+
+  const resultado = await tirarDoCatalogo(supabase, id)
+  if (typeof resultado === 'object') return falha(resultado.erro)
+  revalidatePath('/produtos')
+  revalidatePath('/pre-vendas', 'layout')
+  return sucesso(
+    resultado === 'excluida'
+      ? 'Cerveja tirada da lista e apagada do CRM. Na Olist nada mudou.'
+      : 'Cerveja tirada da lista. Como já teve vendas, ficou desativada no CRM (o histórico continua). Na Olist nada mudou.',
+  )
 }
 
 export type CervejaSalva = {

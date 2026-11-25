@@ -1,6 +1,6 @@
 'use client'
 
-import { Beer, ImagePlus, PackageSearch, Pencil, Plus } from 'lucide-react'
+import { Beer, ImagePlus, PackageSearch, Pencil, Plus, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRef, useState } from 'react'
 
@@ -8,8 +8,9 @@ import { ActionForm, SubmitButton, type AcaoFormulario } from '@/components/form
 import { Field, FormActions, FormSection, Input, Select, Textarea } from '@/components/form/fields'
 import { Button, ButtonLink } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { useAvisos } from '@/components/ui/toaster'
 import { JanelaOlist } from '@/features/olist/components/janela-olist'
-import type { CervejaSalva } from '@/features/produtos/actions'
+import { tirarCervejaDaLista, type CervejaSalva } from '@/features/produtos/actions'
 import { FotoProduto } from '@/features/produtos/components/foto-produto'
 import { JanelaCerveja, type ContextoDoLink } from '@/features/produtos/components/janela-cerveja'
 import { detalhesDa } from '@/features/pre-vendas/publico/cartao-cerveja'
@@ -83,6 +84,8 @@ export function FormularioPreVenda({
   const [ordem, setOrdem] = useState(() => inicial.ordem.map((p) => p.id))
   const [janela, setJanela] = useState<{ cerveja?: Produto; contexto: ContextoDoLink } | null>(null)
   const [buscaOlist, setBuscaOlist] = useState(false)
+  const [tirando, setTirando] = useState<string | null>(null)
+  const avisar = useAvisos()
   const raiz = useRef<HTMLDivElement>(null)
   const porId = new Map(catalogo.map((p) => [p.id, p]))
   const ordenados = ordem.flatMap((id) => porId.get(id) ?? [])
@@ -145,6 +148,21 @@ export function FormularioPreVenda({
       [cerveja.id]: { incluido: true, preco: valorParaInput(cerveja.preco), limite: '', estoque: '', ordem: 999 },
     }))
     setOrdem((atual) => [...atual.filter((id) => linhas[id]?.incluido), cerveja.id, ...atual.filter((id) => !linhas[id]?.incluido)])
+  }
+
+  /** Tira a cerveja da lista (só no CRM; na Olist nada muda). Com vendas, fica desativada. */
+  async function tirarDaLista(cerveja: Produto) {
+    const daOlist = cerveja.olist_id
+      ? ' Só sai do CRM: na Olist o cadastro e o estoque continuam iguais, e dá para trazer de novo pelo "Buscar na Olist".'
+      : ' Dá para reativar depois em Produtos.'
+    if (!window.confirm(`Tirar “${cerveja.nome}” da lista de cervejas?${daOlist} Se ela já teve vendas, fica desativada e o histórico continua.`)) return
+    setTirando(cerveja.id)
+    const resultado = await tirarCervejaDaLista(cerveja.id, preVenda?.id ?? null)
+    setTirando(null)
+    if (resultado.mensagem) avisar(resultado.mensagem, resultado.ok === false ? 'erro' : 'sucesso')
+    if (resultado.ok === false) return
+    setCatalogo((atual) => atual.filter((p) => p.id !== cerveja.id))
+    setOrdem((atual) => atual.filter((id) => id !== cerveja.id))
   }
 
   const botaoOlist = olistConectado && (
@@ -269,6 +287,18 @@ export function FormularioPreVenda({
                               {incompleta ? <ImagePlus className="size-3.5" aria-hidden /> : <Pencil className="size-3.5" aria-hidden />}
                               {incompleta ? (p.imagem_url ? 'Pôr descrição' : 'Pôr foto') : 'Editar'}
                             </button>
+                            {!linha.incluido && (
+                              <button
+                                type="button"
+                                onClick={() => tirarDaLista(p)}
+                                disabled={tirando === p.id}
+                                title="Tirar da lista"
+                                aria-label={`Tirar ${p.nome} da lista`}
+                                className="inline-flex shrink-0 items-center rounded-lg p-1.5 text-suave hover:bg-perigo-50 hover:text-perigo disabled:opacity-40"
+                              >
+                                <Trash2 className="size-4" aria-hidden />
+                              </button>
+                            )}
                           </div>
                           {linha.incluido && (
                             <div className="grid grid-cols-3 gap-2 sm:w-[360px]">
