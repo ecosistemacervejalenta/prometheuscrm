@@ -23,6 +23,11 @@ export type CervejaComLotes = {
   /** Unidades em estoque na Olist na última leitura (null = a Olist não informou). */
   estoque_olist: number | null
   estoque_lido_em: string | null
+  /** Produto na Olist (o histórico fica ligado a ele). */
+  olist_id: number
+  /** Última falha ao ler a Olist (nula depois de uma leitura que deu certo). */
+  leitura_erro: string | null
+  leitura_erro_em: string | null
   /** Da validade mais próxima para a mais distante. */
   lotes: LoteDaCerveja[]
   /** Soma das quantidades dos lotes. */
@@ -45,7 +50,7 @@ export type LoteComCerveja = LoteDaCerveja & {
 export const FILTROS_LOTES = [...SITUACOES_VALIDADE.map((s) => s.chave), 'sem_lote'] as const
 export type FiltroLotes = (typeof FILTROS_LOTES)[number]
 
-const CAMPOS = 'id, sku, nome, foto_url, estoque_olist, estoque_lido_em, lotes(id, lote, validade, quantidade)'
+const CAMPOS = 'id, sku, nome, foto_url, estoque_olist, estoque_lido_em, olist_id, leitura_erro, leitura_erro_em, lotes(id, lote, validade, quantidade)'
 
 type Linha = Omit<CervejaComLotes, 'nosLotes' | 'semLote' | 'lotesSemQuantidade'>
 
@@ -150,42 +155,79 @@ export function cervejasSemLote(cervejas: CervejaComLotes[], busca?: string) {
   return cervejas.filter((c) => precisaDeLote(c) && contem(busca, c.nome, c.sku))
 }
 
+export type TipoMovimento =
+  | 'cadastro'
+  | 'ajuste'
+  | 'edicao'
+  | 'baixa_olist'
+  | 'exclusao'
+  | 'leitura_olist'
+  | 'falha_leitura'
+  | 'cerveja_cadastrada'
+  | 'cerveja_atualizada'
+  | 'cerveja_removida'
+
 export type MovimentoDoLote = {
   id: number
-  lote: string
-  tipo: 'cadastro' | 'ajuste' | 'baixa_olist' | 'exclusao'
-  quantidade: number
+  tipo: TipoMovimento
+  lote: string | null
+  quantidade: number | null
   saldo: number | null
   estoque_antes: number | null
   estoque_depois: number | null
+  /** rotina | aviso_olist | botao | salvar_lote | cadastro | conferencia | manual | alteracao_direta */
+  origem: string | null
+  /** O que mudou, campo a campo, e outras informações do evento. */
+  detalhes: Record<string, unknown>
+  /** Papel no banco de quem mudou (authenticated, service_role, none). */
+  papel: string | null
+  sku: string | null
   criado_em: string
   autor: string | null
 }
 
-/** Últimos movimentos dos lotes da cerveja (cadastro, ajuste, baixa pela Olist, exclusão). */
-export async function listarMovimentosDaCerveja(cervejaId: string, limite = 20): Promise<MovimentoDoLote[]> {
+/** Quantos eventos a tela mostra de cara (o resto, em "Ver histórico completo"). */
+export const HISTORICO_RESUMIDO = 30
+const HISTORICO_COMPLETO = 2000
+
+/**
+ * Histórico do produto, do mais novo para o mais antigo (eventos do mesmo instante na ordem em
+ * que aconteceram: a leitura antes das baixas que ela causou). Pelo id do produto na Olist, para
+ * incluir o que aconteceu antes de a cerveja sair e voltar ao controle.
+ */
+export async function listarHistoricoDoProduto(
+  olistId: number,
+  completo = false,
+): Promise<{ movimentos: MovimentoDoLote[]; total: number }> {
   const { supabase } = await exigirEquipe()
-  const { data, error } = await supabase
+  const { data, error, count } = await supabase
     .from('lote_movimentos')
-    .select('id, lote, tipo, quantidade, saldo, estoque_antes, estoque_depois, criado_em, perfis(nome)')
-    .eq('cerveja_id', cervejaId)
+    .select('id, tipo, lote, quantidade, saldo, estoque_antes, estoque_depois, origem, detalhes, papel, sku, criado_em, perfis(nome)', { count: 'exact' })
+    .eq('olist_id', olistId)
     .order('criado_em', { ascending: false })
-    .order('id', { ascending: false })
-    .limit(limite)
+    .order('id', { ascending: true })
+    .limit(completo ? HISTORICO_COMPLETO : HISTORICO_RESUMIDO)
   // Sem o histórico (ex.: migration ainda não aplicada) a tela continua funcionando.
   if (error) {
     console.error('[lotes] histórico', error.message)
-    return []
+    return { movimentos: [], total: 0 }
   }
-  return data.map((m) => ({
-    id: m.id,
-    lote: m.lote,
-    tipo: m.tipo as MovimentoDoLote['tipo'],
-    quantidade: m.quantidade,
-    saldo: m.saldo,
-    estoque_antes: m.estoque_antes === null ? null : Number(m.estoque_antes),
-    estoque_depois: m.estoque_depois === null ? null : Number(m.estoque_depois),
-    criado_em: m.criado_em,
-    autor: m.perfis?.nome ?? null,
-  }))
+  return {
+    total: count ?? data.length,
+    movimentos: data.map((m) => ({
+      id: m.id,
+      tipo: m.tipo as TipoMovimento,
+      lote: m.lote,
+      quantidade: m.quantidade,
+      saldo: m.saldo,
+      estoque_antes: m.estoque_antes === null ? null : Number(m.estoque_antes),
+      estoque_depois: m.estoque_depois === null ? null : Number(m.estoque_depois),
+      origem: m.origem,
+      detalhes: m.detalhes && typeof m.detalhes === 'object' && !Array.isArray(m.detalhes) ? (m.detalhes as Record<string, unknown>) : {},
+      papel: m.papel,
+      sku: m.sku,
+      criado_em: m.criado_em,
+      autor: m.perfis?.nome ?? null,
+    })),
+  }
 }

@@ -3,23 +3,26 @@ import { notFound } from 'next/navigation'
 import { Beer, RefreshCw, Trash2 } from 'lucide-react'
 
 import { ActionButton } from '@/components/ui/action-button'
+import { ButtonLink } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
 import { atualizarCervejaDaOlist, removerCervejaDosLotes } from '@/features/lotes/actions'
 import { HistoricoLotes } from '@/features/lotes/components/historico-lotes'
 import { FormularioNovosLotes, LinhaLote } from '@/features/lotes/components/lotes-da-cerveja'
 import { FREQUENCIA_LEITURA, quandoLeu } from '@/features/lotes/leitura'
-import { listarMovimentosDaCerveja, obterCervejaDosLotes } from '@/features/lotes/queries'
+import { HISTORICO_RESUMIDO, listarHistoricoDoProduto, obterCervejaDosLotes } from '@/features/lotes/queries'
 import { situacaoValidade } from '@/features/lotes/validade'
 import { formatarNumero } from '@/lib/format'
-import { cn } from '@/lib/utils'
+import { cn, param } from '@/lib/utils'
 
 export const metadata: Metadata = { title: 'Lotes da cerveja' }
 
-export default async function PaginaLotesDaCerveja({ params }: PageProps<'/lotes/[id]'>) {
+export default async function PaginaLotesDaCerveja({ params, searchParams }: PageProps<'/lotes/[id]'>) {
   const { id } = await params
-  const [cerveja, movimentos] = await Promise.all([obterCervejaDosLotes(id), listarMovimentosDaCerveja(id)])
+  const completo = param((await searchParams).historico) === 'completo'
+  const cerveja = await obterCervejaDosLotes(id)
   if (!cerveja) notFound()
+  const historico = await listarHistoricoDoProduto(cerveja.olist_id, completo)
 
   const { lotes, nosLotes, semLote } = cerveja
   // Lote esgotado (0 un.) não entra na conta de vencidos.
@@ -84,6 +87,12 @@ export default async function PaginaLotesDaCerveja({ params }: PageProps<'/lotes
               <dd className="mt-1 text-[12px] text-suave">
                 {cerveja.estoque_olist === null ? 'A Olist não informou o estoque deste produto. ' : ''}
                 {cerveja.estoque_lido_em ? `Atualizado em ${quandoLeu(cerveja.estoque_lido_em)}` : 'Ainda não lido'}
+                {cerveja.leitura_erro && (
+                  <span className="mt-1 block font-medium text-perigo">
+                    Última tentativa de leitura falhou
+                    {cerveja.leitura_erro_em ? ` (${quandoLeu(cerveja.leitura_erro_em)})` : ''}: {cerveja.leitura_erro}
+                  </span>
+                )}
                 <span className="block text-sutil">Atualiza sozinho {FREQUENCIA_LEITURA} e quando a Olist avisa.</span>
               </dd>
             </div>
@@ -116,31 +125,50 @@ export default async function PaginaLotesDaCerveja({ params }: PageProps<'/lotes
           </dl>
         </Card>
 
-        <Card>
-          <CardHeader titulo="Lotes e validades" descricao={lotes.length ? resumoLotes : 'Cadastre o lote e a validade desta cerveja. Dá para lançar vários lotes de uma vez.'} />
-          <FormularioNovosLotes
-            cervejaId={id}
-            temLotes={lotes.length > 0}
-            estoqueOlist={cerveja.estoque_olist}
-            semLote={semLote}
-            foco={lotes.length === 0 || Boolean(semLote)}
-          />
-          {lotes.length > 0 ? (
-            <ul className="divide-y divide-linha border-t border-linha">
-              {lotes.map((lote) => (
-                <LinhaLote key={lote.id} lote={lote} />
-              ))}
-            </ul>
-          ) : (
-            <p className="border-t border-linha px-4 py-8 text-center text-sm text-suave lg:px-5">Nenhum lote cadastrado ainda.</p>
-          )}
-        </Card>
+        <div className="min-w-0 space-y-4 lg:space-y-6">
+          <Card>
+            <CardHeader
+              titulo="Lotes e validades"
+              descricao={lotes.length ? resumoLotes : 'Cadastre o lote e a validade desta cerveja. Dá para lançar vários lotes de uma vez.'}
+            />
+            <FormularioNovosLotes
+              cervejaId={id}
+              temLotes={lotes.length > 0}
+              estoqueOlist={cerveja.estoque_olist}
+              semLote={semLote}
+              foco={lotes.length === 0 || Boolean(semLote)}
+            />
+            {lotes.length > 0 ? (
+              <ul className="divide-y divide-linha border-t border-linha">
+                {lotes.map((lote) => (
+                  <LinhaLote key={lote.id} lote={lote} />
+                ))}
+              </ul>
+            ) : (
+              <p className="border-t border-linha px-4 py-8 text-center text-sm text-suave lg:px-5">Nenhum lote cadastrado ainda.</p>
+            )}
+          </Card>
+          <Card>
+            <CardHeader
+              titulo="Histórico do produto"
+              descricao="Tudo o que aconteceu com este produto: cada mudança de estoque lida na Olist, as baixas automáticas nos lotes, o que a equipe mudou e as falhas de leitura."
+              acoes={
+                historico.total > HISTORICO_RESUMIDO &&
+                (completo ? (
+                  <ButtonLink href={`/lotes/${id}`} tamanho="sm" scroll={false}>
+                    Ver só os últimos
+                  </ButtonLink>
+                ) : (
+                  <ButtonLink href={`/lotes/${id}?historico=completo`} tamanho="sm" scroll={false}>
+                    Ver histórico completo ({formatarNumero(historico.total)})
+                  </ButtonLink>
+                ))
+              }
+            />
+            <HistoricoLotes movimentos={historico.movimentos} />
+          </Card>
+        </div>
       </div>
-
-      <Card className="mt-4 lg:mt-6 lg:ml-[324px]">
-        <CardHeader titulo="Histórico dos lotes" descricao="Cadastros, ajustes e as baixas automáticas feitas a partir do estoque da Olist." />
-        <HistoricoLotes movimentos={movimentos} />
-      </Card>
     </>
   )
 }

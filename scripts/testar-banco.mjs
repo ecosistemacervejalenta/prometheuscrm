@@ -1344,17 +1344,28 @@ await db.exec(`reset role;`)
   const ipa = await um(`insert into lotes_cervejas (sku, olist_id, nome, estoque_olist, estoque_lido_em) values ('BAIXA-1', 7101, 'Pils Baixa', 30, now()) returning id`)
   await q(`insert into lotes (cerveja_id, lote, quantidade, validade) values ($1, 'NOVO', 10, current_date + 90), ($1, 'VELHO', 20, current_date + 10)`, [ipa.id])
   expectEq('cadastro do lote fica no histórico com o autor',
-    await q(`select lote, tipo, quantidade, autor_id = $2 autor from lote_movimentos where cerveja_id = $1 order by lote`, [ipa.id, uid2]),
+    await q(`select lote, tipo, quantidade, autor_id = $2 autor from lote_movimentos where cerveja_id = $1 and tipo = 'cadastro' order by lote`, [ipa.id, uid2]),
     [{ lote: 'NOVO', tipo: 'cadastro', quantidade: 10, autor: true }, { lote: 'VELHO', tipo: 'cadastro', quantidade: 20, autor: true }])
   await db.exec(`reset role; set role service_role;`)
   const qtds = async () => Object.fromEntries((await q(`select lote, quantidade from lotes where cerveja_id = $1`, [ipa.id])).map((l) => [l.lote, l.quantidade]))
   await q(`update lotes_cervejas set estoque_olist = 26 where id = $1`, [ipa.id])
   expectEq('estoque caiu 30 → 26: sai do lote que vence primeiro', await qtds(), { NOVO: 10, VELHO: 16 })
+  expectEq('a leitura fica no histórico (mudança direta no banco é identificada)',
+    await um(`select tipo, quantidade, estoque_antes::int a, estoque_depois::int d, origem, papel, (detalhes->>'soma_dos_lotes_antes')::int soma, (detalhes->>'sem_lote_depois')::int sem_lote
+              from lote_movimentos where cerveja_id = $1 and tipo = 'leitura_olist'`, [ipa.id]),
+    { tipo: 'leitura_olist', quantidade: -4, a: 30, d: 26, origem: 'alteracao_direta', papel: 'service_role', soma: 30, sem_lote: 0 })
   expectEq('baixa registrada com as duas leituras',
     await um(`select tipo, quantidade, saldo, estoque_antes::int a, estoque_depois::int d from lote_movimentos where cerveja_id = $1 and tipo = 'baixa_olist'`, [ipa.id]),
     { tipo: 'baixa_olist', quantidade: -4, saldo: 16, a: 30, d: 26 })
-  await q(`update lotes_cervejas set estoque_olist = 5 where id = $1`, [ipa.id])
+  await q(`update lotes_cervejas set estoque_olist = 5, estoque_lido_em = now(), estoque_origem = 'rotina' where id = $1`, [ipa.id])
   expectEq('queda maior que o lote: zera o mais velho e continua no seguinte', await qtds(), { NOVO: 5, VELHO: 0 })
+  expectEq('leitura da rotina: origem gravada, e as baixas que ela causou levam a mesma origem',
+    await q(`select tipo, lote, quantidade, origem from lote_movimentos where cerveja_id = $1 and origem = 'rotina' order by id`, [ipa.id]),
+    [{ tipo: 'leitura_olist', lote: null, quantidade: -21, origem: 'rotina' },
+      { tipo: 'baixa_olist', lote: 'VELHO', quantidade: -16, origem: 'rotina' },
+      { tipo: 'baixa_olist', lote: 'NOVO', quantidade: -5, origem: 'rotina' }])
+  await q(`update lotes_cervejas set estoque_lido_em = now(), estoque_origem = 'rotina' where id = $1`, [ipa.id])
+  expectEq('leitura sem mudança no estoque não gera linha', (await um(`select count(*)::int n from lote_movimentos where cerveja_id = $1 and tipo = 'leitura_olist'`, [ipa.id])).n, 2)
   await q(`update lotes_cervejas set estoque_olist = 5, nome = 'Pils Baixa' where id = $1`, [ipa.id])
   expectEq('mesma leitura de novo não mexe em nada', (await um(`select count(*)::int n from lote_movimentos where cerveja_id = $1 and tipo = 'baixa_olist'`, [ipa.id])).n, 3)
   await q(`update lotes_cervejas set estoque_olist = -2 where id = $1`, [ipa.id])
@@ -1369,10 +1380,13 @@ await db.exec(`reset role;`)
   await q(`update lotes_cervejas set estoque_olist = 36 where id = $1`, [ipa.id])
   await db.exec(`reset role;`)
   const avisos = await q(`select perfil_id, quantidade, texto from notificacoes where tipo = 'lote_sem_registro' and lote_cerveja_id = $1 order by perfil_id`, [ipa.id])
+  expectEq('entrada de mercadoria fica no histórico com as unidades que ficaram sem lote',
+    await um(`select quantidade, (detalhes->>'sem_lote_depois')::int sem_lote from lote_movimentos where cerveja_id = $1 and tipo = 'leitura_olist' order by id desc limit 1`, [ipa.id]),
+    { quantidade: 12, sem_lote: 36 })
   expectEq('entrada de mercadoria avisa cada pessoa da equipe uma vez (atualiza o aviso)',
     { pessoas: avisos.length, texto: avisos[0]?.texto, vezes: avisos[0]?.quantidade },
     // Três entradas: −2 → 3, 0 → 24 e 24 → 36 (de null → 0 não conta: não havia leitura anterior).
-    { pessoas: 2, texto: 'Pils Baixa: 36 un. na Olist ainda sem lote.', vezes: 3 })
+    { pessoas: (await um(`select count(*)::int n from perfis where ativo`)).n, texto: 'Pils Baixa: 36 un. na Olist ainda sem lote.', vezes: 3 })
   expectEq('lotes continuam como estavam depois da entrada', await qtds(), { NOVO: 0, VELHO: 0 })
 
   // Lote sem quantidade: a conta para (não dá para saber de qual lote saiu).
@@ -1390,6 +1404,22 @@ await db.exec(`reset role;`)
   expectEq('ajuste da equipe fica no histórico', (await um(`select tipo, quantidade, saldo from lote_movimentos where cerveja_id = $1 and lote = 'NOVO' and tipo = 'ajuste'`, [ipa.id])), { tipo: 'ajuste', quantidade: 30, saldo: 30 })
   await expectError('equipe não escreve no histórico', `insert into lote_movimentos (cerveja_id, lote, tipo, quantidade) values ($1, 'X', 'ajuste', 1)`, [ipa.id])
   await expectError('equipe não chama a conciliação interna', `select conciliar_lotes_da_cerveja($1)`, [ipa.id])
+  // Edição de código/validade, dados vindos da Olist e falhas de leitura.
+  await q(`update lotes set validade = validade + 7, lote = 'NOVO-B' where cerveja_id = $1 and lote = 'NOVO'`, [ipa.id])
+  expectEq('edição do lote registra o antes e o depois',
+    await um(`select tipo, lote, detalhes->'lote' codigo, (detalhes->'validade'->>1)::date - (detalhes->'validade'->>0)::date dias, autor_id = $2 autor, origem, papel
+              from lote_movimentos where cerveja_id = $1 and tipo = 'edicao'`, [ipa.id, uid2]),
+    { tipo: 'edicao', lote: 'NOVO-B', codigo: ['NOVO', 'NOVO-B'], dias: 7, autor: true, origem: 'manual', papel: 'authenticated' })
+  await q(`update lotes_cervejas set nome = 'Pils Baixa 473', estoque_lido_em = now(), estoque_origem = 'botao' where id = $1`, [ipa.id])
+  expectEq('nome que mudou na Olist fica no histórico',
+    await um(`select detalhes->'nome' nome, origem from lote_movimentos where cerveja_id = $1 and tipo = 'cerveja_atualizada'`, [ipa.id]),
+    { nome: ['Pils Baixa', 'Pils Baixa 473'], origem: 'botao' })
+  await q(`update lotes_cervejas set leitura_erro = 'A Olist negou o acesso (403)', leitura_erro_em = now(), estoque_origem = 'botao' where id = $1`, [ipa.id])
+  await q(`update lotes_cervejas set leitura_erro = 'A Olist negou o acesso (403)', leitura_erro_em = now() + interval '5 minutes' where id = $1`, [ipa.id])
+  expectEq('falha de leitura fica no histórico (a mesma falha repetida, uma vez só)',
+    await q(`select detalhes->>'erro' erro, origem from lote_movimentos where cerveja_id = $1 and tipo = 'falha_leitura'`, [ipa.id]),
+    [{ erro: 'A Olist negou o acesso (403)', origem: 'botao' }])
+
   await db.exec(`reset role; set role anon; select set_config('request.jwt.claim.sub', '', false);`)
   await expectError('visitante não vê o histórico', `select count(*) from lote_movimentos`)
   await expectError('visitante não concilia', `select conciliar_lotes($1)`, [ipa.id])
@@ -1398,10 +1428,24 @@ await db.exec(`reset role;`)
   await db.exec(como(uid))
   await q(`delete from lotes where cerveja_id = $1 and lote = 'SEMQTD'`, [ipa.id])
   expectEq('exclusão do lote fica no histórico', (await um(`select count(*)::int n from lote_movimentos where cerveja_id = $1 and tipo = 'exclusao'`, [ipa.id])).n, 1)
+  const historicoAntes = (await um(`select count(*)::int n from lote_movimentos where olist_id = 7101`)).n
   await q(`delete from lotes_cervejas where id in ($1, $2)`, [cerveja.id, ipa.id])
   await db.exec(`reset role;`)
-  expectEq('remover a cerveja do controle apaga os lotes e o histórico dela',
-    (await um(`select (select count(*)::int from lotes where cerveja_id in ($1, $2)) + (select count(*)::int from lote_movimentos where cerveja_id in ($1, $2)) n`, [cerveja.id, ipa.id])).n, 0)
+  expectEq('remover a cerveja apaga os lotes, mas o histórico fica guardado pelo produto da Olist',
+    { lotes: (await um(`select count(*)::int n from lotes where cerveja_id in ($1, $2)`, [cerveja.id, ipa.id])).n,
+      historico: (await um(`select count(*)::int n from lote_movimentos where olist_id = 7101`)).n,
+      soltos: (await um(`select count(*)::int n from lote_movimentos where olist_id = 7101 and cerveja_id is null`)).n },
+    { lotes: 0, historico: historicoAntes + 1, soltos: historicoAntes + 1 })
+  expectEq('a remoção guarda como estavam os lotes',
+    await um(`select autor_id = $1 autor, jsonb_array_length(detalhes->'lotes') lotes, detalhes->'lotes'->0->>'lote' primeiro from lote_movimentos where olist_id = 7101 and tipo = 'cerveja_removida'`, [uid]),
+    { autor: true, lotes: 2, primeiro: 'VELHO' })
+  await db.exec(como(uid))
+  await q(`insert into lotes_cervejas (sku, olist_id, nome, estoque_olist, estoque_lido_em, estoque_origem) values ('BAIXA-1', 7101, 'Pils Baixa', 8, now(), 'cadastro')`)
+  await db.exec(`reset role;`)
+  expectEq('cadastrar de novo o mesmo produto traz o histórico antigo junto',
+    await um(`select count(*)::int n, count(*) filter (where tipo = 'cerveja_cadastrada')::int cadastros from lote_movimentos where olist_id = 7101`),
+    { n: historicoAntes + 2, cadastros: 2 })
+  await q(`delete from lotes_cervejas where olist_id = 7101`)
   expectEq('o aviso da cerveja removida sai do sino', (await um(`select count(*)::int n from notificacoes where tipo = 'lote_sem_registro'`)).n, 0)
 }
 

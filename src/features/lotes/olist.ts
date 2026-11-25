@@ -31,6 +31,7 @@ export async function consultarProdutoLoteNaOlist(id: number): Promise<ProdutoLo
 }
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms))
+const mensagemDoErro = (erro: unknown) => (erro instanceof Error ? erro.message : 'Erro desconhecido ao ler a Olist.').slice(0, 300)
 
 /**
  * Rotina (a cada 5 min): relê o nome e o estoque das cervejas com a leitura mais antiga (mais
@@ -43,7 +44,7 @@ export async function atualizarEstoqueDasCervejasDosLotes(): Promise<number> {
   const limite = new Date(Date.now() - RELER_A_CADA_MIN * 60_000).toISOString()
   const { data: cervejas, error } = await supabase
     .from('lotes_cervejas')
-    .select('id, olist_id')
+    .select('id, olist_id, releitura_pedida_em')
     .or(`releitura_pedida_em.not.is.null,estoque_lido_em.is.null,estoque_lido_em.lt."${limite}"`)
     // Primeiro as que a Olist avisou que mudaram; depois as de leitura mais antiga.
     .order('releitura_pedida_em', { ascending: true, nullsFirst: false })
@@ -57,21 +58,40 @@ export async function atualizarEstoqueDasCervejasDosLotes(): Promise<number> {
   for (const [i, cerveja] of cervejas.entries()) {
     if (i > 0) await esperar(PAUSA_ENTRE_LEITURAS_MS)
     const lidoEm = new Date().toISOString()
+    // Vai para o histórico do produto: leitura pedida pela Olist (aviso) ou rotina normal.
+    const origem = cerveja.releitura_pedida_em ? 'aviso_olist' : 'rotina'
     try {
       const produto = await obterProdutoLoteOlist(token, cerveja.olist_id)
       await supabase
         .from('lotes_cervejas')
-        // Se o estoque caiu, o banco baixa dos lotes na mesma hora (do que vence primeiro).
-        .update({ nome: produto.nome.slice(0, 200), estoque_olist: produto.estoque, estoque_lido_em: lidoEm, releitura_pedida_em: null })
+        // Se o estoque mudou, o banco registra a leitura e baixa dos lotes na mesma hora.
+        .update({
+          nome: produto.nome.slice(0, 200),
+          estoque_olist: produto.estoque,
+          estoque_lido_em: lidoEm,
+          estoque_origem: origem,
+          releitura_pedida_em: null,
+          leitura_erro: null,
+          leitura_erro_em: null,
+        })
         .eq('id', cerveja.id)
       atualizadas++
     } catch (erro) {
-      // Produto apagado na Olist: fica sem estoque informado (e sai da frente da fila).
-      if (erro instanceof ErroApiOlist && erro.status === 404) {
-        await supabase.from('lotes_cervejas').update({ estoque_olist: null, estoque_lido_em: lidoEm, releitura_pedida_em: null }).eq('id', cerveja.id)
-        continue
-      }
-      // Limite de chamadas, acesso negado ou rede: o resto fica para a próxima rodada.
+      // Limite de chamadas: não é problema do produto; o resto fica para a próxima rodada.
+      if (erro instanceof ErroApiOlist && erro.status === 429) break
+      const naoExiste = erro instanceof ErroApiOlist && erro.status === 404
+      await supabase
+        .from('lotes_cervejas')
+        .update({
+          // Produto apagado na Olist: fica sem estoque informado (e sai da frente da fila).
+          ...(naoExiste ? { estoque_olist: null, estoque_lido_em: lidoEm, releitura_pedida_em: null } : {}),
+          estoque_origem: origem,
+          leitura_erro: naoExiste ? 'Produto não encontrado na Olist.' : mensagemDoErro(erro),
+          leitura_erro_em: lidoEm,
+        })
+        .eq('id', cerveja.id)
+      if (naoExiste) continue
+      // Acesso negado ou rede: as outras também falhariam; tenta de novo na próxima rodada.
       break
     }
   }

@@ -1192,6 +1192,59 @@ export type Database = {
           },
         ]
       }
+      integracao_shopify: {
+        Row: {
+          atualizado_em: string
+          client_id: string | null
+          conectado_em: string | null
+          conectado_por: string | null
+          cotacao_em: string | null
+          escopos: string | null
+          id: number
+          loja: string | null
+          loja_nome: string | null
+          token_expira_em: string | null
+          ultimo_erro: string | null
+          verificado_em: string | null
+        }
+        Insert: {
+          atualizado_em?: string
+          client_id?: string | null
+          conectado_em?: string | null
+          conectado_por?: string | null
+          cotacao_em?: string | null
+          escopos?: string | null
+          id?: number
+          loja?: string | null
+          loja_nome?: string | null
+          token_expira_em?: string | null
+          ultimo_erro?: string | null
+          verificado_em?: string | null
+        }
+        Update: {
+          atualizado_em?: string
+          client_id?: string | null
+          conectado_em?: string | null
+          conectado_por?: string | null
+          cotacao_em?: string | null
+          escopos?: string | null
+          id?: number
+          loja?: string | null
+          loja_nome?: string | null
+          token_expira_em?: string | null
+          ultimo_erro?: string | null
+          verificado_em?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integracao_shopify_conectado_por_fkey"
+            columns: ["conectado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integracao_mercado_pago: {
         Row: {
           atualizado_em: string
@@ -1629,41 +1682,56 @@ export type Database = {
       lote_movimentos: {
         Row: {
           autor_id: string | null
-          cerveja_id: string
+          cerveja_id: string | null
           criado_em: string
+          detalhes: Json
           estoque_antes: number | null
           estoque_depois: number | null
           id: number
-          lote: string
+          lote: string | null
           lote_id: string | null
-          quantidade: number
+          olist_id: number | null
+          origem: string | null
+          papel: string | null
+          quantidade: number | null
           saldo: number | null
+          sku: string | null
           tipo: string
         }
         Insert: {
           autor_id?: string | null
-          cerveja_id: string
+          cerveja_id?: string | null
           criado_em?: string
+          detalhes?: Json
           estoque_antes?: number | null
           estoque_depois?: number | null
           id?: never
-          lote: string
+          lote?: string | null
           lote_id?: string | null
-          quantidade: number
+          olist_id?: number | null
+          origem?: string | null
+          papel?: string | null
+          quantidade?: number | null
           saldo?: number | null
+          sku?: string | null
           tipo: string
         }
         Update: {
           autor_id?: string | null
-          cerveja_id?: string
+          cerveja_id?: string | null
           criado_em?: string
+          detalhes?: Json
           estoque_antes?: number | null
           estoque_depois?: number | null
           id?: never
-          lote?: string
+          lote?: string | null
           lote_id?: string | null
-          quantidade?: number
+          olist_id?: number | null
+          origem?: string | null
+          papel?: string | null
+          quantidade?: number | null
           saldo?: number | null
+          sku?: string | null
           tipo?: string
         }
         Relationships: [
@@ -1745,8 +1813,11 @@ export type Database = {
           criado_por: string | null
           estoque_lido_em: string | null
           estoque_olist: number | null
+          estoque_origem: string | null
           foto_url: string | null
           id: string
+          leitura_erro: string | null
+          leitura_erro_em: string | null
           nome: string
           olist_id: number
           releitura_pedida_em: string | null
@@ -1758,8 +1829,11 @@ export type Database = {
           criado_por?: string | null
           estoque_lido_em?: string | null
           estoque_olist?: number | null
+          estoque_origem?: string | null
           foto_url?: string | null
           id?: string
+          leitura_erro?: string | null
+          leitura_erro_em?: string | null
           nome: string
           olist_id: number
           releitura_pedida_em?: string | null
@@ -1771,8 +1845,11 @@ export type Database = {
           criado_por?: string | null
           estoque_lido_em?: string | null
           estoque_olist?: number | null
+          estoque_origem?: string | null
           foto_url?: string | null
           id?: string
+          leitura_erro?: string | null
+          leitura_erro_em?: string | null
           nome?: string
           olist_id?: number
           releitura_pedida_em?: string | null
@@ -2066,6 +2143,7 @@ export type Database = {
           endereco_entrega: Json | null
           forma_pagamento: string | null
           frete: Database["public"]["Enums"]["situacao_frete"] | null
+          frete_cotacao: Json | null
           id: string
           numero: number
           observacoes: string | null
@@ -2094,6 +2172,7 @@ export type Database = {
           endereco_entrega?: Json | null
           forma_pagamento?: string | null
           frete?: Database["public"]["Enums"]["situacao_frete"] | null
+          frete_cotacao?: Json | null
           id?: string
           numero?: never
           observacoes?: string | null
@@ -2122,6 +2201,7 @@ export type Database = {
           endereco_entrega?: Json | null
           forma_pagamento?: string | null
           frete?: Database["public"]["Enums"]["situacao_frete"] | null
+          frete_cotacao?: Json | null
           id?: string
           numero?: never
           observacoes?: string | null
@@ -3691,6 +3771,43 @@ export type Database = {
         Args: { p_cobranca_id: string; p_dados: Json }
         Returns: undefined
       }
+      aplicar_frete_calculado: {
+        Args: { p_cep: string; p_pedido_id: string; p_resultado: Json; p_unidades: number }
+        Returns: Json
+      }
+      credenciais_shopify: {
+        Args: never
+        Returns: {
+          access_token: string | null
+          client_id: string
+          client_secret: string | null
+          loja: string
+          token_expira_em: string | null
+        }[]
+      }
+      desconectar_shopify: { Args: never; Returns: undefined }
+      frete_a_calcular: {
+        Args: { p_forcar?: boolean; p_pedido_id: string }
+        Returns: Json
+      }
+      gravar_token_shopify: {
+        Args: { p_escopos?: string; p_expira_em: string; p_token: string }
+        Returns: undefined
+      }
+      salvar_conexao_shopify: {
+        Args: {
+          p_client_id: string
+          p_client_secret: string
+          p_escopos: string
+          p_loja: string
+          p_loja_nome: string
+          p_token: string
+          p_token_expira_em: string
+        }
+        Returns: undefined
+      }
+      status_shopify: { Args: never; Returns: Json }
+      unidades_para_frete: { Args: { p_pedido_id: string }; Returns: number }
       credenciais_mercado_pago: {
         Args: never
         Returns: {

@@ -63,6 +63,7 @@ export async function cadastrarCervejaPorSku(_: EstadoAcao, formData: FormData):
       foto_url: foto,
       estoque_olist: produto.estoque,
       estoque_lido_em: new Date().toISOString(),
+      estoque_origem: 'cadastro',
     })
     .select('id')
     .single()
@@ -80,16 +81,23 @@ export async function atualizarCervejaDaOlist(id: string): Promise<EstadoAcao> {
 
   const inicio = new Date().toISOString()
   const consulta = await consultarOlist({ acao: 'lote-produto', id: cerveja.olist_id })
-  if (!consulta.ok) return falha(consulta.mensagem)
+  if (!consulta.ok || !consulta.produto) {
+    const motivo = !consulta.ok ? consulta.mensagem : 'Este produto não existe mais na Olist. O cadastro e os lotes continuam aqui no CRM.'
+    await registrarFalhaDeLeitura(supabase, id, 'botao', consulta.ok ? 'Produto não encontrado na Olist.' : motivo)
+    revalidatePath('/lotes', 'layout')
+    return falha(motivo)
+  }
   const produto = consulta.produto
-  if (!produto) return falha('Este produto não existe mais na Olist. O cadastro e os lotes continuam aqui no CRM.')
 
   const foto = !cerveja.foto_url && produto.foto ? await copiarFotoDaOlist(supabase, produto.foto) : null
   const mudancas = {
     nome: produto.nome.slice(0, 200),
     estoque_olist: produto.estoque,
     estoque_lido_em: new Date().toISOString(),
+    estoque_origem: 'botao',
     releitura_pedida_em: null,
+    leitura_erro: null,
+    leitura_erro_em: null,
     ...(foto ? { foto_url: foto } : {}),
   }
   let { error } = await supabase
@@ -108,6 +116,15 @@ export async function atualizarCervejaDaOlist(id: string): Promise<EstadoAcao> {
 
 type Supabase = Awaited<ReturnType<typeof exigirEquipe>>['supabase']
 
+/** Guarda na cerveja (e no histórico dela) que a leitura na Olist falhou e por quê. */
+async function registrarFalhaDeLeitura(supabase: Supabase, cervejaId: string, origem: 'botao' | 'salvar_lote', motivo: string) {
+  const { error } = await supabase
+    .from('lotes_cervejas')
+    .update({ estoque_origem: origem, leitura_erro: motivo.slice(0, 300), leitura_erro_em: new Date().toISOString() })
+    .eq('id', cervejaId)
+  if (error) console.error('[lotes] falha de leitura', error.message)
+}
+
 /** "Baixa automática: −4 un. do lote L2411A." — o que o banco tirou dos lotes desde `inicio`. */
 async function baixasDesde(supabase: Supabase, cervejaId: string, inicio: string): Promise<string | null> {
   const { data } = await supabase
@@ -118,7 +135,7 @@ async function baixasDesde(supabase: Supabase, cervejaId: string, inicio: string
     .gte('criado_em', inicio)
     .order('id')
   if (!data?.length) return null
-  return `Baixa automática: ${data.map((m) => `${formatarNumero(Math.abs(m.quantidade))} un. do lote ${m.lote}`).join(', ')}.`
+  return `Baixa automática: ${data.map((m) => `${formatarNumero(Math.abs(m.quantidade ?? 0))} un. do lote ${m.lote ?? '—'}`).join(', ')}.`
 }
 
 /**
@@ -127,14 +144,20 @@ async function baixasDesde(supabase: Supabase, cervejaId: string, inicio: string
  */
 async function lerEstoqueAgora(supabase: Supabase, cerveja: { id: string; olist_id: number }): Promise<boolean> {
   const consulta = await consultarOlist({ acao: 'lote-produto', id: cerveja.olist_id })
-  if (!consulta.ok || !consulta.produto) return false
+  if (!consulta.ok || !consulta.produto) {
+    await registrarFalhaDeLeitura(supabase, cerveja.id, 'salvar_lote', consulta.ok ? 'Produto não encontrado na Olist.' : consulta.mensagem)
+    return false
+  }
   const { error } = await supabase
     .from('lotes_cervejas')
     .update({
       nome: consulta.produto.nome.slice(0, 200),
       estoque_olist: consulta.produto.estoque,
       estoque_lido_em: new Date().toISOString(),
+      estoque_origem: 'salvar_lote',
       releitura_pedida_em: null,
+      leitura_erro: null,
+      leitura_erro_em: null,
     })
     .eq('id', cerveja.id)
   return !error
