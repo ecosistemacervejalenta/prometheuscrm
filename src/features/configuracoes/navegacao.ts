@@ -94,7 +94,7 @@ export const GRUPOS_CONFIGURACOES: GrupoSecoes[] = [
     titulo: 'Conexões',
     secoes: [
       secao('olist', 'Olist ERP', 'Vendas por canal e estoque das cervejas das pré-vendas.', Boxes),
-      secao('shopify', 'Shopify', 'Pedidos e clientes da loja virtual entram no CRM.', ShoppingBag),
+      secao('shopify', 'Shopify', 'Pedidos e clientes da loja entram no CRM; frete do link calculado pelo Olist Envios.', ShoppingBag),
       secao('mercado-pago', 'Mercado Pago', 'PIX com QR Code e baixa automática do pedido.', CreditCard),
       secao('mercado-livre', 'Mercado Livre', 'Tarifas, frete e valor líquido de cada venda.', ShoppingCart),
       secao('shopee', 'Shopee', 'Comissão, taxas e repasse final de cada pedido.', ShoppingCart),

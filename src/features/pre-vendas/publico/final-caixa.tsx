@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState, useTransition } from 'react'
 import { formatarData, formatarMoeda, numeroPedido } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-import { fecharMinhaCaixa, minhaCaixa } from './actions'
+import { fecharMinhaCaixa, minhaCaixa, minhaCaixaComFrete } from './actions'
 import type { PedidoFeito } from './armazenamento'
 import { CaixaIlustracao, ConteudoDaCaixa } from './caixa'
 import { caixaQuitada, gruposDaCaixa, type CaixaPublica } from './caixa-dados'
@@ -22,6 +22,8 @@ type Escolha = NonNullable<PedidoFeito['escolha']>
  * deixar a caixa aberta (vai juntando as próximas pré-vendas e paga tudo no fechamento,
  * com um frete só) ou fechar e pagar agora. Paga, a caixa aparece fechada com laço:
  * vai ser preparada e enviada com carinho.
+ * CEP fora da lista VIP com a Shopify conectada: o frete é calculado aqui (peso da caixa) e o
+ * cliente vê o valor antes de escolher. Se o cálculo falhar, vale o "frete a cotar" de antes.
  */
 export function TelaCaixa({
   pedido,
@@ -44,18 +46,24 @@ export function TelaCaixa({
   const [fechando, iniciar] = useTransition()
   const [primeiraVez] = useState(() => caixaInicial !== null)
   const pedidoId = pedido.pedidoId
+  const freteAutomatico = loja.freteAutomatico
+  /** A primeira conferência no servidor ainda não voltou: frete "a cotar" aparece como "calculando". */
+  const [conferindoFrete, setConferindoFrete] = useState(() => freteAutomatico && Boolean(pedidoId))
 
   // Sempre confere a caixa no servidor: pode ter recebido itens de outra pré-venda ou sido paga.
+  // Com a Shopify conectada, a mesma ida ao servidor calcula o frete que ainda estiver "a cotar".
   useEffect(() => {
     if (!pedidoId) return
     let ativo = true
-    minhaCaixa(pedidoId)
+    const buscar = freteAutomatico ? minhaCaixaComFrete : minhaCaixa
+    buscar(pedidoId)
       .then((c) => ativo && c && setCaixa(c))
       .catch(() => {})
+      .finally(() => ativo && setConferindoFrete(false))
     return () => {
       ativo = false
     }
-  }, [pedidoId])
+  }, [pedidoId, freteAutomatico])
 
   const escolher = useCallback(
     (nova: Escolha) => {
@@ -112,10 +120,13 @@ export function TelaCaixa({
       : 'pagar'
   const primeiroNome = caixa.cliente.primeiroNome || pedido.nome.split(' ')[0]
   const linkCaixa = typeof window === 'undefined' ? '' : `${window.location.origin}/pagar/${caixa.pedidoId}`
-  const freteCaixa =
-    caixa.frete === 'a_cotar'
-      ? { rotulo: 'Frete (um só para a caixa)', valor: 'a cotar' }
-      : { rotulo: 'Frete (um só para a caixa)', valor: formatarMoeda(caixa.taxaEntrega) }
+  // O frete está sendo calculado agora: ao abrir a tela ou no toque em "Fechar e pagar agora".
+  const calculandoFrete = caixa.frete === 'a_cotar' && !quitada && freteAutomatico && (conferindoFrete || fechando)
+  const freteCaixa = {
+    rotulo: 'Frete (um só para a caixa)',
+    valor: caixa.frete !== 'a_cotar' ? formatarMoeda(caixa.taxaEntrega) : calculandoFrete ? 'calculando…' : 'a cotar',
+  }
+  const destino = [caixa.cliente.cidade, caixa.cliente.uf].filter(Boolean).join('/')
 
   return (
     <div className="animar-passo space-y-4">
@@ -151,7 +162,7 @@ export function TelaCaixa({
         </section>
       )}
 
-      {modo === 'escolher' && <CartoesDeEscolha caixa={caixa} ocupado={fechando} aoEscolher={escolher} />}
+      {modo === 'escolher' && <CartoesDeEscolha caixa={caixa} ocupado={fechando} calculandoFrete={calculandoFrete} aoEscolher={escolher} />}
 
       {modo === 'aberta' && (
         <section className="rounded-[24px] border-2 border-vip/50 bg-vip-50 p-5">
@@ -170,13 +181,23 @@ export function TelaCaixa({
             disabled={fechando}
             className={classeBotaoGrande('claro', 'mt-3 w-full')}
           >
-            {fechando ? <LoaderCircle className="animate-spin" aria-hidden /> : <PackageCheck aria-hidden />} Fechar e pagar agora
+            {fechando ? <LoaderCircle className="animate-spin" aria-hidden /> : <PackageCheck aria-hidden />}{' '}
+            {fechando && calculandoFrete ? 'Calculando o frete…' : 'Fechar e pagar agora'}
           </button>
         </section>
       )}
 
       {modo === 'pagar' &&
-        (loja.mercadoPago ? (
+        (calculandoFrete ? (
+          // O PIX só aparece depois do frete: assim ele já sai com o valor da caixa inteira.
+          <section className="rounded-[24px] border border-linha bg-superficie p-5" aria-busy="true">
+            <h2 className="tipo-h2">Pague com PIX</h2>
+            <div className="mt-4 grid place-items-center gap-3 rounded-2xl bg-papel px-4 py-12 text-center">
+              <LoaderCircle className="size-8 animate-spin text-suave" aria-hidden />
+              <p className="text-[15px] text-suave">Calculando o frete da sua caixa…</p>
+            </div>
+          </section>
+        ) : loja.mercadoPago ? (
           <PixMercadoPago
             pedidoId={caixa.pedidoId}
             aoMudar={(s) => {
@@ -200,7 +221,18 @@ export function TelaCaixa({
         previsaoEnvio={caixa.previsaoEnvio}
       />
 
-      {caixa.frete === 'a_cotar' && modo !== 'paga' && (
+      {caixa.freteCalculado && (modo === 'escolher' || modo === 'aberta') && (
+        <p className="flex items-start gap-3 rounded-[20px] bg-volt-50 p-4 text-[15px] leading-6 text-ink/80">
+          <Truck className="mt-0.5 size-5 shrink-0 text-volt-700" aria-hidden />
+          <span>
+            <b className="text-ink">Frete de {formatarMoeda(caixa.taxaEntrega)}</b>
+            {destino ? ` para ${destino}` : ''}, calculado pelo peso da caixa. Se você colocar mais cervejas, a gente calcula de novo —
+            continua sendo um frete só.
+          </span>
+        </p>
+      )}
+
+      {caixa.frete === 'a_cotar' && modo !== 'paga' && !calculandoFrete && (
         <p className="flex items-start gap-3 rounded-[20px] border border-alerta/25 bg-alerta-50 p-4 text-[15px] leading-6 text-ink/80">
           <Truck className="mt-0.5 size-5 shrink-0 text-alerta" aria-hidden />
           <span>
@@ -223,7 +255,17 @@ export function TelaCaixa({
   )
 }
 
-function CartoesDeEscolha({ caixa, ocupado, aoEscolher }: { caixa: CaixaPublica; ocupado: boolean; aoEscolher: (e: Escolha) => void }) {
+function CartoesDeEscolha({
+  caixa,
+  ocupado,
+  calculandoFrete,
+  aoEscolher,
+}: {
+  caixa: CaixaPublica
+  ocupado: boolean
+  calculandoFrete: boolean
+  aoEscolher: (e: Escolha) => void
+}) {
   return (
     <section aria-labelledby="titulo-escolha" className="space-y-3">
       <h2 id="titulo-escolha" className="tipo-h3 px-1">
@@ -246,11 +288,16 @@ function CartoesDeEscolha({ caixa, ocupado, aoEscolher }: { caixa: CaixaPublica;
 
       <div className="rounded-[24px] border border-linha bg-superficie p-5">
         <h3 className="tipo-h3">Fechar a caixa e pagar agora</h3>
-        <p className="mt-1.5 text-[15px] leading-6 text-suave">
-          Já escolheu tudo? Pague {formatarMoeda(caixa.devido)} com PIX e sua caixa segue para envio assim que as cervejas chegarem.
+        <p className="mt-1.5 text-[15px] leading-6 text-suave" aria-live="polite">
+          {calculandoFrete
+            ? 'Já escolheu tudo? Estamos calculando o frete para o seu CEP: o valor aparece aqui em instantes.'
+            : caixa.frete === 'a_cotar'
+              ? `Já escolheu tudo? Pague ${formatarMoeda(caixa.devido)} das cervejas com PIX agora. O frete a gente cota e te manda no WhatsApp.`
+              : `Já escolheu tudo? Pague ${formatarMoeda(caixa.devido)} com PIX, já com o frete, e sua caixa segue para envio assim que as cervejas chegarem.`}
         </p>
         <button type="button" onClick={() => aoEscolher('pagar')} disabled={ocupado} className={classeBotaoGrande('claro', 'mt-4 w-full')}>
-          {ocupado ? <LoaderCircle className="animate-spin" aria-hidden /> : <PackageCheck aria-hidden />} Fechar e pagar agora
+          {ocupado ? <LoaderCircle className="animate-spin" aria-hidden /> : <PackageCheck aria-hidden />}{' '}
+          {ocupado && calculandoFrete ? 'Calculando o frete…' : 'Fechar e pagar agora'}
         </button>
       </div>
     </section>

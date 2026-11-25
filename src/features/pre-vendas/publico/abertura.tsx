@@ -39,6 +39,7 @@ export function AberturaPreVenda({
   itens,
   nomeLoja,
   freteVip,
+  freteAutomatico = false,
   aoComecar,
   capa,
 }: {
@@ -46,6 +47,8 @@ export function AberturaPreVenda({
   itens: CervejaDoLink[]
   nomeLoja: string
   freteVip: number
+  /** Fora dos CEPs atendidos o frete é calculado sozinho pelo peso (não cotado pela equipe). */
+  freteAutomatico?: boolean
   aoComecar?: () => void
   /** Substitui a foto de destaque (prévia de foto ainda não enviada). */
   capa?: ReactNode
@@ -108,7 +111,10 @@ export function AberturaPreVenda({
       <p className="mt-4 flex items-start gap-3 rounded-[20px] border border-linha bg-superficie p-4 text-[15px] leading-6">
         <Truck className="mt-0.5 size-5 shrink-0 text-volt-700" aria-hidden />
         <span>
-          Frete fixo de <b>{formatarMoeda(freteVip)}</b> para os CEPs atendidos. Fora deles, a gente cota e te avisa no WhatsApp.
+          Frete fixo de <b>{formatarMoeda(freteVip)}</b> para os CEPs atendidos.{' '}
+          {freteAutomatico
+            ? 'Fora deles, o frete é calculado pelo peso da sua caixa e você vê o valor antes de pagar.'
+            : 'Fora deles, a gente cota e te avisa no WhatsApp.'}
         </span>
       </p>
 

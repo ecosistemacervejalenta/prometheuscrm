@@ -6,11 +6,17 @@ import { statusOlist } from '@/features/olist/queries'
 import { salvarPreVenda } from '@/features/pre-vendas/actions'
 import { FormularioPreVenda } from '@/features/pre-vendas/components/formulario-pre-venda'
 import { opcoesProdutos } from '@/features/produtos/queries'
+import { statusShopify } from '@/features/shopify/queries'
 
 export const metadata: Metadata = { title: 'Nova pré-venda' }
 
 export default async function PaginaNovaPreVenda() {
-  const [produtos, config, olist] = await Promise.all([opcoesProdutos(), obterConfiguracoes(), statusOlist().catch(() => null)])
+  const [produtos, config, olist, shopify] = await Promise.all([
+    opcoesProdutos(),
+    obterConfiguracoes(),
+    statusOlist().catch(() => null),
+    statusShopify().catch(() => null),
+  ])
   return (
     <>
       <PageHeader
@@ -23,6 +29,7 @@ export default async function PaginaNovaPreVenda() {
         produtos={produtos}
         nomeLoja={config.nome_loja}
         freteVip={Number(config.frete_vip_valor)}
+        freteAutomatico={Boolean(shopify?.conectado)}
         olistConectado={Boolean(olist?.conectado)}
       />
     </>

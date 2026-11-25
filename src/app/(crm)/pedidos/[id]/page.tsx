@@ -19,6 +19,9 @@ import { BotaoCobrar, ControlePagamento, SeletorStatus } from '@/features/pedido
 import { BotaoEnviarFrete, CotarFrete } from '@/features/pedidos/components/frete'
 import { CaixaBadge, CanalBadge, FreteBadge, PagamentoBadge } from '@/features/pedidos/components/selos'
 import { atividadesDoPedido, obterPedido } from '@/features/pedidos/queries'
+import { BotaoCalcularFrete, FreteCalculadoDoPedido } from '@/features/shopify/components/frete-do-pedido'
+import { fraseDaFalha, lerCotacaoDoPedido } from '@/features/shopify/cotacao'
+import { statusShopify } from '@/features/shopify/queries'
 import { formatarCep, formatarData, formatarDataHora, formatarEndereco, formatarMoeda, formatarWhatsapp, numeroPedido, primeiroNome, type Endereco } from '@/lib/format'
 import { exigirEquipe } from '@/lib/auth'
 import { linkWhatsapp } from '@/lib/whatsapp'
@@ -30,13 +33,14 @@ export async function generateMetadata({ params }: PageProps<'/pedidos/[id]'>): 
 
 export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'>) {
   const { id } = await params
-  const [{ perfil }, pedido, atividades, config, basePix, cobrancasPix] = await Promise.all([
+  const [{ perfil }, pedido, atividades, config, basePix, cobrancasPix, shopify] = await Promise.all([
     exigirEquipe(),
     obterPedido(id),
     atividadesDoPedido(id),
     obterConfiguracoes(),
     basePagamentoPix(),
     cobrancasPixDoPedido(id),
+    statusShopify(),
   ])
   if (!pedido) notFound()
 
@@ -61,6 +65,23 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
     itens: pedido.pedido_itens,
   }, linkPix)
   const emAberto = pedido.status !== 'cancelado' && ['pendente', 'cobrado'].includes(pedido.status_pagamento)
+  // Frete calculado sozinho (Olist Envios pela Shopify) — nulo quando é fixo ou foi informado à mão.
+  const cotacaoFrete = lerCotacaoDoPedido(pedido.frete_cotacao)
+  const freteCalculado = pedido.frete === 'cotado' && cotacaoFrete?.situacao === 'ok' ? cotacaoFrete : null
+  const podeCalcularFrete = shopify.conectado && pedido.frete === 'a_cotar' && emAberto && ['novo', 'confirmado'].includes(pedido.status)
+  const cepEntrega = formatarCep(endereco?.cep) || 'não informado'
+  const descricaoFrete =
+    pedido.frete !== 'a_cotar'
+      ? freteCalculado
+        ? 'Calculado sozinho pelo Olist Envios (a opção mais barata). Envie (ou reenvie) o valor ao cliente pelo WhatsApp.'
+        : 'Frete cotado. Envie (ou reenvie) o valor ao cliente pelo WhatsApp.'
+      : cotacaoFrete?.situacao === 'falhou'
+        ? `CEP ${cepEntrega} fora da lista VIP. O cálculo automático não deu certo: ${fraseDaFalha(cotacaoFrete.detalhe)} Informe o valor e envie ao cliente pelo WhatsApp.`
+        : cotacaoFrete?.situacao === 'desatualizada'
+          ? `Entraram cervejas novas na caixa: o frete (antes ${formatarMoeda(cotacaoFrete.valor)}) é calculado de novo quando o cliente abre ou fecha a caixa${podeCalcularFrete ? ' — ou calcule agora' : ''}.`
+          : podeCalcularFrete
+            ? `CEP ${cepEntrega} fora da lista VIP. O frete é calculado sozinho quando o cliente abre ou fecha a caixa — ou calcule agora.`
+            : `CEP ${cepEntrega} fora da lista VIP. Informe o valor e envie ao cliente pelo WhatsApp.`
   const linkFrete =
     pedido.frete === 'cotado'
       ? linkDeFrete(config, {
@@ -161,15 +182,15 @@ export default async function PaginaPedido({ params }: PageProps<'/pedidos/[id]'
             <Card className="print:hidden">
               <CardHeader
                 titulo="Frete"
-                descricao={
-                  pedido.frete === 'a_cotar'
-                    ? `CEP ${formatarCep(endereco?.cep) || 'não informado'} fora da lista VIP. Informe o valor e envie ao cliente pelo WhatsApp.`
-                    : 'Frete cotado. Envie (ou reenvie) o valor ao cliente pelo WhatsApp.'
-                }
+                descricao={descricaoFrete}
                 acoes={<BotaoEnviarFrete href={linkFrete} />}
               />
-              <CardContent>
-                <CotarFrete pedidoId={pedido.id} valor={Number(pedido.taxa_entrega)} className="max-w-sm" />
+              <CardContent className="space-y-4">
+                <FreteCalculadoDoPedido cotacao={freteCalculado} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <CotarFrete pedidoId={pedido.id} valor={Number(pedido.taxa_entrega)} className="max-w-sm min-w-0 flex-1 basis-64" />
+                  {podeCalcularFrete && <BotaoCalcularFrete pedidoId={pedido.id} />}
+                </div>
               </CardContent>
             </Card>
           )}

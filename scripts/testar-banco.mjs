@@ -1614,6 +1614,160 @@ await db.exec(`reset role;`)
   expectEq('linha do tempo registra a anonimização', (await um(`select tipo from atividades where cliente_id = $1 order by criado_em desc limit 1`, [titular.id])).tipo, 'cliente_anonimizado')
 }
 
+// -----------------------------------------------------------------------------
+// Frete calculado pelo Olist Envios (via Shopify): CEP fora da lista VIP.
+// A ida à Shopify é do servidor; aqui o banco decide quando calcular e grava o resultado.
+// -----------------------------------------------------------------------------
+{
+  const como = (id) => `reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${id}', false);`
+  const servidor = `reset role; set role service_role;`
+  // O jsonb devolve as chaves em outra ordem: compara com as chaves ordenadas.
+  const ordenado = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, ordenado(v[k])])) : v)
+  const igual = (label, atual, esperado) => expectEq(label, ordenado(atual), ordenado(esperado))
+  await db.exec(`reset role;`)
+  await q(`select substituir_ceps_frete_vip('[["04500000","04599999"]]'::jsonb)`)
+  const lata = await um(`insert into produtos (nome, preco) values ('Lata do Frete', 20) returning id`)
+  const kit = await um(`insert into produtos (nome, preco, cervejas_do_kit) values ('Kit do Frete', 90, '[{"nome":"A","quantidade":2},{"nome":"B","quantidade":1}]') returning id`)
+  const pvFrete = await um(`insert into pre_vendas (titulo, slug, canal) values ('Drop Frete', 'drop-frete', 'grupo_vip') returning id`)
+  await q(`insert into pre_venda_itens (pre_venda_id, produto_id, preco) values ($1, $2, 20), ($1, $3, 90)`, [pvFrete.id, lata.id, kit.id])
+  const enderecoBH = { cep: '30130-003', logradouro: 'Av. Afonso Pena', numero: '1000', bairro: 'Centro', cidade: 'Belo Horizonte', uf: 'MG' }
+  const enderecoSP = { cep: '04567-890', logradouro: 'Rua A', numero: '1', bairro: 'Centro', cidade: 'São Paulo', uf: 'SP' }
+  const comprarFrete = (whatsapp, itensCompra, cliente = enderecoBH, atualizar = true) =>
+    um(`select * from registrar_pedido_pre_venda('drop-frete', $1::jsonb, $2::jsonb, $3)`, [
+      JSON.stringify({ whatsapp, nome: 'Fred Frete', email: 'fred@x.com', ...cliente }), JSON.stringify(itensCompra), atualizar])
+  const calculado = (valor, servico = 'Olist Envios IMile') =>
+    JSON.stringify({ ok: true, valor, servico, peso_kg: 3.5, opcoes: [{ servico, valor }, { servico: 'Olist Envios Correios SEDEX', valor: 66.18 }] })
+  const aCalcular = async (id, forcar = false) => (await um(`select frete_a_calcular($1, $2) r`, [id, forcar])).r
+  const aplicar = async (id, unidades, cep, resultado) => (await um(`select aplicar_frete_calculado($1, $2, $3, $4::jsonb) r`, [id, unidades, cep, resultado])).r
+
+  await db.exec(servidor)
+  const f1 = await comprarFrete('(31) 95555-7001', [{ produto_id: lata.id, quantidade: 4 }, { produto_id: kit.id, quantidade: 1 }])
+  igual('frete calculado: caixa fora da lista VIP nasce a cotar', { frete: f1.frete, taxa: Number(f1.taxa_entrega), cotacao: f1.frete_cotacao }, { frete: 'a_cotar', taxa: 0, cotacao: null })
+  igual('kit conta cada cerveja de dentro no peso', (await um(`select unidades_para_frete($1) n`, [f1.id])).n, 7)
+  const plano = await aCalcular(f1.id)
+  igual('frete a cotar pede o cálculo com unidades, CEP e endereço',
+    { calcular: plano.calcular, unidades: plano.unidades, cep: plano.cep, cidade: plano.endereco?.cidade, uf: plano.endereco?.uf, valor: Number(plano.valor) },
+    { calcular: true, unidades: 7, cep: '30130003', cidade: 'Belo Horizonte', uf: 'MG', valor: 170 })
+  igual('resultado de outra quantidade de cervejas não é gravado', await aplicar(f1.id, 6, '30130003', calculado(20)), { aplicado: false, motivo: 'caixa_mudou' })
+  igual('resultado de outro CEP não é gravado', await aplicar(f1.id, 7, '80020310', calculado(20)), { aplicado: false, motivo: 'caixa_mudou' })
+  igual('grava o frete calculado', await aplicar(f1.id, 7, '30130-003', calculado(23.34)), { aplicado: true, valor: 23.34, servico: 'Olist Envios IMile' })
+  const comFrete = await um(`select frete, taxa_entrega::float taxa, total::float total, frete_cotacao c from pedidos where id = $1`, [f1.id])
+  igual('pedido passa a ter o frete no total',
+    { frete: comFrete.frete, taxa: comFrete.taxa, total: comFrete.total, origem: comFrete.c?.origem, situacao: comFrete.c?.situacao, unidades: comFrete.c?.unidades, cep: comFrete.c?.cep, opcoes: comFrete.c?.opcoes?.length },
+    { frete: 'cotado', taxa: 23.34, total: 193.34, origem: 'shopify', situacao: 'ok', unidades: 7, cep: '30130003', opcoes: 2 })
+  igual('frete em dia não é calculado de novo', await aCalcular(f1.id), { calcular: false, motivo: 'em_dia' })
+  igual('nem com a equipe forçando', await aCalcular(f1.id, true), { calcular: false, motivo: 'em_dia' })
+  const repetido = await aplicar(f1.id, 7, '30130003', calculado(99))
+  igual('dois cálculos ao mesmo tempo: o segundo não muda o valor', { repetido: repetido.repetido, valor: Number(repetido.valor) }, { repetido: true, valor: 23.34 })
+  igual('linha do tempo registra o frete calculado uma vez', (await um(`select count(*)::int n from atividades where pedido_id = $1 and tipo = 'frete_cotado'`, [f1.id])).n, 1)
+  const publica = (await um(`select caixa_publica($1) r`, [f1.id])).r
+  igual('cliente vê o frete calculado na caixa',
+    { frete: publica.frete, calculado: publica.frete_calculado, taxa: Number(publica.taxa_entrega), devido: Number(publica.devido) },
+    { frete: 'cotado', calculado: true, taxa: 23.34, devido: 193.34 })
+
+  // Cerveja nova na caixa: o frete volta para "a cotar" e a conta é refeita para a caixa inteira.
+  const f2 = await comprarFrete('31955557001', [{ produto_id: lata.id, quantidade: 2 }], {}, false)
+  igual('cerveja nova na caixa zera o frete calculado',
+    { id: f2.id, frete: f2.frete, taxa: Number(f2.taxa_entrega), total: Number(f2.total), situacao: f2.frete_cotacao?.situacao, antes: f2.frete_cotacao?.valor },
+    { id: f1.id, frete: 'a_cotar', taxa: 0, total: 210, situacao: 'desatualizada', antes: 23.34 })
+  igual('linha do tempo avisa que o frete é refeito',
+    (await um(`select descricao from atividades where pedido_id = $1 and tipo = 'caixa_itens_adicionados' order by criado_em desc limit 1`, [f1.id])).descricao.includes('calculado de novo'), true)
+  const plano2 = await aCalcular(f1.id)
+  igual('pede o cálculo da caixa inteira', { calcular: plano2.calcular, unidades: plano2.unidades, valor: Number(plano2.valor) }, { calcular: true, unidades: 9, valor: 210 })
+  igual('caixa pública volta a mostrar frete a cotar', (({ frete, frete_calculado }) => ({ frete, frete_calculado }))((await um(`select caixa_publica($1) r`, [f1.id])).r), { frete: 'a_cotar', frete_calculado: false })
+
+  // Falhou: fica a cotar com o motivo, avisa uma vez, espera antes de tentar de novo.
+  const falhou = JSON.stringify({ ok: false, motivo: 'sem_opcoes', detalhe: 'o Olist Envios não devolveu opção de entrega' })
+  igual('cálculo que falhou deixa o pedido a cotar', await aplicar(f1.id, 9, '30130003', falhou), { aplicado: false, motivo: 'cotacao_falhou' })
+  await aplicar(f1.id, 9, '30130003', falhou)
+  igual('falha repetida avisa na linha do tempo uma vez só',
+    (await um(`select count(*)::int n from atividades where pedido_id = $1 and tipo = 'frete_a_cotar' and dados ->> 'automatico' = 'true'`, [f1.id])).n, 1)
+  igual('pedido guarda o motivo da falha',
+    await um(`select frete, taxa_entrega::float taxa, frete_cotacao ->> 'situacao' situacao, frete_cotacao ->> 'motivo' motivo from pedidos where id = $1`, [f1.id]),
+    { frete: 'a_cotar', taxa: 0, situacao: 'falhou', motivo: 'sem_opcoes' })
+  igual('depois de falhar, espera antes de tentar de novo', await aCalcular(f1.id), { calcular: false, motivo: 'tentativa_recente' })
+  igual('a equipe pode calcular na hora', (await aCalcular(f1.id, true)).calcular, true)
+  await db.exec(`reset role;`)
+  await q(`update pedidos set frete_cotacao = frete_cotacao || jsonb_build_object('tentado_em', now() - interval '2 minutes') where id = $1`, [f1.id])
+  await db.exec(servidor)
+  igual('passada a espera, tenta de novo sozinho', (await aCalcular(f1.id)).calcular, true)
+
+  // PIX das cervejas pago com o frete ainda a cotar; o frete calculado depois entra na conta.
+  const pixCervejas = (await um(`select preparar_cobranca_pix($1) r`, [f1.id])).r
+  igual('com frete a cotar o PIX cobra só as cervejas', Number(pixCervejas.cobranca.valor), 210)
+  await q(`select concluir_cobranca_pix($1, '{"mp_pagamento_id":"ORDFRETE1"}'::jsonb)`, [pixCervejas.cobranca.id])
+  await q(`select registrar_status_pix(null, 'ORDFRETE1', 'approved', 210, now(), null)`)
+  igual('pedido não quita com o frete a cotar', (await um(`select status_pagamento <> 'pago' aberto from pedidos where id = $1`, [f1.id])).aberto, true)
+  igual('frete calculado depois do PIX das cervejas', (await aplicar(f1.id, 9, '30130003', calculado(27.48))).aplicado, true)
+  const pixFrete = (await um(`select preparar_cobranca_pix($1) r`, [f1.id])).r
+  igual('falta pagar só o frete', { situacao: pixFrete.situacao, valor: Number(pixFrete.cobranca?.valor), total: Number(pixFrete.total) }, { situacao: 'criar', valor: 27.48, total: 237.48 })
+
+  // Frete informado à mão pela equipe: deixa de ser automático e o cálculo não mexe mais.
+  await db.exec(como(uid))
+  await q(`select cotar_frete_pedido($1, 30)`, [f1.id])
+  await db.exec(servidor)
+  igual('frete cotado à mão deixa de ser automático', await um(`select frete, taxa_entrega::float taxa, frete_cotacao c from pedidos where id = $1`, [f1.id]), { frete: 'cotado', taxa: 30, c: null })
+  igual('cálculo não troca o frete da equipe', await aCalcular(f1.id, true), { calcular: false, motivo: 'frete_manual' })
+  igual('nem grava por cima', await aplicar(f1.id, 9, '30130003', calculado(10)), { aplicado: false, motivo: 'frete_manual' })
+  igual('caixa pública: frete da equipe não é "calculado"', (await um(`select caixa_publica($1) r`, [f1.id])).r.frete_calculado, false)
+  const f1b = await comprarFrete('31955557001', [{ produto_id: lata.id, quantidade: 1 }], {}, false)
+  igual('cerveja nova não zera o frete cotado à mão', { frete: f1b.frete, taxa: Number(f1b.taxa_entrega) }, { frete: 'cotado', taxa: 30 })
+
+  // CEP da lista VIP fica de fora; trocar o CEP da caixa descarta o cálculo antigo.
+  const fVip = await comprarFrete('(11) 95555-7002', [{ produto_id: lata.id, quantidade: 1 }], enderecoSP)
+  igual('CEP da lista VIP continua com frete fixo', { frete: fVip.frete, taxa: Number(fVip.taxa_entrega), plano: await aCalcular(fVip.id) }, { frete: 'vip', taxa: 15, plano: { calcular: false, motivo: 'frete_fixo' } })
+  igual('frete fixo nunca recebe cálculo', await aplicar(fVip.id, 1, '04567890', calculado(9)), { aplicado: false, motivo: 'frete_fixo' })
+  const f3 = await comprarFrete('(31) 95555-7003', [{ produto_id: lata.id, quantidade: 3 }])
+  await aplicar(f3.id, 3, '30130003', calculado(21))
+  const f3Curitiba = await comprarFrete('31955557003', [{ produto_id: lata.id, quantidade: 1 }], { cep: '80020-310', logradouro: 'Rua XV', numero: '100', bairro: 'Centro', cidade: 'Curitiba', uf: 'PR' })
+  igual('endereço novo com outro CEP descarta o cálculo antigo', { frete: f3Curitiba.frete, taxa: Number(f3Curitiba.taxa_entrega), c: f3Curitiba.frete_cotacao }, { frete: 'a_cotar', taxa: 0, c: null })
+  igual('e o novo cálculo usa o CEP novo', (({ calcular, unidades, cep }) => ({ calcular, unidades, cep }))(await aCalcular(f3.id)), { calcular: true, unidades: 4, cep: '80020310' })
+  await aplicar(f3.id, 4, '80020310', calculado(31))
+  const f3Vip = await comprarFrete('31955557003', [{ produto_id: lata.id, quantidade: 1 }], enderecoSP)
+  igual('endereço novo na lista VIP vira frete fixo', { frete: f3Vip.frete, taxa: Number(f3Vip.taxa_entrega), c: f3Vip.frete_cotacao }, { frete: 'vip', taxa: 15, c: null })
+
+  // Pedido pago ou já separado: o frete não é mais mexido.
+  const f4 = await comprarFrete('(31) 95555-7004', [{ produto_id: lata.id, quantidade: 2 }])
+  await db.exec(`reset role;`)
+  await q(`update pedidos set status_pagamento = 'pago' where id = $1`, [f4.id])
+  await db.exec(servidor)
+  igual('pedido pago não tem frete calculado', await aCalcular(f4.id, true), { calcular: false, motivo: 'pedido_fechado' })
+  igual('nem grava em pedido pago', await aplicar(f4.id, 2, '30130003', calculado(18)), { aplicado: false, motivo: 'pedido_fechado' })
+  igual('pedido inexistente', await aCalcular('00000000-0000-4000-8000-000000000000'), { calcular: false, motivo: 'pedido_nao_encontrado' })
+
+  // Conexão: só administrador salva; a equipe vê o status sem segredo; credenciais só para o servidor.
+  await db.exec(como(uid2))
+  await expectError('membro (não admin) não conecta a Shopify', `select salvar_conexao_shopify('minhaloja', 'Minha Loja', 'cid-123', 'segredo-abc', 'write_draft_orders', 'token-1', now() + interval '1 day')`)
+  await db.exec(como(uid))
+  await expectError('conexão exige loja, Client ID e secret', `select salvar_conexao_shopify('minhaloja', 'Minha Loja', 'cid-123', '  ', 'write_draft_orders', 'token-1', now() + interval '1 day')`)
+  await q(`select salvar_conexao_shopify(' MinhaLoja ', 'Minha Loja', 'cid-123', 'segredo-abc', 'write_draft_orders', 'token-1', now() + interval '1 day')`)
+  const statusFrete = (await um(`select status_shopify() r`)).r
+  igual('equipe vê o status da Shopify sem segredo',
+    { conectado: statusFrete.conectado, loja: statusFrete.loja, nome: statusFrete.loja_nome, vazou: /segredo-abc|token-1/.test(JSON.stringify(statusFrete)), calculados: Number(statusFrete.fretes_calculados) },
+    { conectado: true, loja: 'minhaloja', nome: 'Minha Loja', vazou: false, calculados: 0 })
+  await expectError('equipe não lê as credenciais', `select * from credenciais_shopify()`)
+  await expectError('equipe não lê a tabela da conexão', `select * from integracao_shopify`)
+  await expectError('equipe não grava frete calculado direto no banco', `select aplicar_frete_calculado($1, 2, '30130003', $2::jsonb)`, [f4.id, calculado(1)])
+  await db.exec(`reset role; set role anon;`)
+  await expectError('visitante não vê o status da Shopify', `select status_shopify()`)
+  await expectError('visitante não pergunta o frete direto no banco', `select frete_a_calcular($1)`, [f1.id])
+  await db.exec(servidor)
+  igual('servidor lê as credenciais', await um(`select loja, client_id, client_secret, access_token from credenciais_shopify()`),
+    { loja: 'minhaloja', client_id: 'cid-123', client_secret: 'segredo-abc', access_token: 'token-1' })
+  await q(`select gravar_token_shopify('token-2', now() + interval '1 day', 'write_draft_orders')`)
+  igual('token renovado fica guardado', (await um(`select access_token from credenciais_shopify()`)).access_token, 'token-2')
+  await db.exec(como(uid2))
+  await expectError('membro (não admin) não desconecta a Shopify', `select desconectar_shopify()`)
+  await db.exec(como(uid))
+  await q(`select desconectar_shopify()`)
+  await db.exec(servidor)
+  igual('desconectar apaga as credenciais', (await q(`select * from credenciais_shopify()`)).length, 0)
+  await q(`select gravar_token_shopify('token-atrasado', now() + interval '1 day', 'write_draft_orders')`)
+  await db.exec(`reset role;`)
+  igual('e tira os segredos do Vault (token que chega depois de desconectar não é guardado)', (await um(`select count(*)::int n from vault.secrets where name like 'shopify_%'`)).n, 0)
+  igual('status volta para desconectado', (await um(`select conectado_em, loja, client_id from integracao_shopify`)), { conectado_em: null, loja: null, client_id: null })
+}
+
 if (falhas > 0) {
   console.error(`\n✗ ${falhas} verificação(ões) falharam`)
   process.exit(1)

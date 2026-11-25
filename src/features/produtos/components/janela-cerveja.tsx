@@ -25,6 +25,8 @@ export type ContextoDoLink = {
   preVenda: PreVendaDoLink
   nomeLoja: string
   freteVip: number
+  /** Shopify conectada: fora dos CEPs VIP o frete é calculado sozinho. */
+  freteAutomatico?: boolean
   /** Cervejas já marcadas na pré-venda (com o preço da pré-venda). */
   cervejas: Array<CervejaDoLink & { id: string }>
 }
@@ -595,7 +597,14 @@ export function JanelaCerveja({
             <aside id="previa-no-celular" className="min-w-0 scroll-mt-4 lg:sticky lg:top-0 lg:self-start">
               <p className="tipo-rotulo mb-3 text-center text-suave">Como fica no link</p>
               <CelularPrevia largura={300} className="mx-auto">
-                <AberturaPreVenda preVenda={contexto.preVenda} itens={lista} nomeLoja={contexto.nomeLoja} freteVip={contexto.freteVip} capa={capaNoLink} />
+                <AberturaPreVenda
+                  preVenda={contexto.preVenda}
+                  itens={lista}
+                  nomeLoja={contexto.nomeLoja}
+                  freteVip={contexto.freteVip}
+                  freteAutomatico={contexto.freteAutomatico}
+                  capa={capaNoLink}
+                />
                 <div className="mt-12">
                   <p className="tipo-rotulo text-volt-700">Sua escolha</p>
                   <h2 className="tipo-h2 mt-2 text-balance">{escolha.titulo}</h2>

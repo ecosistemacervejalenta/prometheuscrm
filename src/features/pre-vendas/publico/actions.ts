@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
 import { z } from 'zod'
 
 import { traduzirErro } from '@/lib/acoes'
@@ -9,6 +10,7 @@ import { normalizarWhatsapp, whatsappValido } from '@/lib/whatsapp'
 
 import { agendarProcessamentoDeEventos } from '../../integracoes/eventos'
 import { agendarFilaEstoqueOlist } from '../../olist/estoque'
+import { garantirFreteDoPedido } from '../../shopify/frete'
 import { lerCaixa, type CaixaPublica } from './caixa-dados'
 import { aparelhoConfirmou, conferirCodigo, enviarCodigo, esquecerAparelho, mesmoNumero, whatsappConfirmado } from './verificacao'
 
@@ -119,6 +121,14 @@ export async function confirmarPedidoPreVenda(entrada: z.input<typeof esquemaCon
 
   agendarProcessamentoDeEventos()
   agendarFilaEstoqueOlist() // a compra já baixou na cópia local; aqui vai para a Olist
+  // Frete fora da lista VIP: calculado depois da resposta (não atrasa a tela). A tela final também
+  // pede o cálculo; este garante o frete no pedido mesmo se o cliente fechar o link em seguida.
+  if (data.frete === 'a_cotar') {
+    const pedidoId = data.id
+    after(async () => {
+      await garantirFreteDoPedido(createAdminClient(), pedidoId)
+    })
+  }
   revalidatePath(`/p/${slug}`)
   return {
     ok: true,
@@ -283,6 +293,20 @@ export async function minhaCaixa(pedidoId: string): Promise<CaixaPublica | null>
   return lerCaixa(data)
 }
 
+/**
+ * Caixa atual com o frete calculado: CEP fora da lista VIP e Shopify conectada → pergunta ao
+ * Olist Envios quanto custa mandar a caixa de agora e grava a opção mais barata. Só vai à Shopify
+ * quando precisa (frete "a cotar"); se não der, a caixa volta como está e a equipe cota.
+ */
+export async function minhaCaixaComFrete(pedidoId: string): Promise<CaixaPublica | null> {
+  const id = idPedido.safeParse(pedidoId)
+  if (!id.success) return null
+  const db = createAdminClient()
+  await garantirFreteDoPedido(db, id.data)
+  const { data } = await db.rpc('caixa_publica', { p_pedido_id: id.data })
+  return lerCaixa(data)
+}
+
 /** O cliente escolheu "fechar a caixa e pagar agora" (só do aparelho que confirmou o WhatsApp do dono da caixa). */
 export async function fecharMinhaCaixa(pedidoId: string): Promise<CaixaPublica | null> {
   const id = idPedido.safeParse(pedidoId)
@@ -293,6 +317,8 @@ export async function fecharMinhaCaixa(pedidoId: string): Promise<CaixaPublica |
     const { data } = await db.rpc('caixa_publica', { p_pedido_id: id.data })
     return lerCaixa(data)
   }
+  // Frete calculado antes de fechar: o PIX já sai com o valor da caixa inteira.
+  await garantirFreteDoPedido(db, id.data)
   const { error } = await db.rpc('fechar_caixa', { p_pedido_id: id.data })
   if (error) console.error('[pre-venda] fechar caixa', error.message)
   const { data } = await db.rpc('caixa_publica', { p_pedido_id: id.data })

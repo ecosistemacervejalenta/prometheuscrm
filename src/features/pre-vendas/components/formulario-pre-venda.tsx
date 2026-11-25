@@ -38,6 +38,7 @@ export function FormularioPreVenda({
   encerraEmLocal,
   nomeLoja = 'Prometheus',
   freteVip = 15,
+  freteAutomatico = false,
   olistConectado = false,
 }: {
   acao: AcaoFormulario
@@ -47,6 +48,8 @@ export function FormularioPreVenda({
   encerraEmLocal?: string
   nomeLoja?: string
   freteVip?: number
+  /** Shopify conectada: a prévia do link diz que o frete fora dos CEPs VIP é calculado sozinho. */
+  freteAutomatico?: boolean
   /** Olist conectado: mostra "Buscar na Olist" (produto com foto e estoque de lá). */
   olistConectado?: boolean
 }) {
@@ -115,6 +118,7 @@ export function FormularioPreVenda({
         },
         nomeLoja,
         freteVip,
+        freteAutomatico,
         cervejas: selecionados.map((p) => ({ ...p, preco: lerDinheiro(linhas[p.id].preco || '0') })),
       },
     })

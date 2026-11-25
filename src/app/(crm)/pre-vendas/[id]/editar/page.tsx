@@ -8,17 +8,19 @@ import { salvarPreVenda } from '@/features/pre-vendas/actions'
 import { FormularioPreVenda } from '@/features/pre-vendas/components/formulario-pre-venda'
 import { obterPreVendaParaEdicao } from '@/features/pre-vendas/queries'
 import { opcoesProdutos, produtosPorIds } from '@/features/produtos/queries'
+import { statusShopify } from '@/features/shopify/queries'
 import { isoParaLocal } from '@/lib/datas'
 
 export const metadata: Metadata = { title: 'Editar pré-venda' }
 
 export default async function PaginaEditarPreVenda({ params }: PageProps<'/pre-vendas/[id]/editar'>) {
   const { id } = await params
-  const [preVenda, produtosAtivos, config, olist] = await Promise.all([
+  const [preVenda, produtosAtivos, config, olist, shopify] = await Promise.all([
     obterPreVendaParaEdicao(id),
     opcoesProdutos(),
     obterConfiguracoes(),
     statusOlist().catch(() => null),
+    statusShopify().catch(() => null),
   ])
   if (!preVenda) notFound()
 
@@ -40,6 +42,7 @@ export default async function PaginaEditarPreVenda({ params }: PageProps<'/pre-v
         encerraEmLocal={isoParaLocal(preVenda.encerra_em)}
         nomeLoja={config.nome_loja}
         freteVip={Number(config.frete_vip_valor)}
+        freteAutomatico={Boolean(shopify?.conectado)}
         olistConectado={Boolean(olist?.conectado)}
       />
     </>

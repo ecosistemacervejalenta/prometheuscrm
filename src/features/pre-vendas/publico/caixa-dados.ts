@@ -21,6 +21,8 @@ export type CaixaPublica = {
   status: string
   statusPagamento: string
   frete: 'vip' | 'a_cotar' | 'cotado' | null
+  /** Frete calculado sozinho pelo peso da caixa (Olist Envios): é refeito quando entram cervejas. */
+  freteCalculado: boolean
   subtotal: number
   taxaEntrega: number
   desconto: number
@@ -51,6 +53,7 @@ export function lerCaixa(json: unknown): CaixaPublica | null {
     status: String(c.status ?? ''),
     statusPagamento: String(c.status_pagamento ?? ''),
     frete: c.frete === 'vip' || c.frete === 'a_cotar' || c.frete === 'cotado' ? c.frete : null,
+    freteCalculado: c.frete === 'cotado' && c.frete_calculado === true,
     subtotal: numero(c.subtotal),
     taxaEntrega: numero(c.taxa_entrega),
     desconto: numero(c.desconto),

@@ -541,6 +541,28 @@ curl -X PATCH -H "Authorization: Bearer $INTEGRATIONS_API_KEY" -H "Content-Type:
 
 Como funciona: assinatura HMAC validada → `importar_pedido_shopify()` encontra o cliente (ID Shopify → WhatsApp → e-mail) ou cria um novo, importa o pedido com os valores da Shopify (canal `shopify`) e, se o pedido já existir, apenas sincroniza pagamento/status (idempotente).
 
+#### 11.3.1 Frete calculado pelo Olist Envios (link da pré-venda)
+
+Para os pedidos do link com **CEP fora da lista de CEPs VIP**: em vez de a equipe cotar na mão, o CRM pergunta à loja da Shopify quanto custa o envio — a Shopify consulta o app **Olist Envios** instalado nela — e cobra a **opção mais barata**, já somada no PIX. Nada é criado na Shopify (é só o cálculo `draftOrderCalculate`) e o cliente não precisa de conta na loja. A etiqueta continua sendo comprada na Olist.
+
+**Regras** (decisões do dono da loja, 2026-11-25)
+
+- **Peso:** 500 g por cerveja (`PESO_POR_CERVEJA_KG`); o kit conta cada cerveja de dentro (`unidades_para_frete`). A Shopify recebe N itens de 500 g — a mesma conta do checkout da loja para N latas.
+- **Opção:** sempre a mais barata, e só as do Olist Envios. O outro app de frete da loja (ShipZip, a “Entrega VIP”) fica de fora: frete fixo é assunto da lista de CEPs do CRM.
+- **Um frete por caixa:** o cálculo vale para as cervejas e o CEP da hora (`pedidos.frete_cotacao`). Cerveja nova na caixa ou CEP novo → o frete volta para “a cotar” e é calculado de novo para a caixa inteira.
+- **Quando calcula:** na tela final do link (o cliente vê o valor antes de escolher), ao fechar a caixa, ao abrir `/pagar/{pedido}`, quando a equipe fecha a caixa para cobrar e no botão **Calcular pelo Olist Envios** do pedido.
+- **Se falhar** (Shopify fora do ar, CEP sem opção, permissão): o pedido fica “frete a cotar”, com o motivo na ficha e na linha do tempo, e a equipe informa o valor como antes. Depois de uma falha o link espera 45 s para tentar de novo.
+- **Frete informado à mão** pela equipe nunca é trocado pelo cálculo. Pedido pago, separado ou cancelado não é recalculado.
+
+**Conexão** (Configurações › Shopify, só administradores): app criado no **Dev Dashboard a partir do admin da própria loja** (mesma organização), com o escopo `write_draft_orders`, instalado na loja. O CRM guarda loja + Client ID em `integracao_shopify` e o Client secret + token no **Vault**; o token vale 24 h e é renovado sozinho (client credentials grant). A mesma tela tem o **Testar um frete** (CEP + quantidade de cervejas).
+
+| Onde | O quê |
+|---|---|
+| `src/features/shopify/cotacao.ts` | Regras puras: peso, endereço no formato da Shopify, escolha da mais barata (`npm run test:frete`) |
+| `src/features/shopify/api.ts` | Token (client credentials) e `draftOrderCalculate` |
+| `src/features/shopify/frete.ts` | `garantirFreteDoPedido()`: o banco decide se calcula (`frete_a_calcular`) e grava (`aplicar_frete_calculado`) |
+| Migration `20261125200000_frete_olist_envios_shopify` | `integracao_shopify`, `pedidos.frete_cotacao`, funções acima e o recálculo em `registrar_pedido_pre_venda` |
+
 ### 11.4 App próprio
 
 Já preparado: canal `app`, coluna `clientes.app_usuario_id`, origem `app`, API `/api/v1` para criar clientes/consultar pedidos e eventos via webhook para manter o App sincronizado.
@@ -621,6 +643,7 @@ O gráfico de receita usa uma paleta categórica **validada para daltonismo** (d
 | `npm run typecheck` | Tipos (gera os tipos de rota do Next antes) |
 | `npm run check` | Lint + tipos |
 | `npm run db:test` | Testa migrations, seed, regras de negócio e RLS num Postgres embutido (**sem Docker**) |
+| `npm run test:frete` | Testa as regras do frete calculado (peso, endereço, opção mais barata) com respostas reais da loja, sem rede |
 | `npm run db:start` / `db:stop` | Supabase local (Docker) |
 | `npm run db:reset` | Recria o banco local com migrations + seed |
 | `npm run db:link` | Vincula ao projeto remoto |

@@ -202,16 +202,24 @@ function Fluxo({
   const freteVip = frete?.vip === true
   // Caixa VIP prevista: o que já está na caixa + as cervejas de hoje, com um frete só.
   const freteNovo = !caixa || (enderecoNovo && cepDigitos !== cepDoCadastro) // o frete sai do CEP digitado agora
+  /**
+   * Frete calculado pelo peso (Olist Envios): com as cervejas de hoje ele é refeito para a caixa
+   * inteira. Até lá a conta mostra o frete de agora — o "já pago" da caixa inclui esse frete, então
+   * tirá-lo da conta faria o "falta pagar" aparecer menor do que é.
+   */
+  const freteRefeito = !freteNovo && Boolean(caixa?.freteCalculado)
   const valorFrete = !freteNovo && caixa ? caixa.taxaEntrega : freteVip ? loja.freteVip : 0
   const freteACotar = !freteNovo && caixa ? caixa.frete === 'a_cotar' : !freteVip
+  /** Sem valor ainda: o link calcula sozinho (Shopify conectada) ou a equipe cota. */
+  const freteSemValor = loja.freteAutomatico ? 'a calcular' : 'a cotar'
   const totalPrevisto = (caixa ? caixa.subtotal - caixa.desconto : 0) + subtotal + valorFrete
   const devidoPrevisto = Math.max(totalPrevisto - (caixa?.pago ?? 0), 0)
   const previsaoEnvio = [caixa?.previsaoEnvio, preVenda.previsao_entrega].filter((d): d is string => Boolean(d)).sort().at(-1) ?? null
-  const rotuloFrete = caixa ? 'Frete (um só para a caixa)' : 'Frete'
+  const rotuloFrete = freteRefeito ? 'Frete da caixa até agora' : caixa ? 'Frete (um só para a caixa)' : 'Frete'
   const linhaDoFrete =
     freteNovo && frete?.buscando
       ? { rotulo: rotuloFrete, valor: '…' }
-      : { rotulo: rotuloFrete, valor: freteACotar ? 'a cotar' : formatarMoeda(valorFrete) }
+      : { rotulo: rotuloFrete, valor: freteACotar ? freteSemValor : formatarMoeda(valorFrete) }
   const grupoDeHoje: GrupoDaCaixa = {
     chave: 'hoje',
     titulo: preVenda.titulo,
@@ -639,7 +647,14 @@ function Fluxo({
       <div key={etapa} className="animar-passo">
         {/* Boas-vindas ------------------------------------------------------ */}
         {etapa === 'inicio' && (
-          <AberturaPreVenda preVenda={preVenda} itens={itens} nomeLoja={loja.nome} freteVip={loja.freteVip} aoComecar={() => ir('cervejas')} />
+          <AberturaPreVenda
+            preVenda={preVenda}
+            itens={itens}
+            nomeLoja={loja.nome}
+            freteVip={loja.freteVip}
+            freteAutomatico={loja.freteAutomatico}
+            aoComecar={() => ir('cervejas')}
+          />
         )}
 
         {/* Cervejas ---------------------------------------------------------- */}
@@ -688,7 +703,9 @@ function Fluxo({
               </h1>
               <p className="mt-2 text-[16px] leading-6 text-white/75">
                 {caixa.statusPagamento === 'pago'
-                  ? 'Ela ainda não saiu para entrega: as cervejas de hoje entram nela sem frete novo e você paga só a diferença.'
+                  ? freteRefeito
+                    ? 'Ela ainda não saiu para entrega: as cervejas de hoje entram nela e você paga só a diferença. O frete continua um só, recalculado pelo peso.'
+                    : 'Ela ainda não saiu para entrega: as cervejas de hoje entram nela sem frete novo e você paga só a diferença.'
                   : `Você já tem ${caixa.unidades} ${caixa.unidades === 1 ? 'cerveja guardada' : 'cervejas guardadas'} nela. As de hoje entram junto — e tudo chega com um frete só.`}
               </p>
             </section>
@@ -997,7 +1014,7 @@ function Fluxo({
                       </button>
                     </div>
                   )}
-                  <AvisoFrete vip={frete?.vip ?? null} valor={loja.freteVip} />
+                  <AvisoFrete vip={frete?.vip ?? null} valor={loja.freteVip} automatico={loja.freteAutomatico} />
                 </div>
               )
             )}
@@ -1059,7 +1076,9 @@ function Fluxo({
               titulo={caixa ? 'Confira sua Caixa VIP' : 'Confira seu pedido'}
               descricao={
                 caixa
-                  ? 'As cervejas de hoje entram na caixa que você já tem — com o mesmo frete.'
+                  ? freteRefeito
+                    ? 'As cervejas de hoje entram na caixa que você já tem — com um frete só, recalculado pelo peso.'
+                    : 'As cervejas de hoje entram na caixa que você já tem — com o mesmo frete.'
                   : 'Suas cervejas vão para a sua Caixa VIP. No fim você escolhe: pagar agora ou deixar a caixa aberta para as próximas pré-vendas.'
               }
             />
@@ -1081,10 +1100,17 @@ function Fluxo({
                 </button>
               }
             />
+            {freteRefeito && (
+              <p className="mt-3 rounded-2xl bg-volt-50 p-3 text-[14px] leading-5 text-ink/80">
+                O frete é um só e calculado pelo peso: com as cervejas de hoje ele é refeito para a caixa inteira. O valor final aparece
+                no próximo passo, antes de você pagar.
+              </p>
+            )}
             {freteACotar && !(freteNovo && frete?.buscando) && (
               <p className="mt-3 rounded-2xl bg-alerta-50 p-3 text-[14px] leading-5 text-ink/80">
-                Seu CEP está fora da área de frete fixo. Vamos cotar um frete só para a caixa inteira e te mandar no WhatsApp, antes do
-                fechamento.
+                {loja.freteAutomatico
+                  ? 'O frete é um só para a caixa inteira, calculado pelo peso para o seu CEP. O valor aparece no próximo passo, antes de você pagar.'
+                  : 'Seu CEP está fora da área de frete fixo. Vamos cotar um frete só para a caixa inteira e te mandar no WhatsApp, antes do fechamento.'}
               </p>
             )}
 
@@ -1135,7 +1161,7 @@ function Fluxo({
             <BarraInferior erro={erro}>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] text-white/60">
-                  {caixa && caixa.pago > 0 ? 'Falta pagar na caixa' : caixa ? 'Total da caixa' : freteACotar ? 'Total sem frete' : 'Total com frete'}
+                  {caixa && caixa.pago > 0 ? 'Falta pagar na caixa' : freteACotar ? 'Total sem frete' : caixa ? 'Total da caixa' : 'Total com frete'}
                 </p>
                 <p className="tipo-numero text-2xl whitespace-nowrap text-white max-[360px]:text-lg">
                   {formatarMoeda(caixa && caixa.pago > 0 ? devidoPrevisto : totalPrevisto)}
@@ -1294,7 +1320,7 @@ function MensagemErro({ erro, className }: { erro: string | null; className?: st
   )
 }
 
-function AvisoFrete({ vip, valor }: { vip: boolean | null; valor: number }) {
+function AvisoFrete({ vip, valor, automatico }: { vip: boolean | null; valor: number; automatico: boolean }) {
   if (vip === null) return null
   return vip ? (
     <p className="flex items-start gap-3 rounded-[20px] bg-volt-50 p-4 text-[16px] leading-6 text-ink">
@@ -1306,9 +1332,16 @@ function AvisoFrete({ vip, valor }: { vip: boolean | null; valor: number }) {
   ) : (
     <p className="flex items-start gap-3 rounded-[20px] bg-alerta-50 p-4 text-[16px] leading-6 text-ink">
       <Truck className="mt-0.5 size-5 shrink-0 text-alerta" aria-hidden />
-      <span>
-        <b>Frete a cotar.</b> Vamos calcular e te mandar no WhatsApp o mais rápido possível, antes do fechamento do pedido.
-      </span>
+      {automatico ? (
+        <span>
+          <b>Frete calculado pelo peso.</b> Assim que as cervejas entram na sua caixa, a gente mostra o valor do frete para o seu CEP —
+          antes de você pagar.
+        </span>
+      ) : (
+        <span>
+          <b>Frete a cotar.</b> Vamos calcular e te mandar no WhatsApp o mais rápido possível, antes do fechamento do pedido.
+        </span>
+      )}
     </p>
   )
 }

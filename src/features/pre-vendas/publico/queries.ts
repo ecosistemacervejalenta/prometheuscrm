@@ -3,6 +3,7 @@ import 'server-only'
 import { cache } from 'react'
 
 import { lerKit } from '@/features/produtos/kit'
+import { garantirFreteDoPedido } from '@/features/shopify/frete'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 import { lerCaixa } from './caixa-dados'
@@ -21,7 +22,7 @@ export const obterPreVendaPublica = cache(async (slug: string) => {
 
   if (!preVenda?.id || preVenda.status === 'rascunho') return null
 
-  const [{ data: itens }, { data: loja }, { data: mercadoPago }] = await Promise.all([
+  const [{ data: itens }, { data: loja }, { data: mercadoPago }, { data: shopify }] = await Promise.all([
     db
       .from('vw_pre_venda_itens')
       .select('produto_id, nome, estilo, cervejaria, volume_ml, teor_alcoolico, descricao, imagem_url, fotos, cervejas_do_kit, preco, limite_por_cliente, restante, ordem')
@@ -33,6 +34,7 @@ export const obterPreVendaPublica = cache(async (slug: string) => {
       .eq('id', 1)
       .maybeSingle(),
     db.from('integracao_mercado_pago').select('conta_id').eq('id', 1).maybeSingle(),
+    db.from('integracao_shopify').select('conectado_em').eq('id', 1).maybeSingle(),
   ])
 
   return {
@@ -68,6 +70,8 @@ export const obterPreVendaPublica = cache(async (slug: string) => {
       freteVip: Number(loja?.frete_vip_valor ?? 15),
       /** PIX automático (QR Code + copia e cola com baixa sozinha) pelo Mercado Pago. */
       mercadoPago: Boolean(mercadoPago?.conta_id),
+      /** CEP fora da lista VIP: o frete é calculado sozinho (Olist Envios pela Shopify), não cotado pela equipe. */
+      freteAutomatico: Boolean(shopify?.conectado_em),
     },
   }
 })
@@ -77,10 +81,13 @@ export type PreVendaPublica = NonNullable<Awaited<ReturnType<typeof obterPreVend
 /**
  * Página pública /pagar/{id}: a Caixa VIP (ou o pedido) para o cliente pagar o que falta —
  * fechamento da caixa, frete cotado, cobrança da equipe. Identificado só pelo UUID do pedido.
+ * Abrir esta página é fechar a conta: se o frete ainda está "a cotar", é calculado aqui (quando
+ * a Shopify está conectada), para o PIX já sair com o frete.
  */
 export const obterPedidoParaPagar = cache(async (id: string) => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null
   const db = createAdminClient()
+  await garantirFreteDoPedido(db, id)
   const [{ data: caixa }, { data: loja }, { data: mercadoPago }] = await Promise.all([
     db.rpc('caixa_publica', { p_pedido_id: id }),
     db

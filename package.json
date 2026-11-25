@@ -17,7 +17,8 @@
     "db:nova": "supabase migration new",
     "db:types": "supabase gen types typescript --linked --schema public > src/types/database.types.ts",
     "db:types:local": "supabase gen types typescript --local --schema public > src/types/database.types.ts",
-    "db:test": "node scripts/testar-banco.mjs"
+    "db:test": "node scripts/testar-banco.mjs",
+    "test:frete": "node --no-warnings scripts/testar-frete.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

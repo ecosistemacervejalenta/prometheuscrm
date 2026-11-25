@@ -6,12 +6,15 @@ import { z } from 'zod'
 
 import { errosDeValidacao, falha, sucesso, traduzirErro, type EstadoAcao } from '@/lib/acoes'
 import { exigirEquipe } from '@/lib/auth'
+import { formatarMoeda } from '@/lib/format'
 import { STATUS_PAGAMENTO, STATUS_PEDIDO } from '@/lib/rotulos'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { dinheiroOpcional, textoOpcional } from '@/lib/validacao'
 import type { SituacaoCaixa, StatusPagamento, StatusPedido } from '@/types'
 
 import { agendarProcessamentoDeEventos } from '../integracoes/eventos'
 import { agendarEnvioEstoqueOlist } from '../olist/rotina-estoque'
+import { garantirFreteDoPedido } from '../shopify/frete'
 
 function atualizarTelas(id?: string) {
   if (id) revalidatePath(`/pedidos/${id}`)
@@ -100,13 +103,28 @@ export async function definirStatusPedido(id: string, status: StatusPedido): Pro
 /**
  * Caixa VIP: a equipe fecha a caixa para cobrar (o cliente deixou aberta) ou reabre.
  * Fechada ou aberta, compras novas do cliente continuam entrando nela até o pedido ser separado.
+ * Ao fechar, o frete "a cotar" é calculado antes (Olist Envios pela Shopify, quando conectada),
+ * para a cobrança já sair com o valor da caixa inteira.
  */
 export async function definirCaixa(id: string, caixa: SituacaoCaixa): Promise<EstadoAcao> {
   const { supabase } = await exigirEquipe()
-  const { error } = await supabase.from('pedidos').update({ caixa }).eq('id', id).not('caixa', 'is', null)
+  // Chave secreta só para o cálculo do frete: as credenciais da Shopify ficam no Vault, fora do alcance da sessão da equipe.
+  const calculo = caixa === 'fechada' ? await garantirFreteDoPedido(createAdminClient(), id) : null
+  const { data, error } = await supabase.from('pedidos').update({ caixa }).eq('id', id).not('caixa', 'is', null).select('frete')
   if (error) return falha(traduzirErro(error))
   atualizarTelas(id)
-  return sucesso(caixa === 'fechada' ? 'Caixa fechada. Agora é só cobrar o cliente.' : 'Caixa reaberta: o cliente pode continuar juntando cervejas.')
+  if (caixa === 'aberta') return sucesso('Caixa reaberta: o cliente pode continuar juntando cervejas.')
+  if (data?.[0]?.frete === 'a_cotar') {
+    return sucesso(
+      calculo?.situacao === 'nao_calculado'
+        ? 'Caixa fechada. O frete não pôde ser calculado sozinho: informe o valor antes de cobrar o cliente.'
+        : 'Caixa fechada. O frete ainda está a cotar: informe o valor antes de cobrar o cliente.',
+    )
+  }
+  if (calculo?.situacao === 'calculado') {
+    return sucesso(`Caixa fechada. Frete calculado: ${formatarMoeda(calculo.valor)} (${calculo.servico}). Agora é só cobrar o cliente.`)
+  }
+  return sucesso('Caixa fechada. Agora é só cobrar o cliente.')
 }
 
 /** Valor do frete de um pedido do link com CEP fora da lista VIP (ou correção de frete). */

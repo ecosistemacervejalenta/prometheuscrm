@@ -14,6 +14,7 @@ import { situacaoMercadoPago } from '@/features/mercado-pago/components/cartao-m
 import { statusMercadoPago } from '@/features/mercado-pago/queries'
 import { situacaoOlist } from '@/features/olist/components/cartao-olist'
 import { resumoEstoqueOlist, statusOlist } from '@/features/olist/queries'
+import { statusShopify } from '@/features/shopify/queries'
 import { envServidor } from '@/lib/env.server'
 import { formatarMoeda, formatarNumero } from '@/lib/format'
 import type { Tom } from '@/lib/rotulos'
@@ -104,8 +105,19 @@ const SITUACOES: Record<ChaveSecao, () => Promise<SituacaoSecao | null>> = {
         : false
     return deConexao(situacaoOlist(status), quebrada)
   },
-  shopify: async () =>
-    envServidor.shopifyWebhookSecret ? { tom: 'sucesso', rotulo: 'Segredo configurado', ponto: true } : { tom: 'neutro', rotulo: 'Não configurado', ponto: true },
+  shopify: async () => {
+    const frete = await statusShopify()
+    if (frete.conectado && frete.ultimo_erro) {
+      return {
+        tom: 'alerta',
+        rotulo: 'Frete com erro',
+        ponto: true,
+        atencao: 'A Shopify recusou o cálculo de frete: pedidos com CEP fora da lista VIP estão ficando “a cotar”.',
+      }
+    }
+    if (frete.conectado) return { tom: 'sucesso', rotulo: envServidor.shopifyWebhookSecret ? 'Pedidos e frete ligados' : 'Frete calculado ligado', ponto: true }
+    return envServidor.shopifyWebhookSecret ? { tom: 'sucesso', rotulo: 'Segredo configurado', ponto: true } : { tom: 'neutro', rotulo: 'Não configurado', ponto: true }
+  },
   'mercado-pago': async () => {
     const status = await lerMercadoPago()
     return deConexao(situacaoMercadoPago(status), Boolean(status.ultimo_erro) && 'O Mercado Pago recusou a última conferência: o PIX automático pode estar parado.')
