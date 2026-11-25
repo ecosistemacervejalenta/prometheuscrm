@@ -4,6 +4,8 @@ import { buscarProdutoPorSkuOlist, ErroApiOlist, obterProdutoLoteOlist, type Pro
 import { obterTokenOlist } from '@/features/olist/token'
 import { createAdminClient } from '@/lib/supabase/admin'
 
+import { CERVEJAS_POR_RODADA, PAUSA_ENTRE_LEITURAS_MS, RELER_A_CADA_MIN } from './leitura'
+
 /**
  * Lotes e validades × Olist — SÓ LEITURA. Aqui o CRM consulta o produto (nome, SKU, foto e
  * unidades em estoque) e nunca envia nada à Olist.
@@ -28,17 +30,17 @@ export async function consultarProdutoLoteNaOlist(id: number): Promise<ProdutoLo
   }
 }
 
-const CERVEJAS_POR_RODADA = 10
-const IDADE_DA_LEITURA_MS = 60 * 60_000
+const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /**
  * Rotina (a cada 5 min): relê o nome e o estoque das cervejas com a leitura mais antiga (mais
- * de 1 h), poucas por vez para não disputar o limite de chamadas da Olist com as pré-vendas.
- * Devolve quantas foram atualizadas.
+ * de 1 h), poucas por vez e com pausa entre uma e outra, para não disputar o limite de chamadas
+ * da Olist com as pré-vendas. No limite (ou se a Olist recusar), para e continua na próxima
+ * rodada. Devolve quantas foram atualizadas.
  */
 export async function atualizarEstoqueDasCervejasDosLotes(): Promise<number> {
   const supabase = createAdminClient()
-  const limite = new Date(Date.now() - IDADE_DA_LEITURA_MS).toISOString()
+  const limite = new Date(Date.now() - RELER_A_CADA_MIN * 60_000).toISOString()
   const { data: cervejas, error } = await supabase
     .from('lotes_cervejas')
     .select('id, olist_id')
@@ -50,7 +52,8 @@ export async function atualizarEstoqueDasCervejasDosLotes(): Promise<number> {
 
   const token = await obterTokenOlist(supabase)
   let atualizadas = 0
-  for (const cerveja of cervejas) {
+  for (const [i, cerveja] of cervejas.entries()) {
+    if (i > 0) await esperar(PAUSA_ENTRE_LEITURAS_MS)
     const lidoEm = new Date().toISOString()
     try {
       const produto = await obterProdutoLoteOlist(token, cerveja.olist_id)

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { CalendarClock, SearchX } from 'lucide-react'
+import { CalendarClock, RefreshCw, SearchX } from 'lucide-react'
 
 import { ButtonLink } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -12,6 +12,7 @@ import { Pagination } from '@/components/ui/pagination'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { CadastroPorSku } from '@/features/lotes/components/cadastro-por-sku'
 import { PainelValidades } from '@/features/lotes/components/painel-validades'
+import { quandoLeu, RELER_A_CADA_MIN, resumoLeituras } from '@/features/lotes/leitura'
 import { SeloValidade } from '@/features/lotes/components/selo-validade'
 import {
   cervejasSemLote,
@@ -24,7 +25,7 @@ import {
 } from '@/features/lotes/queries'
 import { SITUACOES_VALIDADE } from '@/features/lotes/validade'
 import { FotoProduto } from '@/features/produtos/components/foto-produto'
-import { formatarData, formatarNumero } from '@/lib/format'
+import { formatarData, formatarHaQuanto, formatarNumero } from '@/lib/format'
 import { cn, param } from '@/lib/utils'
 
 export const metadata: Metadata = { title: 'Lotes e validades' }
@@ -43,6 +44,7 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
 
   const cervejas = await listarCervejasDosLotes()
   const resumo = resumoDosLotes(cervejas)
+  const leituras = resumoLeituras(cervejas)
 
   // A lista mostra lotes (um por linha); "sem lote" mostra as cervejas que ainda não têm nenhum.
   const verSemLote = filtro === 'sem_lote'
@@ -71,6 +73,28 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
       <PageHeader
         titulo="Lotes e validades"
         contexto={`${plural(resumo.cervejas, 'cerveja', 'cervejas')} · ${plural(resumo.total.lotes, 'lote', 'lotes')} · ${formatarNumero(resumo.total.unidades)} un.`}
+        descricao={
+          resumo.cervejas > 0 && (
+            <div className="mt-1 space-y-0.5 text-[13px]">
+              <p className="flex items-start gap-1.5">
+                <RefreshCw className="mt-[3px] size-3.5 shrink-0" aria-hidden />
+                <span>
+                  Estoque da Olist atualizado em{' '}
+                  <span className="font-semibold whitespace-nowrap text-ink">{leituras.ultima ? quandoLeu(leituras.ultima) : 'ainda não lido'}</span>
+                </span>
+              </p>
+              <p className="pl-5 text-sutil">
+                Atualiza sozinho a cada {RELER_A_CADA_MIN / 60} h, dentro do limite da Olist.
+                {leituras.atrasadas > 0 && (
+                  <span className="font-semibold text-alerta">
+                    {' '}
+                    {plural(leituras.atrasadas, 'cerveja', 'cervejas')} sem leitura há mais de 3 h.
+                  </span>
+                )}
+              </p>
+            </div>
+          )
+        }
       />
 
       <Card className="mb-4 p-4 lg:mb-6 lg:p-5">
@@ -169,7 +193,10 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
                           </Link>
                         </TD>
                         <TD className="tipo-dado text-[13px] text-suave">{c.sku}</TD>
-                        <TD className="tipo-dado text-right">{unidades(c.estoque_olist)}</TD>
+                        <TD className="text-right">
+                          <span className="tipo-dado">{unidades(c.estoque_olist)}</span>
+                          {c.estoque_lido_em && <span className="block text-[11px] leading-4 text-suave">{formatarHaQuanto(c.estoque_lido_em)}</span>}
+                        </TD>
                       </TR>
                     ))}
                   </TBody>
@@ -225,7 +252,11 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
                           ) : (
                             <span className="text-[13px] font-semibold text-alerta">Informar</span>
                           )}
-                          {l.daOlist && <span className="block text-[11px] leading-4 text-suave">estoque da Olist</span>}
+                          {l.daOlist && (
+                            <span className="block text-[11px] leading-4 text-suave">
+                              Olist{l.cerveja.estoque_lido_em ? ` · ${formatarHaQuanto(l.cerveja.estoque_lido_em)}` : ''}
+                            </span>
+                          )}
                         </TD>
                         <TD className="tipo-dado text-[13px] whitespace-nowrap text-suave">{formatarData(l.validade)}</TD>
                         <TD>

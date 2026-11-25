@@ -35,7 +35,7 @@ export type CervejaComLotes = {
 /** Um lote com a cerveja dele — a linha da lista do módulo. */
 export type LoteComCerveja = LoteDaCerveja & {
   situacao: SituacaoValidade
-  cerveja: Pick<CervejaComLotes, 'id' | 'sku' | 'nome' | 'foto_url' | 'estoque_olist'>
+  cerveja: Pick<CervejaComLotes, 'id' | 'sku' | 'nome' | 'foto_url' | 'estoque_olist' | 'estoque_lido_em'>
 }
 
 export const FILTROS_LOTES = [...SITUACOES_VALIDADE.map((s) => s.chave), 'sem_lote'] as const
@@ -81,8 +81,12 @@ export async function obterCervejaDosLotes(id: string): Promise<CervejaComLotes 
 /** Todos os lotes, do que vence primeiro para o que vence por último. */
 export function lotesPorValidade(cervejas: CervejaComLotes[]): LoteComCerveja[] {
   return cervejas
-    .flatMap(({ lotes, id, sku, nome, foto_url, estoque_olist }) =>
-      lotes.map((lote) => ({ ...lote, situacao: situacaoValidade(lote.validade).situacao, cerveja: { id, sku, nome, foto_url, estoque_olist } })),
+    .flatMap(({ lotes, id, sku, nome, foto_url, estoque_olist, estoque_lido_em }) =>
+      lotes.map((lote) => ({
+        ...lote,
+        situacao: situacaoValidade(lote.validade).situacao,
+        cerveja: { id, sku, nome, foto_url, estoque_olist, estoque_lido_em },
+      })),
     )
     .sort((a, b) => a.validade.localeCompare(b.validade) || a.cerveja.nome.localeCompare(b.cerveja.nome, 'pt-BR') || a.lote.localeCompare(b.lote))
 }

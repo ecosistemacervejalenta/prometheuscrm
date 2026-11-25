@@ -8,8 +8,9 @@ import { PageHeader } from '@/components/ui/page-header'
 import { atualizarCervejaDaOlist, removerCervejaDosLotes } from '@/features/lotes/actions'
 import { FormularioNovosLotes, LinhaLote } from '@/features/lotes/components/lotes-da-cerveja'
 import { contarLotes, obterCervejaDosLotes } from '@/features/lotes/queries'
+import { quandoLeu, RELER_A_CADA_MIN } from '@/features/lotes/leitura'
 import { situacaoValidade } from '@/features/lotes/validade'
-import { formatarDataHora, formatarNumero } from '@/lib/format'
+import { formatarNumero } from '@/lib/format'
 
 export const metadata: Metadata = { title: 'Lotes da cerveja' }
 
@@ -82,7 +83,8 @@ export default async function PaginaLotesDaCerveja({ params }: PageProps<'/lotes
               </dd>
               <dd className="mt-1 text-[12px] text-suave">
                 {cerveja.estoque_olist === null ? 'A Olist não informou o estoque deste produto. ' : ''}
-                {cerveja.estoque_lido_em ? `Lido em ${formatarDataHora(cerveja.estoque_lido_em)}` : 'Ainda não lido'}
+                {cerveja.estoque_lido_em ? `Atualizado em ${quandoLeu(cerveja.estoque_lido_em)}` : 'Ainda não lido'}
+                <span className="block text-sutil">Atualiza sozinho a cada {RELER_A_CADA_MIN / 60} h.</span>
               </dd>
             </div>
             {variosLotes && (
