@@ -32,7 +32,7 @@ export async function shopifyConectada(db: Banco): Promise<boolean> {
 }
 
 /** Loja + token válido. Renova sozinho quando está perto de vencer. null = não conectada. */
-async function acessoShopify(db: Banco, { renovar = false } = {}): Promise<AcessoShopify | null> {
+export async function acessoShopify(db: Banco, { renovar = false } = {}): Promise<AcessoShopify | null> {
   const { data, error } = await db.rpc('credenciais_shopify')
   if (error) {
     console.error('[shopify] credenciais', error.message)

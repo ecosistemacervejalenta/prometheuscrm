@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
+import { pedidoDoWebhook } from '@/features/influenciadores/shopify'
+import { registrarVendaDoWebhook } from '@/features/influenciadores/sincronizacao'
 import { erroJson } from '@/features/integracoes/api-auth'
 import { agendarProcessamentoDeEventos } from '@/features/integracoes/eventos'
 import { assinaturaShopifyValida, clienteShopifyParaCrm, pedidoShopifyParaCrm } from '@/features/integracoes/shopify'
@@ -29,6 +31,8 @@ export async function POST(request: NextRequest) {
       console.error('[shopify] falha ao importar pedido', error)
       return erroJson('Falha ao importar o pedido.', 500)
     }
+    // Pedido com cupom de influenciador: registra (ou atualiza) a comissão. Não derruba o webhook se falhar.
+    await registrarVendaDoWebhook(db, pedidoDoWebhook(dados))
     agendarProcessamentoDeEventos()
     return NextResponse.json({ ok: true, pedido_id: data })
   }

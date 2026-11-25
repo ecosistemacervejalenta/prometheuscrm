@@ -222,6 +222,28 @@ npm run db:types:local  # regenera os tipos TypeScript
 - Excluir: só quem criou a tarefa ou um administrador (o histórico e as imagens vão junto).
 - Quem aparece para ser marcado: membros ativos com `perfis.participa_tarefas` ligado (padrão para membros novos). A conta técnica de desenvolvimento fica de fora.
 
+### Influenciadores (programa de cupons)
+Cada influenciador divulga um **cupom nativo da Shopify**; todo pedido da loja feito com o cupom vira uma venda dele, com a comissão calculada. A equipe acompanha em **Influenciadores** e cada influenciador entra no **Portal** (`/portal`) com e-mail e senha.
+
+- **Cadastro** (Influenciadores › Novo): nome, e-mail (login do Portal), cupom, % de desconto do cliente, % de comissão, PIX e **“contar vendas a partir de”** (protege cupons que já existiam). Ao salvar, o CRM **cria o cupom na Shopify**; se o código já existir lá, ele é **ligado como está** (o CRM adota o percentual da Shopify).
+- **Vendas**: a rotina `/api/cron/influenciadores` (a cada 15 min) lê os pedidos **atualizados** na Shopify e registra os que têm cupom de influenciador — pedido novo, pago, cancelado, estornado, devolução parcial. Há também **Ler pedidos agora** (Ajustes) e **Buscar na Shopify** (ficha do influenciador, relê o cupom desde a data escolhida).
+- **Comissão** = produtos **depois do desconto e das devoluções, sem o frete** × o percentual do influenciador **no dia da 1ª leitura** (mudar a comissão depois não mexe no que já foi calculado).
+- **Situações** da venda: *Aguardando pagamento* (pedido não pago) → *A liberar* (pago, dentro da carência) → *Disponível* (passou a carência: data do pedido + N dias) → *Paga* (entrou num repasse). *Cancelada*: pedido cancelado/estornado ou comissão cancelada pela equipe (com motivo; a sincronização não reativa).
+- **Repasses**: a aba Repasses lista quem tem comissão disponível, com a chave PIX. Na ficha, **Registrar repasse** quita todas as comissões disponíveis de uma vez e aceita um **ajuste** (+/−, com motivo — ex.: pedido estornado depois de pago, bônus). Administradores podem **desfazer** um repasse lançado errado.
+- **Estorno depois do repasse**: o valor pago não muda; a venda ganha um alerta e a ficha avisa para descontar no próximo repasse.
+- **Relatórios**: visão geral por período (vendas, pedidos, comissão, ranking, evolução), lista de vendas com filtros (influenciador, situação, período, nº do pedido) e **planilha CSV**.
+- **Pausar / encerrar**: desliga o cupom na Shopify (reativar liga de novo). O histórico e as comissões pendentes continuam.
+- **Portal do influenciador** (`/portal`): cupom e **link de divulgação** (`loja/discount/CUPOM`, já aplica o desconto), saldos (disponível, a liberar, aguardando, recebido), vendas com filtros, repasses e “Minha conta” (contato, PIX, senha). O login é criado na ficha (**Criar acesso ao Portal**): senha temporária + mensagem pronta para o WhatsApp, como na Equipe.
+- **Regras** (Influenciadores › Ajustes, só administradores): comissão e desconto padrão, **carência** (dias), nome e endereço da loja no Portal e o texto “como e quando pagamos”.
+
+| Onde | O quê |
+|---|---|
+| `src/features/influenciadores/shopify.ts` | Admin API: cupons (`discountCodeBasicCreate`, ligar/desligar, percentual) e leitura dos pedidos |
+| `src/features/influenciadores/cupom.ts` | `sincronizarCupomNaShopify()`: deixa o cupom da loja igual ao cadastro |
+| `src/features/influenciadores/sincronizacao.ts` | `sincronizarVendas()` (cursor por data de atualização) e `buscarVendasDoCupom()` |
+| `src/features/influenciadores/portal/` | Sessão (`exigirInfluenciador`), consultas e ações do Portal |
+| Migration `20261126100000_programa_de_influenciadores` | Tabelas, comissão, repasses, funções `portal_*()` e RLS |
+
 ### Configurações
 - **Loja e mensagens**: nome, WhatsApp da loja, chave PIX, favorecido e os modelos de mensagem (seção 9).
 - **Integrações**: webhooks (n8n), fila de eventos com reenvio, instruções da Shopify, cron e API.
@@ -321,10 +343,13 @@ erDiagram
 | `tarefa_anexos` | Imagens da tarefa (bucket privado `tarefas`, `path` = `<tarefa_id>/<arquivo>`). |
 | `tarefa_eventos` | Histórico da tarefa: comentários + registros automáticos gravados por trigger. |
 | `notificacoes` | Avisos de cada membro (sino). Nascem no banco; o membro só marca como lido. |
+| `influenciadores` | Influenciadores do programa: cupom, % de desconto, % de comissão, PIX, status, login do Portal (`usuario_id`) e situação do cupom na Shopify. |
+| `influenciador_vendas` | Uma linha por pedido da Shopify com cupom de influenciador (`shopify_order_id` único): base, percentual, comissão, status e `liberar_em`. Só o servidor grava. |
+| `influenciador_pagamentos` | Repasses: comissões quitadas + ajuste (`total` gerado), data e cópia da chave PIX. |
 
 ### 7.3 Visões (respeitam o RLS — `security_invoker`)
 
-`vw_clientes` (LTV, pedidos, em aberto, último pedido) · `vw_pedidos` (cliente, pré-venda, unidades) · `vw_pre_vendas` (status efetivo, pedidos, total, recebido, unidades) · `vw_pre_venda_itens` (vendido e restante) · `vw_contas_pagar` (situação: em dia, vence logo, vencida, paga, cancelada) · `vw_tarefas` (responsáveis, anexos, comentários, atraso, busca).
+`vw_clientes` (LTV, pedidos, em aberto, último pedido) · `vw_pedidos` (cliente, pré-venda, unidades) · `vw_pre_vendas` (status efetivo, pedidos, total, recebido, unidades) · `vw_pre_venda_itens` (vendido e restante) · `vw_contas_pagar` (situação: em dia, vence logo, vencida, paga, cancelada) · `vw_tarefas` (responsáveis, anexos, comentários, atraso, busca) · `vw_influenciadores` (totais e saldos de cada um) · `vw_influenciador_vendas` (venda + `situacao` pronta para a tela).
 
 ### 7.4 Funções (RPC)
 
@@ -341,6 +366,11 @@ erDiagram
 | `importar_pedido_shopify(pedido)` | **Somente servidor** | Importação idempotente de pedidos da Shopify. |
 | `pedido_json(pedido)` | Equipe / servidor | Pedido completo em JSON (eventos e API). |
 | `criar_tarefa(dados, responsaveis)` | Equipe | Cria a tarefa e marca os responsáveis numa transação (os marcados recebem aviso). |
+| `registrar_venda_influenciador(venda)` | Servidor | Registra/atualiza a venda de um pedido da Shopify com cupom (idempotente) e calcula a comissão. |
+| `registrar_pagamento_influenciador(...)` | Equipe | Repasse: quita as comissões disponíveis e soma o ajuste. `desfazer_pagamento_influenciador` só para admin. |
+| `bloquear_comissao_influenciador(venda, bloquear, motivo)` | Equipe | Cancela ou devolve a comissão de uma venda (não vale para comissão já paga). |
+| `resumo_influenciadores(inicio, fim, id?)` · `ranking_influenciadores(...)` | Equipe | Totais, saldos, série por dia e ranking do período. |
+| `portal_influenciador()` · `portal_resumo()` · `portal_vendas()` · `portal_pagamentos()` · `portal_atualizar_dados()` | Influenciador | Só os dados de quem está logado (`auth.uid()`), sem nenhum dado de cliente. |
 
 ### 7.5 Segurança no banco (RLS)
 
@@ -348,6 +378,7 @@ erDiagram
 - O papel `anon` não tem acesso a nenhuma tabela nem função — o link público passa pelo **servidor** com a chave secreta.
 - Só **administradores** mudam papel/acesso de perfis (trigger `proteger_campos_do_perfil`).
 - Storage: bucket `produtos` público para leitura; upload apenas pela equipe.
+- **Influenciadores são logins de fora da equipe**: não têm linha em `perfis` (o gatilho de `auth.users` pula quem nasce com `tipo = influenciador`), então nenhuma tabela do CRM abre para eles. O Portal lê só pelas funções `portal_*()`, presas ao `auth.uid()`. **Toda função nova** precisa de `revoke execute ... from public, anon, authenticated` e de um `grant` explícito para quem pode chamar: o Supabase libera funções novas para qualquer login por padrão.
 
 ### 7.6 Criando novas migrations
 
@@ -562,6 +593,15 @@ Para os pedidos do link com **CEP fora da lista de CEPs VIP**: em vez de a equip
 | `src/features/shopify/api.ts` | Token (client credentials) e `draftOrderCalculate` |
 | `src/features/shopify/frete.ts` | `garantirFreteDoPedido()`: o banco decide se calcula (`frete_a_calcular`) e grava (`aplicar_frete_calculado`) |
 | Migration `20261125200000_frete_olist_envios_shopify` | `integracao_shopify`, `pedidos.frete_cotacao`, funções acima e o recálculo em `registrar_pedido_pre_venda` |
+
+#### 11.3.2 Programa de influenciadores (cupons e pedidos)
+
+O mesmo app da loja ganha dois escopos: **`read_orders`** (ler valor, situação e cupons dos pedidos — nenhum dado do cliente vai para o programa) e **`write_discounts`** (criar, pausar e reativar os cupons). Passo a passo em **Influenciadores › Ajustes** (nova versão do app no Dev Dashboard com os três escopos → Release → aprovar na loja → “Conferir permissões”).
+
+- **Sem `write_discounts`** o programa funciona, mas cada cupom é criado e pausado à mão em Descontos, no admin da Shopify (a ficha do influenciador mostra “Falta criar na Shopify”).
+- **Sem `read_orders`** nenhuma venda chega: a leitura dos pedidos é a fonte das comissões. `read_orders` enxerga os **últimos 60 dias** — por isso a primeira leitura e o “Buscar na Shopify” vão até 60 dias atrás.
+- **Webhook opcional**: se os webhooks `orders/*` da seção 11.3 estiverem ligados, a venda com cupom entra na hora (mesma função `registrar_venda_influenciador`); a rotina de 15 min continua conferindo tudo.
+- O cupom criado pelo CRM vale para **todos os produtos e clientes**, sem limite de usos, e **soma com frete grátis** (não soma com outros descontos de produto ou de pedido). Para regras diferentes, edite o cupom na Shopify: o CRM só mexe no percentual e no liga/desliga.
 
 ### 11.4 App próprio
 

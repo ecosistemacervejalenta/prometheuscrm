@@ -27,6 +27,15 @@ const PADRAO: Configuracoes = {
   frete_vip_importado_em: null,
   caixa_prazo_pagamento_dias: 7,
   lotes_aviso_grupo: true,
+  influ_comissao_padrao: 10,
+  influ_desconto_padrao: 10,
+  influ_carencia_dias: 7,
+  influ_regras: null,
+  influ_loja_url: null,
+  influ_nome_loja: null,
+  influ_sincronizado_ate: null,
+  influ_sincronizado_em: null,
+  influ_sincronizacao_erro: null,
 }
 
 /** Configurações da loja (linha única). */

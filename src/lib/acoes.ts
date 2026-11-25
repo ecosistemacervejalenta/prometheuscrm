@@ -71,6 +71,19 @@ const RESTRICOES: Record<string, string> = {
   lote_tratativas_texto_check: 'Conte o que foi feito (de 3 a 2.000 caracteres).',
   lotes_quantidade_check: 'A quantidade do lote deve ser um número de 0 a 1.000.000.',
   lotes_cerveja_id_fkey: 'Esta cerveja não está mais no controle de lotes.',
+  influenciadores_cupom_key: 'Este cupom já é de outro influenciador.',
+  influenciadores_email_key: 'Já existe um influenciador com este e-mail.',
+  influenciadores_cupom_check: 'O cupom deve ter de 3 a 20 letras e números, sem espaços nem acentos.',
+  influenciadores_email_check: 'E-mail inválido.',
+  influenciadores_instagram_check: 'Instagram inválido: use só o nome de usuário (letras, números, ponto e sublinhado).',
+  influenciadores_documento_check: 'CPF ou CNPJ inválido.',
+  influenciadores_desconto_check: 'O desconto deve ficar entre 0 e 100%.',
+  influenciadores_comissao_check: 'A comissão deve ficar entre 0 e 100%.',
+  influenciador_vendas_influenciador_id_fkey: 'Este influenciador já tem vendas registradas e não pode ser excluído. Encerre a parceria em vez de excluir.',
+  influenciador_pagamentos_influenciador_id_fkey: 'Este influenciador já tem repasses registrados e não pode ser excluído. Encerre a parceria em vez de excluir.',
+  configuracoes_influ_loja_url_check: 'Use o endereço completo da loja, começando com https:// e sem barra no final.',
+  configuracoes_influ_nome_loja_check: 'O nome da loja no Portal deve ter de 1 a 80 caracteres.',
+  configuracoes_influ_carencia_check: 'A carência deve ficar entre 0 e 120 dias.',
 }
 
 /** Traduz erros do Supabase/Postgres em mensagens claras em português. */

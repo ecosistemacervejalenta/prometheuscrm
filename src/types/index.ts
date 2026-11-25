@@ -39,6 +39,9 @@ export type AnexoTarefa = Tables<'tarefa_anexos'>
 export type Notificacao = Tables<'notificacoes'>
 export type CervejaDosLotes = Tables<'lotes_cervejas'>
 export type Lote = Tables<'lotes'>
+export type Influenciador = Tables<'influenciadores'>
+export type VendaInfluenciador = Tables<'influenciador_vendas'>
+export type PagamentoInfluenciador = Tables<'influenciador_pagamentos'>
 
 // Visões
 export type ClienteResumo = Tables<'vw_clientes'>
@@ -52,6 +55,8 @@ export type PastaLeadsResumo = Tables<'vw_leads_pastas'>
 export type AtendimentoResumo = Tables<'vw_atendimentos'>
 export type CampanhaResumo = Tables<'vw_campanhas'>
 export type TarefaResumo = Tables<'vw_tarefas'>
+export type InfluenciadorResumo = Tables<'vw_influenciadores'>
+export type VendaInfluenciadorDetalhe = Tables<'vw_influenciador_vendas'>
 
 // Enums
 export type CanalVenda = Enums<'canal_venda'>
@@ -73,6 +78,8 @@ export type StatusCampanha = Enums<'status_campanha'>
 export type StatusEnvioCampanha = Enums<'status_envio_campanha'>
 export type StatusTarefa = Enums<'status_tarefa'>
 export type PrioridadeTarefa = Enums<'prioridade_tarefa'>
+export type StatusInfluenciador = Enums<'status_influenciador'>
+export type StatusComissao = Enums<'status_comissao'>
 
 export type MetricasPainel = {
   receita: number

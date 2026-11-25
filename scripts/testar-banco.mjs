@@ -1768,6 +1768,166 @@ await db.exec(`reset role;`)
   igual('status volta para desconectado', (await um(`select conectado_em, loja, client_id from integracao_shopify`)), { conectado_em: null, loja: null, client_id: null })
 }
 
+// -----------------------------------------------------------------------------
+// Programa de influenciadores: venda por cupom, comissão, repasse e Portal.
+// Quem lê a Shopify é o servidor; aqui o banco atribui a venda, calcula a comissão,
+// controla o repasse e garante que o influenciador só enxerga o que é dele.
+// -----------------------------------------------------------------------------
+{
+  const como = (id) => `reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${id}', false);`
+  const servidor = `reset role; set role service_role;`
+  const venda = async (dados) => (await um(`select registrar_venda_influenciador($1::jsonb) r`, [JSON.stringify(dados)])).r
+  const haDias = (n) => new Date(Date.now() - n * 86_400_000).toISOString()
+  const paga = { status_financeiro: 'paid', cancelado: false, teste: false, desconto: 20, frete: 15, valor_pedido: 195 }
+
+  await db.exec(como(uid))
+  const lu = await um(`insert into influenciadores (nome, email, cupom, desconto_percentual, comissao_percentual, contar_desde, observacoes)
+    values ('Lu Cervejeira', 'lu@insta.com', 'LU10', 10, 12.5, current_date - 30, 'nota interna da equipe') returning id`)
+  const beto = await um(`insert into influenciadores (nome, email, cupom, desconto_percentual, comissao_percentual, contar_desde)
+    values ('Beto Lúpulo', 'beto@insta.com', 'BETO15', 15, 10, current_date - 30) returning id`)
+  await expectError('cupom não se repete entre influenciadores', `insert into influenciadores (nome, email, cupom, desconto_percentual, comissao_percentual) values ('Outra', 'outra@insta.com', 'LU10', 10, 10)`)
+  await expectError('cupom só aceita letras maiúsculas e números', `insert into influenciadores (nome, email, cupom, desconto_percentual, comissao_percentual) values ('Outra', 'outra@insta.com', 'lu-10', 10, 10)`)
+  await expectError('equipe não grava venda direto (é do servidor)', `select registrar_venda_influenciador('{"shopify_order_id":"1"}'::jsonb)`)
+
+  // Login do Portal: usuário de fora da equipe, sem perfil.
+  await db.exec(`reset role;`)
+  const perfisAntes = (await um(`select count(*)::int n from perfis`)).n
+  const loginLu = (await um(`insert into auth.users (email, raw_user_meta_data) values ('lu@insta.com', '{"nome":"Lu Cervejeira","tipo":"influenciador"}') returning id`)).id
+  const loginBeto = (await um(`insert into auth.users (email, raw_user_meta_data) values ('beto@insta.com', '{"tipo":"influenciador"}') returning id`)).id
+  expectEq('login de influenciador não cria perfil na equipe', (await um(`select count(*)::int n from perfis`)).n, perfisAntes)
+  await db.exec(servidor)
+  await q(`select vincular_acesso_influenciador($1, $2)`, [lu.id, loginLu])
+  await q(`select vincular_acesso_influenciador($1, $2)`, [beto.id, loginBeto])
+  await expectError('membro da equipe não vira login de influenciador', `select vincular_acesso_influenciador($1, $2)`, [beto.id, uid2])
+
+  // Pedidos lidos da Shopify.
+  const v1 = await venda({ ...paga, shopify_order_id: '9001', pedido_numero: '#1001', pedido_em: haDias(10), cupons: ['lu10'], base: 180 })
+  expectEq('pedido com o cupom vira venda do influenciador (cupom digitado em minúsculas também)',
+    { registrada: v1.registrada, nova: v1.nova, status: v1.status }, { registrada: true, nova: true, status: 'aprovada' })
+  expectEq('comissão = produtos depois do desconto × percentual (frete fora)',
+    await um(`select base::float, percentual::float, comissao::float, cupom from influenciador_vendas where shopify_order_id = '9001'`),
+    { base: 180, percentual: 12.5, comissao: 22.5, cupom: 'LU10' })
+  expectEq('cupom que não é de influenciador é ignorado',
+    (await venda({ ...paga, shopify_order_id: '9002', pedido_em: haDias(1), cupons: ['FRETEGRATIS'], base: 100 })).motivo, 'sem_cupom_de_influenciador')
+  expectEq('pedido de teste é ignorado',
+    (await venda({ ...paga, teste: true, shopify_order_id: '9003', pedido_em: haDias(1), cupons: ['LU10'], base: 100 })).motivo, 'pedido_de_teste')
+  expectEq('pedido anterior ao início da parceria é ignorado',
+    (await venda({ ...paga, shopify_order_id: '9004', pedido_em: haDias(45), cupons: ['LU10'], base: 100 })).motivo, 'antes_do_inicio')
+  await venda({ ...paga, shopify_order_id: '9005', pedido_numero: '#1005', pedido_em: haDias(0), cupons: ['OUTRO', 'LU10'], base: 100 })
+  await venda({ ...paga, status_financeiro: 'pending', shopify_order_id: '9006', pedido_numero: '#1006', pedido_em: haDias(9), cupons: ['LU10'], base: 80 })
+  await venda({ ...paga, shopify_order_id: '9007', pedido_numero: '#1007', pedido_em: haDias(12), cupons: ['BETO15'], base: 500 })
+
+  await db.exec(como(uid))
+  expectEq('situação de cada venda (carência de 7 dias a partir do pedido)',
+    await q(`select pedido_numero, situacao from vw_influenciador_vendas where influenciador_id = $1 order by pedido_numero`, [lu.id]),
+    [{ pedido_numero: '#1001', situacao: 'disponivel' }, { pedido_numero: '#1005', situacao: 'a_liberar' }, { pedido_numero: '#1006', situacao: 'aguardando_pagamento' }])
+  expectEq('saldos do influenciador',
+    await um(`select pedidos, vendido::float, saldo_aguardando::float aguardando, saldo_a_liberar::float a_liberar, saldo_disponivel::float disponivel, recebido::float from vw_influenciadores where id = $1`, [lu.id]),
+    { pedidos: 3, vendido: 360, aguardando: 10, a_liberar: 12.5, disponivel: 22.5, recebido: 0 })
+  // A comissão do influenciador muda: vale só para os pedidos novos.
+  await q(`update influenciadores set comissao_percentual = 20 where id = $1`, [lu.id])
+
+  await db.exec(servidor)
+  const v6 = await venda({ ...paga, shopify_order_id: '9006', pedido_em: haDias(9), cupons: ['LU10'], base: 80 })
+  expectEq('pedido pago aprova a comissão', { nova: v6.nova, status: v6.status }, { nova: false, status: 'aprovada' })
+  await venda({ ...paga, status_financeiro: 'partially_refunded', shopify_order_id: '9001', pedido_em: haDias(10), cupons: ['LU10'], base: 120 })
+  expectEq('devolução parcial reduz a comissão, com o percentual da época',
+    await um(`select comissao::float c, percentual::float p, status from influenciador_vendas where shopify_order_id = '9001'`), { c: 15, p: 12.5, status: 'aprovada' })
+
+  // Repasse.
+  await db.exec(como(uid2))
+  await expectError('ajuste sem motivo é recusado', `select registrar_pagamento_influenciador($1, null, -5)`, [lu.id])
+  await expectError('ajuste maior que as comissões é recusado', `select registrar_pagamento_influenciador($1, null, -500, 'estorno')`, [lu.id])
+  const repasse = (await um(`select registrar_pagamento_influenciador($1, null, -2, 'Pedido antigo estornado', 'PIX enviado') id`, [lu.id])).id
+  expectEq('repasse quita só as comissões disponíveis e soma o ajuste',
+    await um(`select comissoes::float, ajuste::float, total::float, vendas from influenciador_pagamentos where id = $1`, [repasse]),
+    { comissoes: 25, ajuste: -2, total: 23, vendas: 2 })
+  expectEq('vendas quitadas ficam pagas; a que está em carência, não',
+    await q(`select pedido_numero, situacao from vw_influenciador_vendas where influenciador_id = $1 order by pedido_numero`, [lu.id]),
+    [{ pedido_numero: '#1001', situacao: 'paga' }, { pedido_numero: '#1005', situacao: 'a_liberar' }, { pedido_numero: '#1006', situacao: 'paga' }])
+  await expectError('sem comissão disponível não há repasse', `select registrar_pagamento_influenciador($1)`, [lu.id])
+  await expectError('membro (não admin) não desfaz repasse', `select desfazer_pagamento_influenciador($1)`, [repasse])
+
+  await db.exec(servidor)
+  await venda({ ...paga, status_financeiro: 'refunded', shopify_order_id: '9001', pedido_em: haDias(10), cupons: ['LU10'], base: 0 })
+  expectEq('estorno depois do repasse não mexe no valor pago, só avisa a equipe',
+    await um(`select status, comissao::float c, alerta is not null avisou from influenciador_vendas where shopify_order_id = '9001'`), { status: 'paga', c: 15, avisou: true })
+
+  // A equipe cancela uma comissão à mão.
+  await db.exec(como(uid2))
+  const v5 = (await um(`select id from influenciador_vendas where shopify_order_id = '9005'`)).id
+  await expectError('cancelar comissão exige motivo', `select bloquear_comissao_influenciador($1, true)`, [v5])
+  await q(`select bloquear_comissao_influenciador($1, true, 'Compra do próprio influenciador')`, [v5])
+  await db.exec(servidor)
+  await venda({ ...paga, shopify_order_id: '9005', pedido_em: haDias(0), cupons: ['LU10'], base: 100 })
+  expectEq('a sincronização não reativa comissão cancelada pela equipe', (await um(`select status from influenciador_vendas where id = $1`, [v5])).status, 'cancelada')
+  await db.exec(como(uid2))
+  await q(`select bloquear_comissao_influenciador($1, false)`, [v5])
+  expectEq('devolver a comissão volta ao status do pedido', await um(`select status, alerta from influenciador_vendas where id = $1`, [v5]), { status: 'aprovada', alerta: null })
+
+  // Portal: o influenciador logado.
+  await db.exec(como(loginLu))
+  const eu = (await um(`select portal_influenciador() r`)).r
+  expectEq('Portal: vê o próprio cadastro, sem as notas internas',
+    { nome: eu.nome, cupom: eu.cupom, comissao: Number(eu.comissao_percentual), trocar: eu.trocar_senha, notas: 'observacoes' in eu },
+    { nome: 'Lu Cervejeira', cupom: 'LU10', comissao: 20, trocar: true, notas: false })
+  const minhas = (await um(`select portal_vendas() r`)).r
+  expectEq('Portal: só as próprias vendas', { total: minhas.total, pedidos: minhas.vendas.map((v) => v.pedido_numero).sort() }, { total: 3, pedidos: ['#1001', '#1005', '#1006'] })
+  expectEq('Portal: a venda não traz cliente nem identificador do pedido na Shopify', Object.keys(minhas.vendas[0]).sort(),
+    ['base', 'comissao', 'cupom', 'dia', 'id', 'liberar_em', 'pedido_em', 'pedido_numero', 'percentual', 'situacao'])
+  expectEq('Portal: filtro por situação', (await um(`select portal_vendas(null, null, 'paga') r`)).r.total, 2)
+  const resumo = (await um(`select portal_resumo(current_date - 30, current_date) r`)).r
+  expectEq('Portal: saldos',
+    { a_liberar: Number(resumo.saldos.a_liberar), disponivel: Number(resumo.saldos.disponivel), recebido: Number(resumo.saldos.recebido), dias: resumo.serie.length },
+    { a_liberar: 12.5, disponivel: 0, recebido: 23, dias: 31 })
+  expectEq('Portal: repasses recebidos', (await um(`select portal_pagamentos() r`)).r.map((p) => Number(p.total)), [23])
+  expectEq('Portal: as tabelas do CRM continuam fechadas',
+    await um(`select (select count(*) from influenciadores)::int influenciadores, (select count(*) from influenciador_vendas)::int vendas,
+      (select count(*) from influenciador_pagamentos)::int repasses, (select count(*) from clientes)::int clientes,
+      (select count(*) from pedidos)::int pedidos, (select count(*) from perfis)::int perfis`),
+    { influenciadores: 0, vendas: 0, repasses: 0, clientes: 0, pedidos: 0, perfis: 0 })
+  expectEq('Portal: o resumo da equipe chamado direto vem vazio', Number((await um(`select resumo_influenciadores(current_date - 30, current_date) r`)).r.total.pedidos), 0)
+  expectEq('Portal: o ranking chamado direto vem vazio', (await q(`select * from ranking_influenciadores(current_date - 30, current_date)`)).length, 0)
+  expectEq('Portal: não muda a própria comissão na tabela', (await q(`update influenciadores set comissao_percentual = 90 where id = $1 returning id`, [lu.id])).length, 0)
+  await expectError('Portal: não grava venda', `select registrar_venda_influenciador('{"shopify_order_id":"1"}'::jsonb)`)
+  await expectError('Portal: não registra repasse', `select registrar_pagamento_influenciador($1)`, [lu.id])
+  await expectError('Portal: não cancela comissão', `select bloquear_comissao_influenciador($1, true, 'x')`, [v5])
+  await expectError('Portal: não vincula login', `select vincular_acesso_influenciador($1, $2)`, [lu.id, loginLu])
+  await expectError('Portal: não cancela Caixas VIP', `select vencer_caixas_vip()`)
+  await expectError('Portal: não lança estoque na Olist', `select ajustar_estoque_olist_item(gen_random_uuid(), gen_random_uuid(), 1, null, 'x')`)
+  await expectError('Portal: não lê a fila de estoque da Olist', `select * from reservar_movimentos_olist(1)`)
+  await q(`select portal_atualizar_dados($1::jsonb)`, [JSON.stringify({
+    whatsapp: '(11) 98888-7777', instagram: '@Lu.Cervejeira', tipo_chave_pix: 'email', chave_pix: 'lu@insta.com',
+    nome_recebedor: 'Luciana Souza', documento: '123.456.789-09', comissao_percentual: 99, cupom: 'HACK',
+  })])
+  await q(`select portal_senha_definida()`)
+  await db.exec(`reset role;`)
+  expectEq('Portal: atualiza contato e PIX, nunca cupom nem comissão',
+    await um(`select whatsapp, instagram, chave_pix, documento, cupom, comissao_percentual::float c, trocar_senha from influenciadores where id = $1`, [lu.id]),
+    { whatsapp: '5511988887777', instagram: 'lu.cervejeira', chave_pix: 'lu@insta.com', documento: '12345678909', cupom: 'LU10', c: 20, trocar_senha: false })
+
+  await db.exec(como(loginBeto))
+  expectEq('Portal: outro influenciador vê só as vendas dele', (await um(`select portal_vendas() r`)).r.vendas.map((v) => v.pedido_numero), ['#1007'])
+  await db.exec(como(uid2))
+  expectEq('equipe não tem Portal', (await um(`select portal_influenciador() r`)).r, null)
+  expectEq('ranking do período (equipe)',
+    await q(`select nome, pedidos::int, vendido::float from ranking_influenciadores(current_date - 30, current_date)`),
+    [{ nome: 'Beto Lúpulo', pedidos: 1, vendido: 500 }, { nome: 'Lu Cervejeira', pedidos: 3, vendido: 300 }])
+
+  await db.exec(como(uid))
+  await q(`select desfazer_pagamento_influenciador($1)`, [repasse])
+  expectEq('admin desfaz o repasse: cada comissão volta conforme o pedido',
+    await q(`select pedido_numero, status from influenciador_vendas where influenciador_id = $1 order by pedido_numero`, [lu.id]),
+    [{ pedido_numero: '#1001', status: 'cancelada' }, { pedido_numero: '#1005', status: 'aprovada' }, { pedido_numero: '#1006', status: 'aprovada' }])
+
+  // Pedido da Shopify que entra no CRM depois da venda fica ligado a ela.
+  await db.exec(`reset role;`)
+  await q(`insert into pedidos (cliente_id, canal, origem, shopify_order_id) values ((select id from clientes order by criado_em limit 1), 'shopify', 'shopify', '9007')`)
+  expectEq('pedido importado depois liga na venda', (await um(`select pedido_id is not null ligado from influenciador_vendas where shopify_order_id = '9007'`)).ligado, true)
+  const comum = (await um(`insert into auth.users (email) values ('novo-membro@prometheus.beer') returning id`)).id
+  expectEq('usuário comum continua ganhando perfil (inativo)', (await um(`select ativo from perfis where id = $1`, [comum]))?.ativo, false)
+}
+
 if (falhas > 0) {
   console.error(`\n✗ ${falhas} verificação(ões) falharam`)
   process.exit(1)

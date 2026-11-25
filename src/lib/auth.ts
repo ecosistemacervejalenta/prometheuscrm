@@ -29,7 +29,11 @@ export const obterSessao = cache(async () => {
 export async function exigirEquipe() {
   const sessao = await obterSessao()
   if (!sessao) redirect('/login')
-  if (!sessao.perfil) redirect('/sem-acesso')
+  if (!sessao.perfil) {
+    // Influenciador (login de fora da equipe) que caiu no CRM: o lugar dele é o Portal.
+    const { data: influenciadorId } = await sessao.supabase.rpc('meu_influenciador_id')
+    redirect(influenciadorId ? '/portal' : '/sem-acesso')
+  }
   if (sessao.perfil.trocar_senha) redirect('/redefinir-senha')
   return { supabase: sessao.supabase, perfil: sessao.perfil }
 }

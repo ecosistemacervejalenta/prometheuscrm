@@ -92,7 +92,19 @@ export async function pedirToken(loja: string, clientId: string, clientSecret: s
 /** `errors` vem como lista (GraphQL) ou como texto solto (recusas da API, ex.: token inválido). */
 type RespostaGraphql<T> = { data?: T | null; errors?: Array<{ message?: string; extensions?: { code?: string } }> | string }
 
-async function graphql<T>(acesso: AcessoShopify, query: string, variables: Record<string, unknown>, esperaMs: number): Promise<T> {
+const SEM_RASCUNHOS = `O app não tem a permissão de rascunhos de pedido (${ESCOPO_NECESSARIO}) nesta loja.`
+
+/**
+ * Consulta à Admin API (GraphQL). `semPermissao` é a frase de quando a Shopify nega o acesso:
+ * cada parte do CRM usa um escopo (frete: rascunhos de pedido; influenciadores: cupons e pedidos).
+ */
+export async function graphql<T>(
+  acesso: AcessoShopify,
+  query: string,
+  variables: Record<string, unknown>,
+  esperaMs: number,
+  semPermissao: string = SEM_RASCUNHOS,
+): Promise<T> {
   let resposta: Response
   try {
     resposta = await fetch(`${base(acesso.loja)}/admin/api/${VERSAO_API}/graphql.json`, {
@@ -108,7 +120,7 @@ async function graphql<T>(acesso: AcessoShopify, query: string, variables: Recor
   }
 
   if (resposta.status === 401) throw new ErroShopify('A Shopify não aceitou o token de acesso.', 'credenciais')
-  if (resposta.status === 403) throw new ErroShopify(`O app não tem a permissão de rascunhos de pedido (${ESCOPO_NECESSARIO}) nesta loja.`, 'permissao')
+  if (resposta.status === 403) throw new ErroShopify(semPermissao, 'permissao')
   if (resposta.status === 402 || resposta.status === 423) throw new ErroShopify('A loja da Shopify está pausada ou bloqueada.', 'recusou')
   if (resposta.status === 429 || resposta.status >= 500) throw new ErroShopify(`A Shopify está fora do ar ou ocupada (HTTP ${resposta.status}).`, 'fora_do_ar')
 
@@ -119,7 +131,7 @@ async function graphql<T>(acesso: AcessoShopify, query: string, variables: Recor
   const erro = corpo.errors?.[0]
   if (erro) {
     const codigo = erro.extensions?.code ?? ''
-    if (codigo === 'ACCESS_DENIED') throw new ErroShopify(`O app não tem a permissão de rascunhos de pedido (${ESCOPO_NECESSARIO}) nesta loja.`, 'permissao')
+    if (codigo === 'ACCESS_DENIED') throw new ErroShopify(semPermissao, 'permissao')
     if (codigo === 'THROTTLED') throw new ErroShopify('A Shopify pediu para esperar (muitas consultas seguidas).', 'fora_do_ar')
     throw new ErroShopify(`A Shopify recusou a consulta: ${erro.message || codigo || 'erro'}`.slice(0, 300), 'recusou')
   }

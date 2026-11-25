@@ -641,6 +641,15 @@ export type Database = {
           frete_vip_arquivo: string | null
           frete_vip_importado_em: string | null
           frete_vip_valor: number
+          influ_carencia_dias: number
+          influ_comissao_padrao: number
+          influ_desconto_padrao: number
+          influ_loja_url: string | null
+          influ_nome_loja: string | null
+          influ_regras: string | null
+          influ_sincronizacao_erro: string | null
+          influ_sincronizado_ate: string | null
+          influ_sincronizado_em: string | null
           id: number
           lotes_aviso_grupo: boolean
           mensagem_cobranca: string
@@ -664,6 +673,15 @@ export type Database = {
           frete_vip_arquivo?: string | null
           frete_vip_importado_em?: string | null
           frete_vip_valor?: number
+          influ_carencia_dias?: number
+          influ_comissao_padrao?: number
+          influ_desconto_padrao?: number
+          influ_loja_url?: string | null
+          influ_nome_loja?: string | null
+          influ_regras?: string | null
+          influ_sincronizacao_erro?: string | null
+          influ_sincronizado_ate?: string | null
+          influ_sincronizado_em?: string | null
           id?: number
           lotes_aviso_grupo?: boolean
           mensagem_cobranca?: string
@@ -687,6 +705,15 @@ export type Database = {
           frete_vip_arquivo?: string | null
           frete_vip_importado_em?: string | null
           frete_vip_valor?: number
+          influ_carencia_dias?: number
+          influ_comissao_padrao?: number
+          influ_desconto_padrao?: number
+          influ_loja_url?: string | null
+          influ_nome_loja?: string | null
+          influ_regras?: string | null
+          influ_sincronizacao_erro?: string | null
+          influ_sincronizado_ate?: string | null
+          influ_sincronizado_em?: string | null
           id?: number
           lotes_aviso_grupo?: boolean
           mensagem_cobranca?: string
@@ -1191,6 +1218,281 @@ export type Database = {
             columns: ["pedido_id"]
             isOneToOne: false
             referencedRelation: "vw_pedidos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      influenciador_pagamentos: {
+        Row: {
+          ajuste: number
+          ajuste_motivo: string | null
+          chave_pix: string | null
+          comissoes: number
+          criado_em: string
+          criado_por: string | null
+          id: string
+          influenciador_id: string
+          observacoes: string | null
+          pago_em: string
+          total: number
+          vendas: number
+        }
+        Insert: {
+          ajuste?: number
+          ajuste_motivo?: string | null
+          chave_pix?: string | null
+          comissoes?: number
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          influenciador_id: string
+          observacoes?: string | null
+          pago_em?: string
+          vendas?: number
+        }
+        Update: {
+          ajuste?: number
+          ajuste_motivo?: string | null
+          chave_pix?: string | null
+          comissoes?: number
+          criado_em?: string
+          criado_por?: string | null
+          id?: string
+          influenciador_id?: string
+          observacoes?: string | null
+          pago_em?: string
+          vendas?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "influenciador_pagamentos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "influenciador_pagamentos_influenciador_id_fkey"
+            columns: ["influenciador_id"]
+            isOneToOne: false
+            referencedRelation: "influenciadores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "influenciador_pagamentos_influenciador_id_fkey"
+            columns: ["influenciador_id"]
+            isOneToOne: false
+            referencedRelation: "vw_influenciadores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      influenciador_vendas: {
+        Row: {
+          alerta: string | null
+          atualizado_em: string
+          base: number
+          bloqueada: boolean
+          comissao: number
+          criado_em: string
+          cupom: string
+          desconto: number
+          dia: string
+          frete: number
+          id: string
+          influenciador_id: string
+          liberar_em: string
+          origem: string
+          pagamento_id: string | null
+          pedido_cancelado: boolean
+          pedido_em: string
+          pedido_id: string | null
+          pedido_numero: string | null
+          percentual: number
+          shopify_order_id: string
+          status: Database["public"]["Enums"]["status_comissao"]
+          status_financeiro: string | null
+          valor_pedido: number
+        }
+        Insert: {
+          alerta?: string | null
+          atualizado_em?: string
+          base?: number
+          bloqueada?: boolean
+          comissao?: number
+          criado_em?: string
+          cupom: string
+          desconto?: number
+          frete?: number
+          id?: string
+          influenciador_id: string
+          liberar_em: string
+          origem?: string
+          pagamento_id?: string | null
+          pedido_cancelado?: boolean
+          pedido_em: string
+          pedido_id?: string | null
+          pedido_numero?: string | null
+          percentual: number
+          shopify_order_id: string
+          status?: Database["public"]["Enums"]["status_comissao"]
+          status_financeiro?: string | null
+          valor_pedido?: number
+        }
+        Update: {
+          alerta?: string | null
+          atualizado_em?: string
+          base?: number
+          bloqueada?: boolean
+          comissao?: number
+          criado_em?: string
+          cupom?: string
+          desconto?: number
+          frete?: number
+          id?: string
+          influenciador_id?: string
+          liberar_em?: string
+          origem?: string
+          pagamento_id?: string | null
+          pedido_cancelado?: boolean
+          pedido_em?: string
+          pedido_id?: string | null
+          pedido_numero?: string | null
+          percentual?: number
+          shopify_order_id?: string
+          status?: Database["public"]["Enums"]["status_comissao"]
+          status_financeiro?: string | null
+          valor_pedido?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "influenciador_vendas_influenciador_id_fkey"
+            columns: ["influenciador_id"]
+            isOneToOne: false
+            referencedRelation: "influenciadores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "influenciador_vendas_influenciador_id_fkey"
+            columns: ["influenciador_id"]
+            isOneToOne: false
+            referencedRelation: "vw_influenciadores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "influenciador_vendas_pagamento_id_fkey"
+            columns: ["pagamento_id"]
+            isOneToOne: false
+            referencedRelation: "influenciador_pagamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "influenciador_vendas_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "influenciador_vendas_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "vw_pedidos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      influenciadores: {
+        Row: {
+          acesso_criado_em: string | null
+          atualizado_em: string
+          chave_pix: string | null
+          comissao_percentual: number
+          contar_desde: string
+          criado_em: string
+          criado_por: string | null
+          cupom: string
+          cupom_conferido_em: string | null
+          cupom_detalhe: string | null
+          cupom_situacao: string
+          desconto_percentual: number
+          documento: string | null
+          email: string
+          id: string
+          instagram: string | null
+          nome: string
+          nome_recebedor: string | null
+          observacoes: string | null
+          shopify_desconto_id: string | null
+          status: Database["public"]["Enums"]["status_influenciador"]
+          tipo_chave_pix: string | null
+          trocar_senha: boolean
+          ultimo_acesso_em: string | null
+          usuario_id: string | null
+          whatsapp: string | null
+        }
+        Insert: {
+          acesso_criado_em?: string | null
+          atualizado_em?: string
+          chave_pix?: string | null
+          comissao_percentual: number
+          contar_desde?: string
+          criado_em?: string
+          criado_por?: string | null
+          cupom: string
+          cupom_conferido_em?: string | null
+          cupom_detalhe?: string | null
+          cupom_situacao?: string
+          desconto_percentual: number
+          documento?: string | null
+          email: string
+          id?: string
+          instagram?: string | null
+          nome: string
+          nome_recebedor?: string | null
+          observacoes?: string | null
+          shopify_desconto_id?: string | null
+          status?: Database["public"]["Enums"]["status_influenciador"]
+          tipo_chave_pix?: string | null
+          trocar_senha?: boolean
+          ultimo_acesso_em?: string | null
+          usuario_id?: string | null
+          whatsapp?: string | null
+        }
+        Update: {
+          acesso_criado_em?: string | null
+          atualizado_em?: string
+          chave_pix?: string | null
+          comissao_percentual?: number
+          contar_desde?: string
+          criado_em?: string
+          criado_por?: string | null
+          cupom?: string
+          cupom_conferido_em?: string | null
+          cupom_detalhe?: string | null
+          cupom_situacao?: string
+          desconto_percentual?: number
+          documento?: string | null
+          email?: string
+          id?: string
+          instagram?: string | null
+          nome?: string
+          nome_recebedor?: string | null
+          observacoes?: string | null
+          shopify_desconto_id?: string | null
+          status?: Database["public"]["Enums"]["status_influenciador"]
+          tipo_chave_pix?: string | null
+          trocar_senha?: boolean
+          ultimo_acesso_em?: string | null
+          usuario_id?: string | null
+          whatsapp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "influenciadores_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
             referencedColumns: ["id"]
           },
         ]
@@ -3710,6 +4012,123 @@ export type Database = {
           },
         ]
       }
+      vw_influenciador_vendas: {
+        Row: {
+          alerta: string | null
+          atualizado_em: string | null
+          base: number | null
+          bloqueada: boolean | null
+          comissao: number | null
+          criado_em: string | null
+          cupom: string | null
+          desconto: number | null
+          dia: string | null
+          frete: number | null
+          id: string | null
+          influenciador_id: string | null
+          influenciador_nome: string | null
+          liberar_em: string | null
+          origem: string | null
+          pagamento_id: string | null
+          pedido_cancelado: boolean | null
+          pedido_em: string | null
+          pedido_id: string | null
+          pedido_numero: string | null
+          percentual: number | null
+          shopify_order_id: string | null
+          situacao: string | null
+          status: Database["public"]["Enums"]["status_comissao"] | null
+          status_financeiro: string | null
+          valor_pedido: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "influenciador_vendas_influenciador_id_fkey"
+            columns: ["influenciador_id"]
+            isOneToOne: false
+            referencedRelation: "influenciadores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "influenciador_vendas_influenciador_id_fkey"
+            columns: ["influenciador_id"]
+            isOneToOne: false
+            referencedRelation: "vw_influenciadores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "influenciador_vendas_pagamento_id_fkey"
+            columns: ["pagamento_id"]
+            isOneToOne: false
+            referencedRelation: "influenciador_pagamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "influenciador_vendas_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "influenciador_vendas_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "vw_pedidos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vw_influenciadores: {
+        Row: {
+          acesso_criado_em: string | null
+          alertas: number | null
+          atualizado_em: string | null
+          chave_pix: string | null
+          comissao_percentual: number | null
+          comissao_total: number | null
+          contar_desde: string | null
+          criado_em: string | null
+          criado_por: string | null
+          cupom: string | null
+          cupom_conferido_em: string | null
+          cupom_detalhe: string | null
+          cupom_situacao: string | null
+          desconto_percentual: number | null
+          documento: string | null
+          email: string | null
+          id: string | null
+          instagram: string | null
+          nome: string | null
+          nome_recebedor: string | null
+          observacoes: string | null
+          pedidos: number | null
+          recebido: number | null
+          saldo_a_liberar: number | null
+          saldo_aguardando: number | null
+          saldo_disponivel: number | null
+          shopify_desconto_id: string | null
+          status: Database["public"]["Enums"]["status_influenciador"] | null
+          tipo_chave_pix: string | null
+          trocar_senha: boolean | null
+          ultima_venda_em: string | null
+          ultimo_acesso_em: string | null
+          ultimo_pagamento_em: string | null
+          usuario_id: string | null
+          vendas_disponiveis: number | null
+          vendido: number | null
+          whatsapp: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "influenciadores_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vw_tarefas: {
         Row: {
           anexos: number | null
@@ -3999,6 +4418,48 @@ export type Database = {
         Returns: undefined
       }
       status_shopify: { Args: never; Returns: Json }
+      bloquear_comissao_influenciador: {
+        Args: { p_bloquear: boolean; p_motivo?: string; p_venda_id: string }
+        Returns: undefined
+      }
+      desfazer_pagamento_influenciador: { Args: { p_pagamento_id: string }; Returns: undefined }
+      meu_influenciador_id: { Args: never; Returns: string }
+      portal_atualizar_dados: { Args: { p_dados: Json }; Returns: undefined }
+      portal_influenciador: { Args: never; Returns: Json }
+      portal_pagamentos: { Args: never; Returns: Json }
+      portal_registrar_acesso: { Args: never; Returns: undefined }
+      portal_resumo: { Args: { p_fim: string; p_inicio: string }; Returns: Json }
+      portal_senha_definida: { Args: never; Returns: undefined }
+      portal_vendas: {
+        Args: { p_fim?: string; p_inicio?: string; p_pagina?: number; p_por_pagina?: number; p_situacao?: string }
+        Returns: Json
+      }
+      ranking_influenciadores: {
+        Args: { p_fim: string; p_inicio: string; p_limite?: number }
+        Returns: {
+          comissao: number
+          cupom: string
+          influenciador_id: string
+          instagram: string
+          nome: string
+          pedidos: number
+          vendido: number
+        }[]
+      }
+      registrar_pagamento_influenciador: {
+        Args: { p_ajuste?: number; p_ajuste_motivo?: string; p_influenciador_id: string; p_observacoes?: string; p_pago_em?: string }
+        Returns: string
+      }
+      registrar_venda_influenciador: { Args: { p_venda: Json }; Returns: Json }
+      resumo_influenciadores: {
+        Args: { p_fim: string; p_influenciador_id?: string; p_inicio: string }
+        Returns: Json
+      }
+      status_da_comissao: {
+        Args: { p_cancelado: boolean; p_status_financeiro: string }
+        Returns: Database["public"]["Enums"]["status_comissao"]
+      }
+      vincular_acesso_influenciador: { Args: { p_influenciador_id: string; p_usuario_id: string }; Returns: undefined }
       unidades_para_frete: { Args: { p_pedido_id: string }; Returns: number }
       credenciais_mercado_pago: {
         Args: never
@@ -4501,6 +4962,8 @@ export type Database = {
         | "separado"
         | "entregue"
         | "cancelado"
+      status_comissao: "pendente" | "aprovada" | "paga" | "cancelada"
+      status_influenciador: "ativo" | "pausado" | "encerrado"
       status_pre_venda: "rascunho" | "ativa" | "encerrada"
       status_recebimento: "pendente" | "recebida" | "cancelada"
       status_tarefa: "a_fazer" | "fazendo" | "concluida"
@@ -4694,6 +5157,8 @@ export const Constants = {
         "entregue",
         "cancelado",
       ],
+      status_comissao: ["pendente", "aprovada", "paga", "cancelada"],
+      status_influenciador: ["ativo", "pausado", "encerrado"],
       status_pre_venda: ["rascunho", "ativa", "encerrada"],
       status_recebimento: ["pendente", "recebida", "cancelada"],
       status_tarefa: ["a_fazer", "fazendo", "concluida"],

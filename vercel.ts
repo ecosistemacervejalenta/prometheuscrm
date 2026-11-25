@@ -34,5 +34,7 @@ export const config: VercelConfig = {
     // Estoque da Olist nas pré-vendas: envia as baixas/devoluções que ficaram na fila, cancela
     // Caixas VIP vencidas sem pagamento e atualiza o estoque das pré-vendas ativas (a cada 5 min).
     { path: '/api/cron/olist-estoque', schedule: '*/5 * * * *' },
+    // Influenciadores: lê na Shopify os pedidos feitos com cupom e atualiza as comissões (a cada 15 min).
+    { path: '/api/cron/influenciadores', schedule: '*/15 * * * *' },
   ],
 }

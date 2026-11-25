@@ -5,7 +5,10 @@ import { envPublico } from '@/lib/env'
 import type { Database } from '@/types/database.types'
 
 /** Rotas acessíveis sem login. */
-const ROTAS_PUBLICAS = ['/login', '/redefinir-senha', '/p/', '/pagar/', '/privacidade', '/auth/', '/api/']
+const ROTAS_PUBLICAS = ['/login', '/redefinir-senha', '/p/', '/pagar/', '/privacidade', '/auth/', '/api/', '/portal/entrar']
+
+/** Portal do influenciador: tem a própria tela de entrada. */
+const ENTRADA_DO_PORTAL = '/portal/entrar'
 
 function ehPublica(pathname: string) {
   return ROTAS_PUBLICAS.some((rota) => pathname === rota.replace(/\/$/, '') || pathname.startsWith(rota))
@@ -41,10 +44,24 @@ export async function atualizarSessao(request: NextRequest) {
   const logado = Boolean(data?.claims)
   const { pathname } = request.nextUrl
 
+  if (!logado && !ehPublica(pathname) && (pathname === '/portal' || pathname.startsWith('/portal/'))) {
+    const url = request.nextUrl.clone()
+    url.pathname = ENTRADA_DO_PORTAL
+    url.search = ''
+    return NextResponse.redirect(url)
+  }
+
   if (!logado && !ehPublica(pathname)) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.search = pathname === '/' ? '' : `?voltar=${encodeURIComponent(pathname + request.nextUrl.search)}`
+    return NextResponse.redirect(url)
+  }
+
+  if (logado && pathname === ENTRADA_DO_PORTAL) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/portal'
+    url.search = ''
     return NextResponse.redirect(url)
   }
 
