@@ -65,7 +65,7 @@ export default async function PaginaAvisosNoGrupo() {
                   {config.webhook === 'pausado' ? 'Webhook do n8n pausado' : 'Falta o webhook do n8n'}
                 </Link>
               )}
-              <span className="mt-1 block text-[12px] text-suave">Fluxo “Validade dos lotes” no n8n, pelo WhatsApp da loja.</span>
+              <span className="mt-1 block text-[12px] text-suave">Fluxo “Aviso de Venda (grupo equipe)” no n8n, o mesmo do aviso de venda.</span>
             </dd>
           </div>
           <div>

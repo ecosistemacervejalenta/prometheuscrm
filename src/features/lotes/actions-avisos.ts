@@ -26,7 +26,7 @@ function resultadoDaEntrega(entrega: EntregaEvento, oQue: string): EstadoAcao {
     return falha('Nenhum webhook ativo recebe os avisos de validade. Confira em Configurações › Webhooks o "n8n · validade dos lotes".')
   }
   return falha(
-    `O n8n não recebeu (${entrega.erro ?? 'sem resposta'}). Confira se o fluxo "Validade dos lotes" está publicado no n8n. ` +
+    `O n8n não recebeu (${entrega.erro ?? 'sem resposta'}). Confira se o fluxo "Cerveja Lenta - Aviso de Venda (grupo equipe)" está publicado no n8n. ` +
       'O CRM tenta de novo sozinho daqui a pouco.',
   )
 }

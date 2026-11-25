@@ -8,8 +8,9 @@ import type { Json } from '@/types'
 
 /**
  * Avisos de validade no grupo da equipe. Quem fala com o grupo é o n8n (fluxo "Cerveja Lenta -
- * Validade dos lotes"): o CRM manda o evento pela fila de webhooks com a mensagem pronta e o
- * botão "Registrar tratativa".
+ * Aviso de Venda (grupo equipe)", entrada "Evento do CRM (lotes)", que usa o mesmo envio do aviso
+ * de venda): o CRM manda o evento pela fila de webhooks com a mensagem pronta e o botão
+ * "Registrar tratativa".
  */
 
 /** Os avisos automáticos só saem neste horário (Brasília); o que vencer de madrugada sai às 8h. */
