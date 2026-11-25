@@ -4,22 +4,21 @@ import { after } from 'next/server'
 
 import { atualizarEstoqueDaPreVenda } from '@/features/olist/estoque'
 import { CheckoutPreVenda } from '@/features/pre-vendas/publico/checkout'
+import { textoDaPrevia } from '@/features/pre-vendas/publico/previa-link'
 import { obterPreVendaPublica } from '@/features/pre-vendas/publico/queries'
 import { param } from '@/lib/utils'
 
 export async function generateMetadata({ params }: PageProps<'/p/[slug]'>): Promise<Metadata> {
   const dados = await obterPreVendaPublica((await params).slug)
   if (!dados) return { title: 'Pré-venda' }
-  // Prévia do WhatsApp: sem *negrito*/_itálico_ do WhatsApp (aparecem literais) e numa linha só.
-  const descricao =
-    dados.preVenda.descricao?.replace(/[*_~]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300) ||
-    `Pré-venda exclusiva ${dados.loja.nome}. Garanta a sua!`
+  // Prévia do WhatsApp: texto padrão (nome da cerveja + chamada do Grupo VIP), igual em todos os links.
+  const { titulo, descricao } = textoDaPrevia(dados)
   return {
-    title: { absolute: `${dados.preVenda.titulo} · ${dados.loja.nome}` },
+    title: { absolute: titulo },
     description: descricao,
     // A imagem vem de ./opengraph-image (foto das cervejas desta pré-venda).
-    openGraph: { title: dados.preVenda.titulo, description: descricao, type: 'website' },
-    twitter: { card: 'summary_large_image', title: dados.preVenda.titulo, description: descricao },
+    openGraph: { title: titulo, description: descricao, type: 'website' },
+    twitter: { card: 'summary_large_image', title: titulo, description: descricao },
   }
 }
 
