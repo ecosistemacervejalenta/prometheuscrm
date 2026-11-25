@@ -162,6 +162,27 @@ export async function importarProdutoDaOlist(olistId: number): Promise<Resultado
   }
 }
 
+/**
+ * Botão da pré-venda: devolve à Olist tudo o que esta pré-venda baixou lá (toda a equipe pode).
+ * Pedidos e Caixas VIP continuam como estão; essas unidades não voltam a baixar nem a devolver.
+ * Na Olist, o lançamento fica registrado como DEVOLUÇÃO MANUAL (quem, quando, qual pré-venda).
+ */
+export async function devolverEstoqueOlistPreVenda(preVendaId: string): Promise<EstadoAcao> {
+  const { supabase } = await exigirEquipe()
+  const { data, error } = await supabase.rpc('devolver_estoque_olist_pre_venda', { p_pre_venda_id: preVendaId })
+  if (error) return falha(traduzirErro(error))
+  const resultado = (data ?? {}) as { unidades?: number; pedidos?: number }
+  const unidades = resultado.unidades ?? 0
+  if (unidades <= 0) return sucesso('Nada para devolver: esta pré-venda não tem estoque baixado na Olist.')
+
+  await agendarEnvioEstoqueOlist()
+  revalidatePath(`/pre-vendas/${preVendaId}`)
+  revalidatePath('/configuracoes', 'layout')
+  return sucesso(
+    `${unidades} unidade(s) voltando para o estoque da Olist (${resultado.pedidos ?? 0} pedido(s)). Lá fica registrado como devolução manual.`,
+  )
+}
+
 /** Lançamento travado: tentar de novo ou marcar como resolvido à mão na Olist (só admin). */
 export async function resolverLancamentoOlist(id: number, acao: 'reenviar' | 'ignorar'): Promise<EstadoAcao> {
   const { supabase } = await exigirAdmin()

@@ -31,6 +31,25 @@ export async function itensDaPreVenda(id: string) {
   return data ?? []
 }
 
+/**
+ * Estoque da Olist que esta pré-venda tem baixado agora (o que o botão "Devolver estoque à
+ * Olist" devolveria) e a última devolução manual.
+ */
+export async function estoqueOlistDaPreVenda(id: string) {
+  const { supabase } = await exigirEquipe()
+  const [{ data: baixado, error }, { data: pv }] = await Promise.all([
+    supabase.rpc('estoque_olist_baixado_pre_venda', { p_pre_venda_id: id }),
+    supabase.from('pre_vendas').select('estoque_olist_devolvido_em, estoque_olist_devolvido_por').eq('id', id).maybeSingle(),
+  ])
+  if (error) console.error('[pre-venda] estoque baixado na Olist', error.message)
+  let devolvidoPor: string | null = null
+  if (pv?.estoque_olist_devolvido_por) {
+    const { data: perfil } = await supabase.from('perfis').select('nome').eq('id', pv.estoque_olist_devolvido_por).maybeSingle()
+    devolvidoPor = perfil?.nome ?? null
+  }
+  return { baixado: baixado ?? [], devolvidoEm: pv?.estoque_olist_devolvido_em ?? null, devolvidoPor }
+}
+
 export async function pedidosDaPreVenda(id: string) {
   const { supabase } = await exigirEquipe()
   const { data } = await supabase

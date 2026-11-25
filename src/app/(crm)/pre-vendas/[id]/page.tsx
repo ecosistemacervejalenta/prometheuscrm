@@ -18,7 +18,8 @@ import { totaisDosPedidos } from '@/features/grupo-vip/resumo'
 import { TabelaCobrancas } from '@/features/pedidos/components/tabela-cobrancas'
 import { pedidosComItens } from '@/features/pedidos/queries'
 import { alterarStatusPreVenda, excluirPreVenda } from '@/features/pre-vendas/actions'
-import { itensDaPreVenda, obterPreVenda } from '@/features/pre-vendas/queries'
+import { estoqueOlistDaPreVenda, itensDaPreVenda, obterPreVenda } from '@/features/pre-vendas/queries'
+import { DevolverEstoquePreVenda } from '@/features/olist/components/devolver-estoque-pre-venda'
 import { FotoProduto } from '@/features/produtos/components/foto-produto'
 import { formatarData, formatarDataHora, formatarMoeda, formatarNumero } from '@/lib/format'
 import { exigirEquipe } from '@/lib/auth'
@@ -47,6 +48,9 @@ export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/
     basePagamentoPix(),
   ])
   if (!pv?.id) notFound()
+
+  const temOlist = itens.some((i) => i.olist_id)
+  const estoqueOlist = temOlist ? await estoqueOlistDaPreVenda(id) : null
 
   const link = await linkPreVenda(pv.slug ?? '')
   const mensagem = mensagemPreVenda(
@@ -119,7 +123,18 @@ export default async function PaginaPreVenda({ params }: PageProps<'/pre-vendas/
       <Card className="mb-6">
         <CardHeader
           titulo="Cervejas da pré-venda"
-          descricao={itens.some((i) => i.olist_id) ? 'Vendido e saldo por item. Cervejas da Olist usam o estoque de lá: cada venda baixa e cada cancelamento devolve.' : 'Vendido e saldo por item.'}
+          descricao={
+            temOlist
+              ? `Vendido e saldo por item. Cervejas da Olist usam o estoque de lá: cada venda baixa e cada cancelamento devolve.${
+                  estoqueOlist?.devolvidoEm
+                    ? ` Última devolução manual à Olist: ${formatarDataHora(estoqueOlist.devolvidoEm)}${estoqueOlist.devolvidoPor ? `, por ${estoqueOlist.devolvidoPor}` : ''}.`
+                    : ''
+                }`
+              : 'Vendido e saldo por item.'
+          }
+          acoes={
+            estoqueOlist ? <DevolverEstoquePreVenda preVendaId={id} titulo={pv.titulo ?? ''} baixado={estoqueOlist.baixado} /> : undefined
+          }
         />
         <ListaMobile>
           {itens.map((i) => {

@@ -167,6 +167,7 @@ const MOTIVO_NA_OLIST: Record<string, string> = {
   caixa_vencida: 'caixa vencida sem pagamento',
   item_removido: 'item removido da caixa',
   pedido_excluido: 'pedido excluído',
+  devolucao_manual: 'devolução manual pelo botão da pré-venda',
 }
 
 /**
@@ -175,6 +176,9 @@ const MOTIVO_NA_OLIST: Record<string, string> = {
  * próprio, gravado no movimento, e nunca é somada a estes.
  */
 function observacaoDoLote(movimentos: Movimento[], tipo: 'S' | 'E', lote: string): string {
+  // Devolução manual: o texto foi montado no banco (quem, quando, qual pré-venda).
+  const manual = movimentos[0]?.observacao
+  if (manual) return `${manual} · ref ${lote.slice(0, 8)}`
   const numeros = [...new Set(movimentos.map((m) => m.pedido_numero).filter((n): n is number => typeof n === 'number'))].sort((a, b) => a - b)
   const lista = numeros.slice(0, 8).map((n) => `#${n}`).join(', ')
   const resto = numeros.length > 8 ? ` e mais ${numeros.length - 8}` : ''
@@ -247,10 +251,16 @@ export async function processarFilaEstoqueOlist({ tempoMaximoMs = 45_000 } = {})
     if (error) throw error
     if (!reservados?.length) break
 
-    const porProduto = new Map<number, Movimento[]>()
-    for (const m of reservados) porProduto.set(m.olist_produto_id, [...(porProduto.get(m.olist_produto_id) ?? []), m])
+    // Um lançamento por produto e por texto: a devolução manual (com observação própria) vai
+    // sempre sozinha — nunca somada a baixas/devoluções automáticas do mesmo produto.
+    const porProduto = new Map<string, Movimento[]>()
+    for (const m of reservados) {
+      const chave = `${m.olist_produto_id}|${m.observacao ?? ''}`
+      porProduto.set(chave, [...(porProduto.get(chave) ?? []), m])
+    }
 
-    for (const [produtoId, movimentos] of porProduto) {
+    for (const movimentos of porProduto.values()) {
+      const produtoId = movimentos[0].olist_produto_id
       const ids = movimentos.map((m) => m.id)
       if (parar || Date.now() - inicio >= tempoMaximoMs) {
         await devolverParaFila(supabase, ids, 0)

@@ -2012,6 +2012,7 @@ export type Database = {
           id_lancamento: number | null
           lote: string | null
           motivo: string
+          observacao: string | null
           olist_produto_id: number
           pedido_id: string | null
           pedido_item_id: string | null
@@ -2032,6 +2033,7 @@ export type Database = {
           id_lancamento?: number | null
           lote?: string | null
           motivo: string
+          observacao?: string | null
           olist_produto_id: number
           pedido_id?: string | null
           pedido_item_id?: string | null
@@ -2052,6 +2054,7 @@ export type Database = {
           id_lancamento?: number | null
           lote?: string | null
           motivo?: string
+          observacao?: string | null
           olist_produto_id?: number
           pedido_id?: string | null
           pedido_item_id?: string | null
@@ -2198,6 +2201,7 @@ export type Database = {
       pedido_itens: {
         Row: {
           descricao: string
+          estoque_olist_devolvido: number
           id: string
           pedido_id: string
           pre_venda_id: string | null
@@ -2209,6 +2213,7 @@ export type Database = {
         }
         Insert: {
           descricao: string
+          estoque_olist_devolvido?: number
           id?: string
           pedido_id: string
           pre_venda_id?: string | null
@@ -2220,6 +2225,7 @@ export type Database = {
         }
         Update: {
           descricao?: string
+          estoque_olist_devolvido?: number
           id?: string
           pedido_id?: string
           pre_venda_id?: string | null
@@ -2538,6 +2544,8 @@ export type Database = {
           criado_por: string | null
           descricao: string | null
           encerra_em: string | null
+          estoque_olist_devolvido_em: string | null
+          estoque_olist_devolvido_por: string | null
           id: string
           previsao_entrega: string | null
           slug: string
@@ -2552,6 +2560,8 @@ export type Database = {
           criado_por?: string | null
           descricao?: string | null
           encerra_em?: string | null
+          estoque_olist_devolvido_em?: string | null
+          estoque_olist_devolvido_por?: string | null
           id?: string
           previsao_entrega?: string | null
           slug?: string
@@ -2566,6 +2576,8 @@ export type Database = {
           criado_por?: string | null
           descricao?: string | null
           encerra_em?: string | null
+          estoque_olist_devolvido_em?: string | null
+          estoque_olist_devolvido_por?: string | null
           id?: string
           previsao_entrega?: string | null
           slug?: string
@@ -3765,6 +3777,18 @@ export type Database = {
       }
       estoque_olist_efetivo: { Args: { p_olist_id: number }; Returns: number }
       estoque_olist_produto: { Args: { p_produto_id: string }; Returns: number }
+      devolver_estoque_olist_pre_venda: {
+        Args: { p_pre_venda_id: string }
+        Returns: Json
+      }
+      estoque_olist_baixado_pre_venda: {
+        Args: { p_pre_venda_id: string }
+        Returns: {
+          nome: string
+          olist_id: number
+          unidades: number
+        }[]
+      }
       estoques_olist_produtos: {
         Args: { p_produto_ids: string[] }
         Returns: {
