@@ -1450,6 +1450,74 @@ await db.exec(`reset role;`)
 }
 
 // -----------------------------------------------------------------------------
+// Lotes e validades: aviso no grupo (pelo n8n) e tratativa
+// -----------------------------------------------------------------------------
+{
+  const como = (id) => `reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${id}', false);`
+  const hoje = `(now() at time zone 'America/Sao_Paulo')::date`
+  await db.exec(`reset role; update perfis set ativo = true where id in ('${uid}', '${uid2}'); update configuracoes set lotes_aviso_grupo = true;`)
+  await db.exec(como(uid2))
+  const cerv = await um(`insert into lotes_cervejas (sku, olist_id, nome, estoque_olist, estoque_lido_em, estoque_origem) values ('AVISO-1', 7201, 'IPA Aviso', 50, now(), 'cadastro') returning id`)
+  await q(`insert into lotes (cerveja_id, lote, quantidade, validade) values ($1, 'A1', 20, ${hoje} + 20), ($1, 'A2', 10, ${hoje} + 90), ($1, 'A3', 0, ${hoje} + 3)`, [cerv.id])
+  await expectError('equipe não gera os avisos (só a rotina)', `select gerar_alertas_de_validade()`)
+  await db.exec(`reset role; set role service_role;`)
+  const gerar = async () => (await q(`select lote, faixa, dias from gerar_alertas_de_validade() order by lote`))
+  expectEq('lote que entrou em Alerta gera aviso (esgotado e OK não avisam)', await gerar(), [{ lote: 'A1', faixa: 'alerta', dias: 20 }])
+  expectEq('a mesma faixa não avisa de novo', await gerar(), [])
+  await q(`update lotes set validade = ${hoje} + 10 where lote = 'A1' and cerveja_id = $1`, [cerv.id])
+  expectEq('piorou para Atenção: avisa de novo', await gerar(), [{ lote: 'A1', faixa: 'atencao', dias: 10 }])
+  await q(`update lotes set validade = ${hoje} + 2 where lote = 'A1' and cerveja_id = $1`, [cerv.id])
+  expectEq('piorou para Crítico: avisa de novo', await gerar(), [{ lote: 'A1', faixa: 'critico', dias: 2 }])
+  await q(`update lotes set validade = ${hoje} + 40 where lote = 'A1' and cerveja_id = $1`, [cerv.id])
+  expectEq('validade corrigida para longe: sem aviso, a faixa volta', { avisos: await gerar(), faixa: (await um(`select faixa_avisada f from lotes where lote = 'A1' and cerveja_id = $1`, [cerv.id])).f }, { avisos: [], faixa: 'ok' })
+  await q(`update lotes set validade = ${hoje} + 5 where lote = 'A1' and cerveja_id = $1`, [cerv.id])
+  expectEq('depois de corrigida, se piorar avisa de novo', (await gerar()).map((a) => a.faixa), ['critico'])
+  await q(`update lotes set validade = ${hoje} - 1 where lote = 'A2' and cerveja_id = $1`, [cerv.id])
+  expectEq('lote vencido não gera aviso (não foi pedido)', await gerar(), [])
+  await db.exec(`reset role; update configuracoes set lotes_aviso_grupo = false;`)
+  await q(`update lotes set validade = ${hoje} + 25, faixa_avisada = null where lote = 'A2' and cerveja_id = $1`, [cerv.id])
+  await db.exec(`set role service_role;`)
+  expectEq('avisos pausados: nada é gerado', await gerar(), [])
+  await db.exec(`reset role; update configuracoes set lotes_aviso_grupo = true;`)
+  expectEq('aviso entra no histórico do produto',
+    (await q(`select detalhes->>'faixa' faixa from lote_movimentos where olist_id = 7201 and tipo = 'alerta_grupo' order by id`)).map((m) => m.faixa),
+    ['alerta', 'atencao', 'critico', 'critico'])
+
+  // Fila de webhooks: o aviso vira evento para o n8n.
+  const aviso = await um(`select id from lote_alertas where cerveja_id = $1 order by criado_em desc, id limit 1`, [cerv.id])
+  await db.exec(como(uid2))
+  const evento = (await um(`select enfileirar_aviso_lote('lote.alerta_validade', $1, null, '{"mensagem":"Atenção, grupo!"}'::jsonb) id`, [aviso.id])).id
+  await db.exec(`reset role;`)
+  expectEq('aviso vai para a fila de webhooks e fica ligado ao evento',
+    await um(`select e.tipo, e.payload->>'mensagem' mensagem, a.evento_id = e.id ligado from eventos_integracao e join lote_alertas a on a.id = $2 where e.id = $1`, [evento, aviso.id]),
+    { tipo: 'lote.alerta_validade', mensagem: 'Atenção, grupo!', ligado: true })
+  await db.exec(como(uid2))
+  await expectError('tipo de evento inválido é recusado', `select enfileirar_aviso_lote('pedido.criado', $1, null, '{}'::jsonb)`, [aviso.id])
+  await expectError('equipe não cria aviso de verdade pela tela', `insert into lote_alertas (cerveja_nome, lote, validade, faixa, dias) values ('X', 'L', current_date, 'critico', 0)`)
+  const teste = await um(`insert into lote_alertas (cerveja_nome, lote, validade, faixa, dias, teste) values ('Cerveja de exemplo', 'TESTE-001', current_date + 5, 'critico', 5, true) returning id`)
+
+  // Tratativa: em nome próprio, com histórico (o teste não entra no histórico).
+  await q(`insert into lote_tratativas (alerta_id, texto) values ($1, 'Coloquei em promoção no Grupo VIP')`, [aviso.id])
+  await expectError('tratativa em nome de outra pessoa é recusada', `insert into lote_tratativas (alerta_id, autor_id, texto) values ($1, $2, 'Outro')`, [aviso.id, uid])
+  await expectError('tratativa sem explicação é recusada', `insert into lote_tratativas (alerta_id, texto) values ($1, ' ok ')`, [aviso.id])
+  await q(`insert into lote_tratativas (alerta_id, texto) values ($1, 'Teste do fluxo')`, [teste.id])
+  await db.exec(`reset role;`)
+  expectEq('tratativa fica com quem tratou e entra no histórico do produto',
+    await um(`select t.autor_id = $2 autor, m.tipo, m.detalhes->>'texto' texto, m.autor_id = $2 autor_historico
+              from lote_tratativas t join lote_movimentos m on m.tipo = 'tratativa' and m.detalhes->>'alerta_id' = t.alerta_id::text where t.alerta_id = $1`, [aviso.id, uid2]),
+    { autor: true, tipo: 'tratativa', texto: 'Coloquei em promoção no Grupo VIP', autor_historico: true })
+  expectEq('tratativa de teste não entra no histórico', (await um(`select count(*)::int n from lote_movimentos where tipo = 'tratativa' and detalhes->>'alerta_id' = $1`, [teste.id])).n, 0)
+
+  await db.exec(`reset role; set role anon; select set_config('request.jwt.claim.sub', '', false);`)
+  await expectError('visitante não vê os avisos', `select count(*) from lote_alertas`)
+  await expectError('visitante não vê as tratativas', `select count(*) from lote_tratativas`)
+  await expectError('visitante não manda aviso para a fila', `select enfileirar_aviso_lote('lote.alerta_validade', $1, null, '{}'::jsonb)`, [aviso.id])
+  await db.exec(`reset role;`)
+  await q(`delete from lotes_cervejas where id = $1`, [cerv.id])
+  expectEq('remover a cerveja mantém os avisos e as tratativas', (await um(`select count(*)::int n from lote_alertas a join lote_tratativas t on t.alerta_id = a.id where a.olist_id = 7201`)).n, 1)
+}
+
+// -----------------------------------------------------------------------------
 // Privacidade (LGPD): código no WhatsApp do link da pré-venda e anonimização do cliente
 // -----------------------------------------------------------------------------
 {

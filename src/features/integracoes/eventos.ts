@@ -62,6 +62,62 @@ export async function enviarParaWebhook(
   }
 }
 
+type Db = ReturnType<typeof createAdminClient>
+
+export type EntregaEvento = { status: 'enviado' | 'sem_destino' | 'falhou'; erro?: string }
+
+/** Envia um evento (já reservado) a todos os webhooks que o querem e grava o resultado. */
+async function entregar(db: Db, evento: EventoIntegracao, webhooks: Webhook[]): Promise<EntregaEvento> {
+  const destinos = webhooks.filter((w) => querEvento(w, evento.tipo))
+
+  if (destinos.length === 0) {
+    await db.from('eventos_integracao').update({ status: 'ignorado', processado_em: new Date().toISOString() }).eq('id', evento.id)
+    return { status: 'sem_destino' }
+  }
+
+  const envios = await Promise.all(destinos.map((w) => enviarParaWebhook(w, evento)))
+  const erros = envios.filter((e) => !e.ok).map((e) => e.erro)
+
+  if (erros.length === 0) {
+    await db
+      .from('eventos_integracao')
+      .update({ status: 'enviado', processado_em: new Date().toISOString(), ultimo_erro: null })
+      .eq('id', evento.id)
+    return { status: 'enviado' }
+  }
+
+  const tentativas = evento.tentativas + 1
+  const erro = erros.join(' | ').slice(0, 1000)
+  await db
+    .from('eventos_integracao')
+    .update({
+      status: tentativas >= MAX_TENTATIVAS ? 'erro' : 'pendente',
+      tentativas,
+      ultimo_erro: erro,
+      proxima_tentativa_em: proximaTentativa(tentativas),
+    })
+    .eq('id', evento.id)
+  return { status: 'falhou', erro }
+}
+
+/**
+ * Entrega um evento agora (ex.: botão de teste), sem esperar a fila. Se falhar, ele continua
+ * na fila e é tentado de novo depois, como os outros.
+ */
+export async function entregarEventoAgora(eventoId: string): Promise<EntregaEvento> {
+  const db = createAdminClient()
+  const { data: evento } = await db
+    .from('eventos_integracao')
+    .update({ proxima_tentativa_em: new Date(Date.now() + 120_000).toISOString() })
+    .eq('id', eventoId)
+    .eq('status', 'pendente')
+    .select()
+    .maybeSingle()
+  if (!evento) return { status: 'falhou', erro: 'O evento já foi processado ou não existe mais.' }
+  const { data: webhooks } = await db.from('webhooks').select('*').eq('ativo', true)
+  return entregar(db, evento, webhooks ?? [])
+}
+
 /** Processa até `limite` eventos pendentes. Seguro para execuções simultâneas. */
 export async function processarFilaDeEventos(limite = 50): Promise<ResultadoFila> {
   const db = createAdminClient()
@@ -93,39 +149,10 @@ export async function processarFilaDeEventos(limite = 50): Promise<ResultadoFila
 
   for (const evento of eventos) {
     resultado.processados++
-    const destinos = (webhooks ?? []).filter((w) => querEvento(w, evento.tipo))
-
-    if (destinos.length === 0) {
-      resultado.ignorados++
-      await db
-        .from('eventos_integracao')
-        .update({ status: 'ignorado', processado_em: new Date().toISOString() })
-        .eq('id', evento.id)
-      continue
-    }
-
-    const envios = await Promise.all(destinos.map((w) => enviarParaWebhook(w, evento)))
-    const erros = envios.filter((e) => !e.ok).map((e) => e.erro)
-
-    if (erros.length === 0) {
-      resultado.enviados++
-      await db
-        .from('eventos_integracao')
-        .update({ status: 'enviado', processado_em: new Date().toISOString(), ultimo_erro: null })
-        .eq('id', evento.id)
-    } else {
-      resultado.falhas++
-      const tentativas = evento.tentativas + 1
-      await db
-        .from('eventos_integracao')
-        .update({
-          status: tentativas >= MAX_TENTATIVAS ? 'erro' : 'pendente',
-          tentativas,
-          ultimo_erro: erros.join(' | ').slice(0, 1000),
-          proxima_tentativa_em: proximaTentativa(tentativas),
-        })
-        .eq('id', evento.id)
-    }
+    const entrega = await entregar(db, evento, webhooks ?? [])
+    if (entrega.status === 'sem_destino') resultado.ignorados++
+    else if (entrega.status === 'enviado') resultado.enviados++
+    else resultado.falhas++
   }
 
   return resultado

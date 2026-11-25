@@ -13,8 +13,9 @@ import { formatarData, formatarNumero } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import { adicionarLotes, editarLote, excluirLote } from '../actions'
-import type { LoteDaCerveja } from '../queries'
+import type { AvisoDoLote, LoteDaCerveja } from '../queries'
 import { MAX_LOTES_POR_VEZ } from '../schema'
+import { SituacaoDoAviso } from './avisos-grupo'
 import { SeloValidade } from './selo-validade'
 
 const un = (n: number) => `${formatarNumero(n)} un.`
@@ -160,7 +161,8 @@ export function FormularioNovosLotes({
   )
 }
 
-export function LinhaLote({ lote }: { lote: LoteDaCerveja }) {
+/** `aviso`: o último aviso do lote no grupo (se houver), com a tratativa. */
+export function LinhaLote({ lote, aviso }: { lote: LoteDaCerveja; aviso?: AvisoDoLote }) {
   const [editando, setEditando] = useState(false)
 
   if (editando) {
@@ -194,6 +196,7 @@ export function LinhaLote({ lote }: { lote: LoteDaCerveja }) {
       <div className="min-w-0 flex-1">
         <p className="tipo-dado truncate text-[15px] font-semibold">{lote.lote}</p>
         <p className="mt-0.5 text-[13px] text-suave">Validade {formatarData(lote.validade)}</p>
+        {aviso && <SituacaoDoAviso aviso={aviso} />}
       </div>
       {/* Larguras fixas a partir do tablet: quantidade e selo ficam alinhados em coluna entre as linhas. */}
       <div className="shrink-0 sm:w-32 sm:text-right">

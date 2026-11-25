@@ -1,5 +1,7 @@
 import {
   ArrowDownRight,
+  BellRing,
+  CircleCheck,
   ArrowUpRight,
   CircleAlert,
   Info,
@@ -35,7 +37,11 @@ const VISUAL: Record<TipoMovimento, { icone: LucideIcon; classe: string }> = {
   cerveja_cadastrada: { icone: PackagePlus, classe: 'bg-volt-50 text-volt-700' },
   cerveja_atualizada: { icone: Info, classe: 'bg-papel text-suave ring-1 ring-inset ring-linha' },
   cerveja_removida: { icone: PackageX, classe: 'bg-perigo-50 text-perigo' },
+  alerta_grupo: { icone: BellRing, classe: 'bg-alerta-50 text-alerta' },
+  tratativa: { icone: CircleCheck, classe: 'bg-sucesso-50 text-sucesso' },
 }
+
+const FAIXAS: Record<string, string> = { alerta: 'Alerta (16 a 30 dias)', atencao: 'Atenção (8 a 15 dias)', critico: 'Crítico (até 7 dias)' }
 
 const ORIGENS: Record<string, string> = {
   rotina: 'leitura automática',
@@ -130,6 +136,16 @@ function descrever(m: MovimentoDoLote): { titulo: string; complemento?: string; 
       if (par(d.olist_id)) partes.push('produto da Olist trocado')
       return { titulo: `Dados do produto mudaram: ${partes.join('; ') || 'atualizados'}` }
     }
+    case 'alerta_grupo': {
+      const dias = numero(d.dias)
+      return {
+        titulo: `Aviso no grupo: lote ${lote} entrou em ${FAIXAS[texto(d.faixa) ?? ''] ?? texto(d.faixa) ?? '—'}`,
+        complemento:
+          dias === null ? undefined : `Faltavam ${dias} dia${dias === 1 ? '' : 's'} para vencer (validade ${formatarData(texto(d.validade))}).`,
+      }
+    }
+    case 'tratativa':
+      return { titulo: `Tratativa do lote ${lote} registrada`, complemento: texto(d.texto) ?? undefined }
     case 'cerveja_removida': {
       const lotes = Array.isArray(d.lotes) ? (d.lotes as Array<Record<string, unknown>>) : []
       return {

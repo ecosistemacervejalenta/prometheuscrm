@@ -10,7 +10,7 @@ import { atualizarCervejaDaOlist, removerCervejaDosLotes } from '@/features/lote
 import { HistoricoLotes } from '@/features/lotes/components/historico-lotes'
 import { FormularioNovosLotes, LinhaLote } from '@/features/lotes/components/lotes-da-cerveja'
 import { FREQUENCIA_LEITURA, quandoLeu } from '@/features/lotes/leitura'
-import { HISTORICO_RESUMIDO, listarHistoricoDoProduto, obterCervejaDosLotes } from '@/features/lotes/queries'
+import { avisosDosLotes, HISTORICO_RESUMIDO, listarHistoricoDoProduto, obterCervejaDosLotes } from '@/features/lotes/queries'
 import { situacaoValidade } from '@/features/lotes/validade'
 import { formatarNumero } from '@/lib/format'
 import { cn, param } from '@/lib/utils'
@@ -22,7 +22,10 @@ export default async function PaginaLotesDaCerveja({ params, searchParams }: Pag
   const completo = param((await searchParams).historico) === 'completo'
   const cerveja = await obterCervejaDosLotes(id)
   if (!cerveja) notFound()
-  const historico = await listarHistoricoDoProduto(cerveja.olist_id, completo)
+  const [historico, avisos] = await Promise.all([
+    listarHistoricoDoProduto(cerveja.olist_id, completo),
+    avisosDosLotes(cerveja.lotes.map((l) => l.id)),
+  ])
 
   const { lotes, nosLotes, semLote } = cerveja
   // Lote esgotado (0 un.) não entra na conta de vencidos.
@@ -141,7 +144,7 @@ export default async function PaginaLotesDaCerveja({ params, searchParams }: Pag
             {lotes.length > 0 ? (
               <ul className="divide-y divide-linha border-t border-linha">
                 {lotes.map((lote) => (
-                  <LinhaLote key={lote.id} lote={lote} />
+                  <LinhaLote key={lote.id} lote={lote} aviso={avisos[lote.id]} />
                 ))}
               </ul>
             ) : (

@@ -642,6 +642,7 @@ export type Database = {
           frete_vip_importado_em: string | null
           frete_vip_valor: number
           id: number
+          lotes_aviso_grupo: boolean
           mensagem_cobranca: string
           mensagem_pre_venda: string
           nome_loja: string
@@ -664,6 +665,7 @@ export type Database = {
           frete_vip_importado_em?: string | null
           frete_vip_valor?: number
           id?: number
+          lotes_aviso_grupo?: boolean
           mensagem_cobranca?: string
           mensagem_pre_venda?: string
           nome_loja?: string
@@ -686,6 +688,7 @@ export type Database = {
           frete_vip_importado_em?: string | null
           frete_vip_valor?: number
           id?: number
+          lotes_aviso_grupo?: boolean
           mensagem_cobranca?: string
           mensagem_pre_venda?: string
           nome_loja?: string
@@ -1679,6 +1682,89 @@ export type Database = {
         }
         Relationships: []
       }
+      lote_alertas: {
+        Row: {
+          cerveja_id: string | null
+          cerveja_nome: string
+          criado_em: string
+          criado_por: string | null
+          dias: number
+          evento_id: string | null
+          faixa: string
+          id: string
+          lote: string
+          lote_id: string | null
+          olist_id: number | null
+          quantidade: number | null
+          sku: string | null
+          teste: boolean
+          validade: string
+        }
+        Insert: {
+          cerveja_id?: string | null
+          cerveja_nome: string
+          criado_em?: string
+          criado_por?: string | null
+          dias: number
+          evento_id?: string | null
+          faixa: string
+          id?: string
+          lote: string
+          lote_id?: string | null
+          olist_id?: number | null
+          quantidade?: number | null
+          sku?: string | null
+          teste?: boolean
+          validade: string
+        }
+        Update: {
+          cerveja_id?: string | null
+          cerveja_nome?: string
+          criado_em?: string
+          criado_por?: string | null
+          dias?: number
+          evento_id?: string | null
+          faixa?: string
+          id?: string
+          lote?: string
+          lote_id?: string | null
+          olist_id?: number | null
+          quantidade?: number | null
+          sku?: string | null
+          teste?: boolean
+          validade?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lote_alertas_cerveja_id_fkey"
+            columns: ["cerveja_id"]
+            isOneToOne: false
+            referencedRelation: "lotes_cervejas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lote_alertas_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lote_alertas_evento_id_fkey"
+            columns: ["evento_id"]
+            isOneToOne: false
+            referencedRelation: "eventos_integracao"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lote_alertas_lote_id_fkey"
+            columns: ["lote_id"]
+            isOneToOne: false
+            referencedRelation: "lotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lote_movimentos: {
         Row: {
           autor_id: string | null
@@ -1758,12 +1844,62 @@ export type Database = {
           },
         ]
       }
+      lote_tratativas: {
+        Row: {
+          alerta_id: string
+          autor_id: string
+          criado_em: string
+          evento_id: string | null
+          id: string
+          texto: string
+        }
+        Insert: {
+          alerta_id: string
+          autor_id?: string
+          criado_em?: string
+          evento_id?: string | null
+          id?: string
+          texto: string
+        }
+        Update: {
+          alerta_id?: string
+          autor_id?: string
+          criado_em?: string
+          evento_id?: string | null
+          id?: string
+          texto?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lote_tratativas_alerta_id_fkey"
+            columns: ["alerta_id"]
+            isOneToOne: false
+            referencedRelation: "lote_alertas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lote_tratativas_autor_id_fkey"
+            columns: ["autor_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lote_tratativas_evento_id_fkey"
+            columns: ["evento_id"]
+            isOneToOne: false
+            referencedRelation: "eventos_integracao"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lotes: {
         Row: {
           atualizado_em: string
           cerveja_id: string
           criado_em: string
           criado_por: string | null
+          faixa_avisada: string | null
           id: string
           lote: string
           quantidade: number | null
@@ -1774,6 +1910,7 @@ export type Database = {
           cerveja_id: string
           criado_em?: string
           criado_por?: string | null
+          faixa_avisada?: string | null
           id?: string
           lote: string
           quantidade?: number | null
@@ -1784,6 +1921,7 @@ export type Database = {
           cerveja_id?: string
           criado_em?: string
           criado_por?: string | null
+          faixa_avisada?: string | null
           id?: string
           lote?: string
           quantidade?: number | null
@@ -3767,6 +3905,36 @@ export type Database = {
       whatsapp_do_pedido: { Args: { p_pedido_id: string }; Returns: string }
       fechar_caixa: { Args: { p_pedido_id: string }; Returns: undefined }
       conciliar_lotes: { Args: { p_cerveja_id: string }; Returns: number }
+      enfileirar_aviso_lote: {
+        Args: { p_alerta_id: string; p_payload: Json; p_tipo: string; p_tratativa_id: string | null }
+        Returns: string
+      }
+      gerar_alertas_de_validade: {
+        Args: never
+        Returns: {
+          cerveja_id: string | null
+          cerveja_nome: string
+          criado_em: string
+          criado_por: string | null
+          dias: number
+          evento_id: string | null
+          faixa: string
+          id: string
+          lote: string
+          lote_id: string | null
+          olist_id: number | null
+          quantidade: number | null
+          sku: string | null
+          teste: boolean
+          validade: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "lote_alertas"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       concluir_cobranca_pix: {
         Args: { p_cobranca_id: string; p_dados: Json }
         Returns: undefined

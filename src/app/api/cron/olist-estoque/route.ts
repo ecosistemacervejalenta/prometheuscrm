@@ -1,11 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
 import { verificarChave } from '@/features/integracoes/api-auth'
+import { processarAvisosDeValidade } from '@/features/lotes/avisos'
 import { atualizarEstoqueDasCervejasDosLotes, consultarProdutoLoteNaOlist, consultarSkuNaOlist } from '@/features/lotes/olist'
 import { buscarNaOlist, detalhesNaOlist, prepararProdutoOlist, processarFilaEstoqueOlist, rotinaEstoqueOlist } from '@/features/olist/estoque'
 import type { PedidoRotinaEstoque, RespostaRotinaEstoque } from '@/features/olist/rotina-estoque'
 import { OlistNaoConectado } from '@/features/olist/token'
 import { envServidor } from '@/lib/env.server'
+import { urlDoSite } from '@/lib/url'
 
 export const maxDuration = 300
 
@@ -13,13 +15,17 @@ export const maxDuration = 300
  * Estoque da Olist nas pré-vendas (única rota da tela que usa os tokens da Olist).
  *   GET  → Vercel Cron a cada 5 min (vercel.ts): vence caixas sem pagamento, envia a fila de
  *          lançamentos e atualiza o estoque das pré-vendas ativas. No fim, relê o estoque de
- *          algumas cervejas do módulo Lotes e validades (só consulta).
+ *          algumas cervejas do módulo Lotes e validades (só consulta) e manda ao n8n os avisos de
+ *          validade dos lotes (grupo da equipe), das 8h às 20h.
  *   POST → pedidos da tela: { acao: 'buscar', termo, offset? } | { acao: 'detalhes', ids } | { acao: 'produto', id } |
  *          { acao: 'processar' } | { acao: 'lote-sku', sku } | { acao: 'lote-produto', id }.
  */
 export async function GET(request: NextRequest) {
   const negado = verificarChave(request, envServidor.cronSecret, 'CRON_SECRET')
   if (negado) return negado
+
+  let resposta: Record<string, unknown>
+  let status = 200
   try {
     const rotina = await rotinaEstoqueOlist()
     // Só depois das pré-vendas, e só se a Olist estiver respondendo: é o menos urgente.
@@ -29,11 +35,21 @@ export async function GET(request: NextRequest) {
           return 0
         })
       : 0
-    return NextResponse.json({ ...rotina, lotes })
+    resposta = { ...rotina, lotes }
   } catch (e) {
     console.error('[olist-estoque] rotina falhou', e)
-    return NextResponse.json({ ok: false, motivo: e instanceof Error ? e.message : 'erro' }, { status: 502 })
+    resposta = { ok: false, motivo: e instanceof Error ? e.message : 'erro' }
+    status = 502
   }
+
+  // Avisos de validade no grupo (pelo n8n): rodam mesmo se a Olist falhar.
+  const avisos = await urlDoSite()
+    .then((site) => processarAvisosDeValidade(site))
+    .catch((e) => {
+      console.error('[lotes] avisos de validade', e)
+      return null
+    })
+  return NextResponse.json({ ...resposta, avisos }, { status })
 }
 
 export async function POST(request: NextRequest) {

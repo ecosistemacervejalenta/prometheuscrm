@@ -90,6 +90,8 @@ const EVENTOS_VALIDOS = [
   'pre_venda.atualizada',
   'whatsapp.mensagem_recebida',
   'atendimento.transferido',
+  'lote.alerta_validade',
+  'lote.tratativa_registrada',
 ] as const
 
 const esquemaWebhook = z.object({

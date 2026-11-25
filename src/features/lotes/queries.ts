@@ -166,6 +166,8 @@ export type TipoMovimento =
   | 'cerveja_cadastrada'
   | 'cerveja_atualizada'
   | 'cerveja_removida'
+  | 'alerta_grupo'
+  | 'tratativa'
 
 export type MovimentoDoLote = {
   id: number
@@ -229,5 +231,139 @@ export async function listarHistoricoDoProduto(
       criado_em: m.criado_em,
       autor: m.perfis?.nome ?? null,
     })),
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Avisos no grupo e tratativas
+// -----------------------------------------------------------------------------
+
+/** Como está a entrega do aviso ao n8n (que posta no grupo). */
+export type EntregaDoAviso = 'aguardando' | 'na_fila' | 'tentando' | 'entregue' | 'falhou' | 'sem_webhook'
+
+export type TratativaDoAviso = { id: string; texto: string; criado_em: string; autor: string | null }
+
+export type AvisoDoLote = {
+  id: string
+  lote_id: string | null
+  cerveja_id: string | null
+  cerveja_nome: string
+  sku: string | null
+  lote: string
+  validade: string
+  quantidade: number | null
+  faixa: 'alerta' | 'atencao' | 'critico'
+  /** Dias que faltavam quando o aviso foi criado. */
+  dias: number
+  teste: boolean
+  criado_em: string
+  entrega: EntregaDoAviso
+  erroEntrega: string | null
+  /** Da mais antiga para a mais nova. */
+  tratativas: TratativaDoAviso[]
+}
+
+const CAMPOS_AVISO =
+  'id, lote_id, cerveja_id, cerveja_nome, sku, lote, validade, quantidade, faixa, dias, teste, criado_em, ' +
+  'evento:eventos_integracao!lote_alertas_evento_id_fkey(status, tentativas, ultimo_erro), ' +
+  'lote_tratativas(id, texto, criado_em, perfis(nome))'
+
+type LinhaAviso = {
+  id: string
+  lote_id: string | null
+  cerveja_id: string | null
+  cerveja_nome: string
+  sku: string | null
+  lote: string
+  validade: string
+  quantidade: number | null
+  faixa: string
+  dias: number
+  teste: boolean
+  criado_em: string
+  evento: { status: string; tentativas: number; ultimo_erro: string | null } | null
+  lote_tratativas: Array<{ id: string; texto: string; criado_em: string; perfis: { nome: string | null } | null }>
+}
+
+function paraAviso(a: LinhaAviso): AvisoDoLote {
+  const entrega: EntregaDoAviso = !a.evento
+    ? 'aguardando'
+    : a.evento.status === 'enviado'
+      ? 'entregue'
+      : a.evento.status === 'ignorado'
+        ? 'sem_webhook'
+        : a.evento.status === 'erro'
+          ? 'falhou'
+          : a.evento.tentativas > 0
+            ? 'tentando'
+            : 'na_fila'
+  return {
+    id: a.id,
+    lote_id: a.lote_id,
+    cerveja_id: a.cerveja_id,
+    cerveja_nome: a.cerveja_nome,
+    sku: a.sku,
+    lote: a.lote,
+    validade: a.validade,
+    quantidade: a.quantidade,
+    faixa: a.faixa as AvisoDoLote['faixa'],
+    dias: a.dias,
+    teste: a.teste,
+    criado_em: a.criado_em,
+    entrega,
+    erroEntrega: a.evento?.ultimo_erro ?? null,
+    tratativas: [...a.lote_tratativas]
+      .sort((x, y) => x.criado_em.localeCompare(y.criado_em))
+      .map((t) => ({ id: t.id, texto: t.texto, criado_em: t.criado_em, autor: t.perfis?.nome ?? null })),
+  }
+}
+
+/** Últimos avisos mandados ao grupo (inclusive os de teste). */
+export async function listarAvisos(limite = 100): Promise<AvisoDoLote[]> {
+  const { supabase } = await exigirEquipe()
+  const { data, error } = await supabase.from('lote_alertas').select(CAMPOS_AVISO).order('criado_em', { ascending: false }).limit(limite)
+  if (error) {
+    console.error('[lotes] avisos', error.message)
+    return []
+  }
+  return (data as unknown as LinhaAviso[]).map(paraAviso)
+}
+
+export async function obterAviso(id: string): Promise<AvisoDoLote | null> {
+  const { supabase } = await exigirEquipe()
+  const { data } = await supabase.from('lote_alertas').select(CAMPOS_AVISO).eq('id', id).maybeSingle()
+  return data ? paraAviso(data as unknown as LinhaAviso) : null
+}
+
+/** Aviso mais recente (de verdade, não teste) de cada lote. */
+export async function avisosDosLotes(loteIds: string[]): Promise<Record<string, AvisoDoLote>> {
+  if (loteIds.length === 0) return {}
+  const { supabase } = await exigirEquipe()
+  const { data, error } = await supabase
+    .from('lote_alertas')
+    .select(CAMPOS_AVISO)
+    .in('lote_id', loteIds)
+    .eq('teste', false)
+    .order('criado_em', { ascending: false })
+  if (error) {
+    console.error('[lotes] avisos dos lotes', error.message)
+    return {}
+  }
+  const porLote: Record<string, AvisoDoLote> = {}
+  for (const a of (data as unknown as LinhaAviso[]).map(paraAviso)) if (a.lote_id && !porLote[a.lote_id]) porLote[a.lote_id] = a
+  return porLote
+}
+
+/** Avisos ligados? E existe webhook ativo levando os avisos ao n8n? */
+export async function configuracaoDosAvisos(): Promise<{ ativo: boolean; webhook: 'ok' | 'pausado' | 'ausente' }> {
+  const { supabase } = await exigirEquipe()
+  const [{ data: config }, { data: webhooks }] = await Promise.all([
+    supabase.from('configuracoes').select('lotes_aviso_grupo').eq('id', 1).maybeSingle(),
+    supabase.from('webhooks').select('ativo, eventos'),
+  ])
+  const recebem = (webhooks ?? []).filter((w) => w.eventos.includes('*') || w.eventos.includes('lote.alerta_validade'))
+  return {
+    ativo: config?.lotes_aviso_grupo ?? true,
+    webhook: recebem.some((w) => w.ativo) ? 'ok' : recebem.length ? 'pausado' : 'ausente',
   }
 }

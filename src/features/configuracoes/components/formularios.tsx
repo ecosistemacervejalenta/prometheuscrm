@@ -173,6 +173,8 @@ const EVENTOS = [
   { valor: 'pre_venda.atualizada', rotulo: 'Pré-venda atualizada' },
   { valor: 'whatsapp.mensagem_recebida', rotulo: 'WhatsApp: mensagem de cliente' },
   { valor: 'atendimento.transferido', rotulo: 'WhatsApp: atendimento transferido' },
+  { valor: 'lote.alerta_validade', rotulo: 'Lotes: validade em alerta, atenção ou crítico' },
+  { valor: 'lote.tratativa_registrada', rotulo: 'Lotes: tratativa registrada' },
 ]
 
 export function FormularioWebhook() {

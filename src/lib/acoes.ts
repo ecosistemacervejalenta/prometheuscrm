@@ -68,6 +68,7 @@ const RESTRICOES: Record<string, string> = {
   lotes_cervejas_sku_check: 'O SKU deve ter de 1 a 60 caracteres.',
   lotes_cerveja_lote_key: 'Esta cerveja já tem um lote com este código.',
   lotes_lote_check: 'O lote deve ter de 1 a 60 caracteres.',
+  lote_tratativas_texto_check: 'Conte o que foi feito (de 3 a 2.000 caracteres).',
   lotes_quantidade_check: 'A quantidade do lote deve ser um número de 0 a 1.000.000.',
   lotes_cerveja_id_fkey: 'Esta cerveja não está mais no controle de lotes.',
 }

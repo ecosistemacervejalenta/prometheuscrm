@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { CalendarClock, RefreshCw, SearchX } from 'lucide-react'
+import { BellRing, CalendarClock, RefreshCw, SearchX, Send } from 'lucide-react'
 
+import { ActionButton } from '@/components/ui/action-button'
 import { ButtonLink } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -10,6 +11,7 @@ import { ItemMobile, ListaMobile } from '@/components/ui/lista-mobile'
 import { PageHeader } from '@/components/ui/page-header'
 import { Pagination } from '@/components/ui/pagination'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
+import { testarAvisoNoGrupo } from '@/features/lotes/actions-avisos'
 import { CadastroPorSku } from '@/features/lotes/components/cadastro-por-sku'
 import { PainelValidades } from '@/features/lotes/components/painel-validades'
 import { FREQUENCIA_LEITURA, quandoLeu, resumoLeituras } from '@/features/lotes/leitura'
@@ -72,6 +74,16 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
     <>
       <PageHeader
         titulo="Lotes e validades"
+        acoes={
+          <>
+            <ButtonLink href="/lotes/avisos" tamanho="md">
+              <BellRing /> Avisos no grupo
+            </ButtonLink>
+            <ActionButton acao={testarAvisoNoGrupo} tamanho="md" titulo="Manda uma mensagem de teste para o grupo da equipe">
+              <Send /> Testar aviso no grupo
+            </ActionButton>
+          </>
+        }
         contexto={`${plural(resumo.cervejas, 'cerveja', 'cervejas')} · ${plural(resumo.total.lotes, 'lote', 'lotes')} · ${formatarNumero(resumo.total.unidades)} un.`}
         descricao={
           resumo.cervejas > 0 && (
