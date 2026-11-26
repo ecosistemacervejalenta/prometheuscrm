@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { ExternalLink, MessageCircle, Pause, Pencil, Play, RefreshCw, Search, ShoppingBag, UserRound } from 'lucide-react'
+import { Calculator, ExternalLink, MessageCircle, Pause, Pencil, Play, RefreshCw, Search, ShoppingBag, UserRound } from 'lucide-react'
 
 import { ActionButton } from '@/components/ui/action-button'
 import { Alert } from '@/components/ui/alert'
@@ -226,6 +226,9 @@ export default async function PaginaInfluenciador({ params, searchParams }: Page
                 <ActionButton acao={conferirCupom.bind(null, id)}>
                   <RefreshCw aria-hidden /> {i.cupom_situacao === 'ativo' || i.cupom_situacao === 'inativo' ? 'Conferir na Shopify' : 'Criar na Shopify'}
                 </ActionButton>
+                <ButtonLink href={`/influenciadores/${id}/editar#simulacao`} tamanho="sm">
+                  <Calculator aria-hidden /> Simular um pedido
+                </ButtonLink>
                 {adminDaShopify && (
                   <ButtonExternal href={adminDaShopify} tamanho="sm">
                     <ExternalLink aria-hidden /> Descontos na Shopify

@@ -234,6 +234,7 @@ Cada influenciador divulga um **cupom nativo da Shopify**; todo pedido da loja f
 - **Relatórios**: visão geral por período (vendas, pedidos, comissão, ranking, evolução), lista de vendas com filtros (influenciador, situação, período, nº do pedido) e **planilha CSV**.
 - **Pausar / encerrar**: desliga o cupom na Shopify (reativar liga de novo). O histórico e as comissões pendentes continuam.
 - **Portal do influenciador** (`/portal`): cupom e **link de divulgação** (`loja/discount/CUPOM`, já aplica o desconto), saldos (disponível, a liberar, aguardando, recebido), vendas com filtros, repasses e “Minha conta” (contato, PIX, senha). O login é criado na ficha (**Criar acesso ao Portal**): senha temporária + mensagem pronta para o WhatsApp, como na Equipe.
+- **Simulador no cadastro** (seção “Simular um pedido”, também pelo atalho na ficha): monta um pedido com produtos reais da loja (catálogo pela Admin API, `read_products`; sem essa permissão, a vitrine pública, que a Shopify limita) ou carrega um dos últimos pedidos (só itens e valores). Mostra produtos, desconto do cupom, quanto o cliente paga, comissão e quanto fica para a loja, acompanhando o % digitado no formulário. O desconto segue a conta do checkout (sobre o total, arredondado para baixo no centavo — conferido em 6 pedidos reais: `npm run test:simulacao`). Não grava nada.
 - **Regras** (Influenciadores › Ajustes, só administradores): comissão e desconto padrão, **carência** (dias), nome e endereço da loja no Portal e o texto “como e quando pagamos”.
 
 | Onde | O quê |
@@ -242,6 +243,7 @@ Cada influenciador divulga um **cupom nativo da Shopify**; todo pedido da loja f
 | `src/features/influenciadores/cupom.ts` | `sincronizarCupomNaShopify()`: deixa o cupom da loja igual ao cadastro |
 | `src/features/influenciadores/sincronizacao.ts` | `sincronizarVendas()` (cursor por data de atualização) e `buscarVendasDoCupom()` |
 | `src/features/influenciadores/portal/` | Sessão (`exigirInfluenciador`), consultas e ações do Portal |
+| `src/features/influenciadores/simulacao.ts` · `catalogo.ts` | Conta do simulador (pura, testada) e catálogo/pedidos recentes da loja |
 | Migration `20261126100000_programa_de_influenciadores` | Tabelas, comissão, repasses, funções `portal_*()` e RLS |
 
 ### Configurações
@@ -596,7 +598,7 @@ Para os pedidos do link com **CEP fora da lista de CEPs VIP**: em vez de a equip
 
 #### 11.3.2 Programa de influenciadores (cupons e pedidos)
 
-O mesmo app da loja ganha dois escopos: **`read_orders`** (ler valor, situação e cupons dos pedidos — nenhum dado do cliente vai para o programa) e **`write_discounts`** (criar, pausar e reativar os cupons). Passo a passo em **Influenciadores › Ajustes** (nova versão do app no Dev Dashboard com os três escopos → Release → aprovar na loja → “Conferir permissões”).
+O mesmo app da loja ganha três escopos: **`read_products`** (catálogo do simulador do cadastro), **`read_orders`** (ler valor, situação e cupons dos pedidos — nenhum dado do cliente vai para o programa) e **`write_discounts`** (criar, pausar e reativar os cupons). Passo a passo em **Influenciadores › Ajustes** (nova versão do app no Dev Dashboard com os três escopos → Release → aprovar na loja → “Conferir permissões”).
 
 - **Sem `write_discounts`** o programa funciona, mas cada cupom é criado e pausado à mão em Descontos, no admin da Shopify (a ficha do influenciador mostra “Falta criar na Shopify”).
 - **Sem `read_orders`** nenhuma venda chega: a leitura dos pedidos é a fonte das comissões. `read_orders` enxerga os **últimos 60 dias** — por isso a primeira leitura e o “Buscar na Shopify” vão até 60 dias atrás.

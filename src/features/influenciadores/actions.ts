@@ -5,21 +5,23 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 
 import { ErroShopify } from '@/features/shopify/api'
+import { acessoShopify } from '@/features/shopify/frete'
+import { statusShopify } from '@/features/shopify/queries'
 import { errosDeValidacao, falha, sucesso, traduzirErro, type Credenciais, type EstadoAcao } from '@/lib/acoes'
 import { exigirAdmin, exigirEquipe } from '@/lib/auth'
 import { hojeISO } from '@/lib/datas'
 import { formatarMoeda } from '@/lib/format'
 import { gerarSenhaTemporaria } from '@/lib/senha'
-import { acessoShopify } from '@/features/shopify/frete'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { urlDoSite } from '@/lib/url'
 import { formParaObjeto } from '@/lib/validacao'
 import type { StatusInfluenciador } from '@/types'
 
+import { catalogoDaLoja, pedidosRecentesDaLoja, type PedidoRecente, type ProdutoDaLoja } from './catalogo'
 import { sincronizarCupomNaShopify } from './cupom'
 import { formatarPercentual, STATUS_INFLUENCIADOR } from './rotulos'
 import { esquemaEditarInfluenciador, esquemaNovoInfluenciador, esquemaPagamento, esquemaRegras } from './schema'
-import { acessoComEscopo, ESCOPO_CUPONS, ESCOPO_PEDIDOS, lerLoja } from './shopify'
+import { acessoComEscopo, ESCOPO_CUPONS, ESCOPO_PEDIDOS, ESCOPO_PRODUTOS, lerLoja } from './shopify'
 import { buscarVendasDoCupom, sincronizarVendas, type ResultadoDaSincronizacao } from './sincronizacao'
 
 /**
@@ -319,17 +321,54 @@ export async function conferirPermissoes(): Promise<EstadoAcao> {
   await exigirEquipe()
   const admin = createAdminClient()
   try {
-    const [cupons, pedidos] = [await acessoComEscopo(admin, ESCOPO_CUPONS, { conferir: true }), await acessoComEscopo(admin, ESCOPO_PEDIDOS)]
+    // Sempre um token novo: ele traz os escopos de agora (inclusive os recém-aprovados na loja).
+    if (!(await acessoShopify(admin, { renovar: true }))) return falha('A Shopify não está conectada. Conecte em Configurações › Shopify.')
+    const [cupons, pedidos, produtos] = await Promise.all([
+      acessoComEscopo(admin, ESCOPO_CUPONS),
+      acessoComEscopo(admin, ESCOPO_PEDIDOS),
+      acessoComEscopo(admin, ESCOPO_PRODUTOS),
+    ])
     revalidatePath('/influenciadores', 'layout')
     revalidatePath('/configuracoes', 'layout')
     if (!cupons.ok && cupons.motivo === 'sem_conexao') return falha(cupons.mensagem)
-    if (cupons.ok && pedidos.ok) return sucesso('Tudo certo: o app já cria cupons e lê os pedidos.')
+    if (cupons.ok && pedidos.ok) {
+      return sucesso(
+        produtos.ok
+          ? 'Tudo certo: o app cria cupons, lê os pedidos e lê os produtos para o simulador.'
+          : 'Tudo certo: o app já cria cupons e lê os pedidos. (Opcional: read_products deixa o simulador mais estável.)',
+      )
+    }
     const faltam = [cupons.ok ? null : ESCOPO_CUPONS, pedidos.ok ? null : ESCOPO_PEDIDOS].filter(Boolean).join(' e ')
     return falha(`Ainda falta a permissão ${faltam}. Crie uma versão do app com ela, clique em Release e aprove o novo acesso na loja.`)
   } catch (e) {
     if (!(e instanceof ErroShopify)) console.error('[influenciadores] conferir permissões', e)
     return falha(e instanceof ErroShopify ? e.message : 'Não foi possível falar com a Shopify. Tente de novo em instantes.')
   }
+}
+
+// -----------------------------------------------------------------------------
+// Simulador do cadastro (produtos e pedidos reais da loja)
+// -----------------------------------------------------------------------------
+
+export async function carregarCatalogoDaLoja(): Promise<{ ok: true; produtos: ProdutoDaLoja[] } | { ok: false; mensagem: string }> {
+  await exigirEquipe()
+  const status = await statusShopify()
+  if (!status.conectado || !status.loja) return { ok: false, mensagem: 'A Shopify não está conectada. Conecte em Configurações › Shopify para usar os produtos da loja.' }
+  try {
+    // Chave secreta só para ler o token da Shopify (Vault): a sessão da equipe já foi conferida acima.
+    return { ok: true, produtos: await catalogoDaLoja(createAdminClient(), status.loja) }
+  } catch (e) {
+    console.error('[influenciadores] catálogo da loja', e)
+    // Mensagens já escritas para a equipe (Shopify recusou, vitrine fechada ou ocupada); o resto, genérica.
+    const conhecida = e instanceof ErroShopify || (e instanceof Error && e.message.startsWith('A '))
+    return { ok: false, mensagem: conhecida ? (e as Error).message : 'Não foi possível ler os produtos da loja agora. Tente de novo em instantes.' }
+  }
+}
+
+export async function carregarPedidosRecentes(): Promise<{ ok: true; pedidos: PedidoRecente[] } | { ok: false; mensagem: string }> {
+  await exigirEquipe()
+  // Chave secreta só para ler o token da Shopify (Vault): a sessão da equipe já foi conferida acima.
+  return pedidosRecentesDaLoja(createAdminClient())
 }
 
 // -----------------------------------------------------------------------------

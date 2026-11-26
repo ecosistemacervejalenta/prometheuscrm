@@ -6,7 +6,7 @@ import { termoBusca } from '@/lib/utils'
 import type { StatusInfluenciador } from '@/types'
 
 import { lerResumo, type SituacaoVenda } from './rotulos'
-import { ESCOPO_CUPONS, ESCOPO_PEDIDOS, temEscopo } from './shopify'
+import { ESCOPO_CUPONS, ESCOPO_PEDIDOS, ESCOPO_PRODUTOS, temEscopo } from './shopify'
 
 /** Consultas do programa de influenciadores para a equipe (RLS da sessão). */
 
@@ -54,6 +54,8 @@ export type IntegracaoDoPrograma = {
   cupons: boolean
   /** O app pode ler os pedidos (read_orders). */
   pedidos: boolean
+  /** Opcional: o app lê os produtos pela API (read_products) — catálogo do simulador mais estável. */
+  produtos: boolean
 }
 
 /** O que o app da Shopify já consegue fazer pelo programa. */
@@ -65,6 +67,7 @@ export async function integracaoDoPrograma(): Promise<IntegracaoDoPrograma> {
     loja_nome: status.loja_nome,
     cupons: status.conectado && temEscopo(status.escopos, ESCOPO_CUPONS),
     pedidos: status.conectado && temEscopo(status.escopos, ESCOPO_PEDIDOS),
+    produtos: status.conectado && temEscopo(status.escopos, ESCOPO_PRODUTOS),
   }
 }
 

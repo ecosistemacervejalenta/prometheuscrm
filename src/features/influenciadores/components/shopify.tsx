@@ -73,7 +73,7 @@ export function SituacaoDaShopify({
 }) {
   return (
     <div className="space-y-4">
-      <ul className="grid gap-3 sm:grid-cols-3">
+      <ul className="grid gap-3 sm:grid-cols-2">
         <Capacidade
           ok={integracao.conectada}
           titulo={integracao.conectada ? `Loja conectada` : 'Loja não conectada'}
@@ -88,6 +88,15 @@ export function SituacaoDaShopify({
           ok={integracao.cupons}
           titulo="Criar e pausar cupons"
           descricao={integracao.cupons ? 'O cupom nasce na Shopify junto com o cadastro.' : 'Falta a permissão write_discounts.'}
+        />
+        <Capacidade
+          ok={integracao.produtos}
+          titulo="Ler os produtos (simulador)"
+          descricao={
+            integracao.produtos
+              ? 'O simulador do cadastro usa o catálogo pela API.'
+              : 'Opcional: com read_products o catálogo do simulador não depende da vitrine, que a Shopify limita.'
+          }
         />
       </ul>
       {erro && integracao.pedidos && (
@@ -126,11 +135,13 @@ export function GuiaDePermissoes() {
           titulo: 'Crie uma versão com as permissões novas',
           conteudo: (
             <>
-              Em <b>Versions</b>, crie uma versão e, em <b>Scopes</b> (Admin API), deixe estas três:{' '}
-              <Codigo>write_draft_orders</Codigo> <Codigo>read_orders</Codigo> <Codigo>write_discounts</Codigo>. Clique em <b>Release</b>.
+              Em <b>Versions</b>, crie uma versão e, em <b>Scopes</b> (Admin API), deixe estas quatro:{' '}
+              <Codigo>write_draft_orders</Codigo> <Codigo>read_orders</Codigo> <Codigo>write_discounts</Codigo> <Codigo>read_products</Codigo>. Clique em{' '}
+              <b>Release</b>.
               <span className="mt-1 block text-[13px] text-suave">
                 <Codigo>read_orders</Codigo> lê valor, situação e cupom dos pedidos (nenhum dado do cliente é copiado para o programa).{' '}
-                <Codigo>write_discounts</Codigo> cria, pausa e reativa os cupons dos influenciadores.
+                <Codigo>write_discounts</Codigo> cria, pausa e reativa os cupons dos influenciadores. <Codigo>read_products</Codigo> traz o catálogo
+                para o simulador do cadastro.
               </span>
             </>
           ),

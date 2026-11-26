@@ -12,14 +12,35 @@ import { cn } from '@/lib/utils'
 import type { Influenciador } from '@/types'
 
 import { TIPOS_CHAVE_PIX } from '../rotulos'
+import { lerPercentual } from '../simulacao'
+import { SimuladorDePedido } from './simulador'
 
 const paraCampo = (valor: number | null | undefined) => (valor === null || valor === undefined ? '' : String(Number(valor)).replace('.', ','))
 
 /** Campo de porcentagem: número com o "%" fixo à direita. */
-function CampoPercentual({ name, defaultValue, autoFocus }: { name: string; defaultValue?: string; autoFocus?: boolean }) {
+function CampoPercentual({
+  name,
+  defaultValue,
+  autoFocus,
+  aoMudar,
+}: {
+  name: string
+  defaultValue?: string
+  autoFocus?: boolean
+  /** Texto digitado (o simulador do cadastro acompanha). */
+  aoMudar?: (texto: string) => void
+}) {
   return (
     <div className="relative">
-      <Input name={name} inputMode="decimal" autoComplete="off" defaultValue={defaultValue} autoFocus={autoFocus} className="tipo-dado pr-9" />
+      <Input
+        name={name}
+        inputMode="decimal"
+        autoComplete="off"
+        defaultValue={defaultValue}
+        autoFocus={autoFocus}
+        onChange={aoMudar ? (e) => aoMudar(e.target.value) : undefined}
+        className="tipo-dado pr-9"
+      />
       <span className="tipo-dado pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-suave">%</span>
     </div>
   )
@@ -64,6 +85,10 @@ export function FormularioInfluenciador({
   const [nome, setNome] = useState(influenciador?.nome ?? '')
   const [cupom, setCupom] = useState(influenciador?.cupom ?? '')
   const [cupomEditado, setCupomEditado] = useState(false)
+  const descontoInicial = paraCampo(influenciador?.desconto_percentual ?? padroes.desconto)
+  const comissaoInicial = paraCampo(influenciador?.comissao_percentual ?? padroes.comissao)
+  const [descontoDigitado, setDescontoDigitado] = useState(descontoInicial)
+  const [comissaoDigitada, setComissaoDigitada] = useState(comissaoInicial)
   const voltar = influenciador ? `/influenciadores/${influenciador.id}` : '/influenciadores/lista'
 
   /** Sugestão do cupom: primeiro nome + desconto ("LU10"). Para de sugerir quando a pessoa digita o próprio. */
@@ -134,10 +159,10 @@ export function FormularioInfluenciador({
             )}
           </Field>
           <Field label="Desconto para o cliente" name="desconto_percentual" obrigatorio className="sm:col-span-2" dica="Quanto o cupom tira do pedido.">
-            <CampoPercentual name="desconto_percentual" defaultValue={paraCampo(influenciador?.desconto_percentual ?? padroes.desconto)} />
+            <CampoPercentual name="desconto_percentual" defaultValue={descontoInicial} aoMudar={setDescontoDigitado} />
           </Field>
           <Field label="Comissão do influenciador" name="comissao_percentual" obrigatorio className="sm:col-span-2" dica="Sobre os produtos, depois do desconto e sem o frete.">
-            <CampoPercentual name="comissao_percentual" defaultValue={paraCampo(influenciador?.comissao_percentual ?? padroes.comissao)} />
+            <CampoPercentual name="comissao_percentual" defaultValue={comissaoInicial} aoMudar={setComissaoDigitada} />
           </Field>
           <Field
             label="Contar vendas a partir de"
@@ -148,6 +173,19 @@ export function FormularioInfluenciador({
           >
             <Input name="contar_desde" type="date" max={hoje} defaultValue={influenciador?.contar_desde ?? hoje} />
           </Field>
+        </FormSection>
+
+        <FormSection
+          titulo="Simular um pedido"
+          descricao="Monte um pedido com produtos reais da loja e veja, com o desconto e a comissão acima, quanto o cliente paga, quanto vai para o influenciador e quanto fica para a loja."
+        >
+          <div id="simulacao" className="scroll-mt-24 sm:col-span-6">
+            <SimuladorDePedido
+              desconto={lerPercentual(descontoDigitado)}
+              comissao={lerPercentual(comissaoDigitada)}
+              cupom={influenciador?.cupom ?? cupom}
+            />
+          </div>
         </FormSection>
 
         <FormSection titulo="Como recebe" descricao="A chave PIX usada nos repasses. O influenciador também pode preencher pelo Portal.">

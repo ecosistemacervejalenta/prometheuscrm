@@ -18,10 +18,13 @@ type Banco = SupabaseClient<Database>
 
 export const ESCOPO_CUPONS = 'write_discounts'
 export const ESCOPO_PEDIDOS = 'read_orders'
+/** Opcional: catálogo do simulador pela API (sem ele, a vitrine pública, que a Shopify limita). */
+export const ESCOPO_PRODUTOS = 'read_products'
 
 const ESPERA_MS = 15_000
 const SEM_CUPONS = `O app da Shopify ainda não tem a permissão de cupons (${ESCOPO_CUPONS}).`
 const SEM_PEDIDOS = `O app da Shopify ainda não tem a permissão de leitura de pedidos (${ESCOPO_PEDIDOS}).`
+const SEM_PRODUTOS = 'O app da Shopify ainda não tem a permissão de leitura de produtos (read_products).'
 
 /** A Shopify devolve só o escopo mais forte: "write_x" já inclui "read_x". */
 export function temEscopo(escopos: string | null | undefined, escopo: string): boolean {
@@ -57,7 +60,8 @@ export async function acessoComEscopo(db: Banco, escopo: string, { conferir = fa
     }
   }
   if (!temEscopo(conexao?.escopos, escopo)) {
-    return { ok: false, motivo: 'sem_permissao', mensagem: escopo === ESCOPO_CUPONS ? SEM_CUPONS : SEM_PEDIDOS }
+    const mensagem = escopo === ESCOPO_CUPONS ? SEM_CUPONS : escopo === ESCOPO_PRODUTOS ? SEM_PRODUTOS : SEM_PEDIDOS
+    return { ok: false, motivo: 'sem_permissao', mensagem }
   }
   return { ok: true, acesso }
 }
