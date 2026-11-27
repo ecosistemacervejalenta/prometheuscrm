@@ -209,6 +209,8 @@ export async function listarPedidos(
 type ProdutoListadoOlist = {
   id: number
   sku?: string | null
+  /** Código de barras (EAN/GTIN) do cadastro. */
+  gtin?: string | null
   descricao?: string | null
   tipo?: string | null
   situacao?: string | null
@@ -398,6 +400,30 @@ export async function buscarProdutoPorSkuOlist(accessToken: string, sku: string)
   // Produto "pai" de variações não tem estoque próprio: prefere o item vendável.
   const achado = iguais.find((p) => p.tipoVariacao !== 'P') ?? iguais[0]
   return achado ? obterProdutoLoteOlist(accessToken, achado.id) : null
+}
+
+/** Produto da Olist achado pelo código de barras (só o que a listagem traz). */
+export type ProdutoGtinOlist = { id: number; sku: string | null; nome: string; ativo: boolean }
+
+/** Só os dígitos, sem zeros à esquerda: "0012345678905" e "12345678905" são o mesmo código. */
+const normalizarGtin = (codigo: string) => codigo.replace(/\D/g, '').replace(/^0+/, '')
+
+/**
+ * Produtos com este código de barras (EAN/GTIN) no cadastro da Olist, ativos primeiro. O filtro
+ * "gtin" da Olist é exato e ignora zeros à esquerda (o leitor pode mandar o UPC-A com um 0 na
+ * frente); a conferência aqui repete essa regra. Excluídos ficam de fora; produto "pai" de
+ * variações só entra se não houver o item vendável. Uma chamada só.
+ */
+export async function buscarProdutosPorGtinOlist(accessToken: string, gtin: string): Promise<ProdutoGtinOlist[]> {
+  const alvo = normalizarGtin(gtin)
+  if (!alvo) return []
+  const params = new URLSearchParams({ gtin: gtin.replace(/\D/g, ''), limit: String(POR_PAGINA) })
+  const pagina = (await requisicao(`/produtos?${params}`, accessToken, { esperarLimite: false })) as { itens?: ProdutoListadoOlist[] } | null
+  const iguais = (pagina?.itens ?? []).filter((p) => typeof p.id === 'number' && p.situacao !== 'E' && normalizarGtin(p.gtin ?? '') === alvo)
+  const vendaveis = iguais.filter((p) => p.tipoVariacao !== 'P')
+  return (vendaveis.length ? vendaveis : iguais)
+    .map((p) => ({ id: p.id, sku: p.sku?.trim() || null, nome: p.descricao?.trim() || `Produto ${p.id}`, ativo: p.situacao === 'A' }))
+    .sort((a, b) => Number(b.ativo) - Number(a.ativo))
 }
 
 export async function obterEstoqueOlist(accessToken: string, id: number, opcoes: { esperarLimite?: boolean } = {}): Promise<EstoqueOlist> {

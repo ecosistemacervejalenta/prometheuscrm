@@ -1,6 +1,6 @@
 'use client'
 
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
+import type { ComponentProps, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
 
 import { cn } from '@/lib/utils'
 
@@ -57,7 +57,8 @@ export function Field({
   )
 }
 
-export function Input({ className, name, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+/** Aceita `ref` (React 19: é uma prop comum), para quem precisa focar ou selecionar o campo. */
+export function Input({ className, name, ...props }: ComponentProps<'input'>) {
   const erro = useErro(name)
   return (
     <input

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
+import type { ProdutoLoteOlist } from '@/features/olist/api'
 import { copiarFotoDaOlist } from '@/features/olist/foto'
 import { pedirARotinaEstoque, type PedidoRotinaEstoque } from '@/features/olist/rotina-estoque'
 import { errosDeValidacao, falha, sucesso, traduzirErro, type EstadoAcao } from '@/lib/acoes'
@@ -10,7 +11,7 @@ import { exigirEquipe } from '@/lib/auth'
 import { formatarNumero } from '@/lib/format'
 import { agruparLista, formParaObjeto } from '@/lib/validacao'
 
-import { esquemaLoteEditado, esquemaLoteNovo, esquemaSku, MAX_LOTES_POR_VEZ } from './schema'
+import { codigoDeBarras, esquemaCodigo, esquemaLoteEditado, esquemaLoteNovo, MAX_LOTES_POR_VEZ } from './schema'
 
 /**
  * Lotes e validades. A Olist é só consultada (nome, SKU, foto e estoque do produto):
@@ -23,32 +24,82 @@ import { esquemaLoteEditado, esquemaLoteNovo, esquemaSku, MAX_LOTES_POR_VEZ } fr
 
 const BUCKET_FOTOS = 'produtos'
 
+const SEM_RESPOSTA_DA_OLIST = 'Não foi possível consultar a Olist. Tente de novo em instantes.'
+
 /** Consulta um produto na Olist pela rotina do estoque (a tela não lê os tokens). */
 async function consultarOlist(pedido: Extract<PedidoRotinaEstoque, { acao: 'lote-sku' | 'lote-produto' }>) {
   const resposta = await pedirARotinaEstoque(pedido)
   if ('produtoLote' in resposta) return { ok: true as const, produto: resposta.produtoLote }
-  return { ok: false as const, mensagem: 'mensagem' in resposta ? resposta.mensagem : 'Não foi possível consultar a Olist. Tente de novo em instantes.' }
+  return { ok: false as const, mensagem: 'mensagem' in resposta ? resposta.mensagem : SEM_RESPOSTA_DA_OLIST }
 }
 
+/** Produtos da Olist com este código de barras (EAN), ativos primeiro. */
+async function consultarGtinNaOlist(gtin: string) {
+  const resposta = await pedirARotinaEstoque({ acao: 'lote-gtin', gtin })
+  if ('produtosGtin' in resposta) return { ok: true as const, produtos: resposta.produtosGtin }
+  return { ok: false as const, mensagem: 'mensagem' in resposta ? resposta.mensagem : SEM_RESPOSTA_DA_OLIST }
+}
+
+const listaDeSkus = (itens: Array<{ sku: string | null }>) => itens.map((i) => i.sku ?? '—').join(', ')
+
 /**
- * Puxa a cerveja da Olist pelo SKU e a cadastra no controle (foto principal, nome, SKU e
- * unidades em estoque). Se ela já estiver cadastrada, só abre o cadastro.
+ * Puxa a cerveja da Olist pelo código de barras (EAN, bipado no leitor) ou pelo SKU e a cadastra
+ * no controle (foto principal, nome, SKU e unidades em estoque). Se ela já estiver cadastrada,
+ * só abre o cadastro. Código com cara de EAN (só dígitos: 8, 12, 13 ou 14) é procurado primeiro
+ * pelo código de barras e, se nenhum produto tiver esse EAN, pelo SKU (há SKUs só com números).
  */
-export async function cadastrarCervejaPorSku(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
+export async function cadastrarCervejaPorCodigo(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
   const { supabase } = await exigirEquipe()
-  const dados = esquemaSku.safeParse(formParaObjeto(formData))
+  const dados = esquemaCodigo.safeParse(formParaObjeto(formData))
   if (!dados.success) return errosDeValidacao(dados.error)
-  const { sku } = dados.data
+  const { codigo } = dados.data
 
   // Já está no controle com este SKU: abre direto, sem consultar a Olist.
-  const { data: peloSku } = await supabase.from('lotes_cervejas').select('id').eq('sku', sku).maybeSingle()
+  const { data: peloSku } = await supabase.from('lotes_cervejas').select('id').eq('sku', codigo).maybeSingle()
   if (peloSku) redirect(`/lotes/${peloSku.id}`)
 
-  const consulta = await consultarOlist({ acao: 'lote-sku', sku })
-  if (!consulta.ok) return falha(consulta.mensagem)
-  const produto = consulta.produto
-  if (!produto) return falha(`Nenhum produto com o SKU “${sku}” na Olist. Confira o código (SKU) no cadastro do produto lá.`)
+  const gtin = codigoDeBarras(codigo)
+  if (gtin) {
+    const consulta = await consultarGtinNaOlist(gtin)
+    if (!consulta.ok) return falha(consulta.mensagem)
+    if (consulta.produtos.length) {
+      // Já está no controle: abre direto (sem a 2ª chamada à Olist).
+      const ids = consulta.produtos.map((p) => p.id)
+      const { data: noControle } = await supabase.from('lotes_cervejas').select('id, sku').in('olist_id', ids)
+      if (noControle?.length === 1) redirect(`/lotes/${noControle[0].id}`)
+      if (noControle && noControle.length > 1) {
+        return falha(`Mais de uma cerveja do controle tem o código de barras ${gtin} na Olist (SKU ${listaDeSkus(noControle)}). Digite o SKU da que você quer abrir.`)
+      }
 
+      // EAN repetido em mais de um produto da Olist: não chuta qual é.
+      const ativos = consulta.produtos.filter((p) => p.ativo)
+      const opcoes = ativos.length ? ativos : consulta.produtos
+      if (opcoes.length > 1) {
+        return falha(
+          `${opcoes.length} produtos da Olist têm o código de barras ${gtin}: ${opcoes.map((p) => `${p.nome} (SKU ${p.sku ?? '—'})`).join('; ')}. Digite o SKU da cerveja certa.`,
+        )
+      }
+      const produto = await consultarOlist({ acao: 'lote-produto', id: opcoes[0].id })
+      if (!produto.ok) return falha(produto.mensagem)
+      if (!produto.produto) return falha(`O produto do código de barras ${gtin} não foi encontrado na Olist. Tente de novo em instantes.`)
+      return cadastrarProdutoDaOlist(supabase, produto.produto, codigo)
+    }
+  }
+
+  const consulta = await consultarOlist({ acao: 'lote-sku', sku: codigo })
+  if (!consulta.ok) return falha(consulta.mensagem)
+  if (!consulta.produto) {
+    return falha(
+      gtin
+        ? `Nenhum produto da Olist tem o código de barras ou o SKU “${codigo}”. Confira o EAN (GTIN) e o código (SKU) no cadastro do produto lá.`
+        : `Nenhum produto com o SKU “${codigo}” na Olist. Confira o código (SKU) no cadastro do produto lá.`,
+    )
+  }
+  return cadastrarProdutoDaOlist(supabase, consulta.produto, codigo)
+}
+
+/** Grava a cerveja consultada na Olist e abre a tela dos lotes dela. */
+async function cadastrarProdutoDaOlist(supabase: Supabase, produto: ProdutoLoteOlist, codigoDigitado: string): Promise<EstadoAcao> {
   // Mesmo produto cadastrado com o SKU escrito de outro jeito (ou trocado na Olist).
   const { data: peloProduto } = await supabase.from('lotes_cervejas').select('id').eq('olist_id', produto.id).maybeSingle()
   if (peloProduto) redirect(`/lotes/${peloProduto.id}`)
@@ -57,7 +108,7 @@ export async function cadastrarCervejaPorSku(_: EstadoAcao, formData: FormData):
   const { data: cerveja, error } = await supabase
     .from('lotes_cervejas')
     .insert({
-      sku: (produto.sku ?? sku).slice(0, 60),
+      sku: (produto.sku ?? codigoDigitado).slice(0, 60),
       olist_id: produto.id,
       nome: produto.nome.slice(0, 200),
       foto_url: foto,

@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 import { verificarChave } from '@/features/integracoes/api-auth'
 import { processarAvisosDeValidade } from '@/features/lotes/avisos'
-import { atualizarEstoqueDasCervejasDosLotes, consultarProdutoLoteNaOlist, consultarSkuNaOlist } from '@/features/lotes/olist'
+import { atualizarEstoqueDasCervejasDosLotes, consultarGtinNaOlist, consultarProdutoLoteNaOlist, consultarSkuNaOlist } from '@/features/lotes/olist'
+import { codigoDeBarras } from '@/features/lotes/schema'
 import { buscarNaOlist, detalhesNaOlist, prepararProdutoOlist, processarFilaEstoqueOlist, rotinaEstoqueOlist } from '@/features/olist/estoque'
 import type { PedidoRotinaEstoque, RespostaRotinaEstoque } from '@/features/olist/rotina-estoque'
 import { OlistNaoConectado } from '@/features/olist/token'
@@ -18,7 +19,7 @@ export const maxDuration = 300
  *          algumas cervejas do módulo Lotes e validades (só consulta) e manda ao n8n os avisos de
  *          validade dos lotes (grupo da equipe), das 8h às 20h.
  *   POST → pedidos da tela: { acao: 'buscar', termo, offset? } | { acao: 'detalhes', ids } | { acao: 'produto', id } |
- *          { acao: 'processar' } | { acao: 'lote-sku', sku } | { acao: 'lote-produto', id }.
+ *          { acao: 'processar' } | { acao: 'lote-sku', sku } | { acao: 'lote-gtin', gtin } | { acao: 'lote-produto', id }.
  */
 export async function GET(request: NextRequest) {
   const negado = verificarChave(request, envServidor.cronSecret, 'CRON_SECRET')
@@ -84,6 +85,12 @@ export async function POST(request: NextRequest) {
         const sku = String(pedido.sku ?? '').trim().slice(0, 60)
         if (!sku) return NextResponse.json({ ok: false, mensagem: 'Informe o SKU.' }, { status: 400 })
         resposta = { ok: true, produtoLote: await consultarSkuNaOlist(sku) }
+        break
+      }
+      case 'lote-gtin': {
+        const gtin = codigoDeBarras(String(pedido.gtin ?? ''))
+        if (!gtin) return NextResponse.json({ ok: false, mensagem: 'Código de barras inválido.' }, { status: 400 })
+        resposta = { ok: true, produtosGtin: await consultarGtinNaOlist(gtin) }
         break
       }
       case 'lote-produto':

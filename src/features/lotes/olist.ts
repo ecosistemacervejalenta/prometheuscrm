@@ -1,6 +1,13 @@
 import 'server-only'
 
-import { buscarProdutoPorSkuOlist, ErroApiOlist, obterProdutoLoteOlist, type ProdutoLoteOlist } from '@/features/olist/api'
+import {
+  buscarProdutoPorSkuOlist,
+  buscarProdutosPorGtinOlist,
+  ErroApiOlist,
+  obterProdutoLoteOlist,
+  type ProdutoGtinOlist,
+  type ProdutoLoteOlist,
+} from '@/features/olist/api'
 import { obterTokenOlist } from '@/features/olist/token'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -17,6 +24,12 @@ import { CERVEJAS_POR_RODADA, PAUSA_ENTRE_LEITURAS_MS, RELER_A_CADA_MIN } from '
 export async function consultarSkuNaOlist(sku: string): Promise<ProdutoLoteOlist | null> {
   const supabase = createAdminClient()
   return buscarProdutoPorSkuOlist(await obterTokenOlist(supabase), sku)
+}
+
+/** Produtos da Olist com este código de barras (EAN), ativos primeiro (lista vazia se nenhum). */
+export async function consultarGtinNaOlist(gtin: string): Promise<ProdutoGtinOlist[]> {
+  const supabase = createAdminClient()
+  return buscarProdutosPorGtinOlist(await obterTokenOlist(supabase), gtin)
 }
 
 /** Relê um produto já cadastrado (null se ele não existir mais na Olist). */

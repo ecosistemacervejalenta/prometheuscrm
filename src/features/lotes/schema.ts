@@ -29,9 +29,19 @@ const quantidadeOpcional = z.preprocess(lerQuantidade, unidades(1, 'Use só núm
 /** Edição: obrigatória e aceita zero (o lote acabou, mas o registro fica). */
 const quantidadeObrigatoria = z.preprocess((v) => lerQuantidade(v) ?? undefined, unidades(0, 'Informe a quantidade.'))
 
-export const esquemaSku = z.object({
-  sku: texto('Informe o SKU da cerveja.').max(60, 'O SKU pode ter no máximo 60 caracteres.'),
+/** Código bipado no leitor (EAN) ou SKU digitado. */
+export const esquemaCodigo = z.object({
+  codigo: texto('Bipe o código de barras ou digite o SKU da cerveja.').max(60, 'O código pode ter no máximo 60 caracteres.'),
 })
+
+/**
+ * O código tem cara de código de barras (EAN-8, UPC-A, EAN-13 ou GTIN-14: só dígitos, com 8,
+ * 12, 13 ou 14)? Devolve só os dígitos (espaços e hífens de quem digitou saem), ou null.
+ */
+export function codigoDeBarras(codigo: string): string | null {
+  const digitos = codigo.replace(/[\s-]/g, '')
+  return /^(\d{8}|\d{12,14})$/.test(digitos) ? digitos : null
+}
 
 /** Quantos lotes dá para cadastrar de uma vez na mesma cerveja. */
 export const MAX_LOTES_POR_VEZ = 30
