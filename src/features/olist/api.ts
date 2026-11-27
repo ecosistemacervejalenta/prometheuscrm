@@ -382,12 +382,22 @@ export async function obterProdutoLoteOlist(accessToken: string, id: number): Pr
   }
 }
 
+/** Produto da Olist achado pela busca (só o que a listagem traz; o detalhe é outra chamada). */
+export type ProdutoAchadoOlist = { id: number; sku: string | null; nome: string; ativo: boolean }
+
+const paraAchado = (p: ProdutoListadoOlist): ProdutoAchadoOlist => ({
+  id: p.id,
+  sku: p.sku?.trim() || null,
+  nome: p.descricao?.trim() || `Produto ${p.id}`,
+  ativo: p.situacao === 'A',
+})
+
 /**
- * Acha o produto pelo SKU exato (sem diferenciar maiúsculas) e devolve nome, foto e estoque.
- * Procura nos ativos e, se não achar, nos demais (um produto inativo ainda pode ter lote na
- * prateleira). Devolve null se nenhum produto da Olist tiver esse SKU.
+ * Acha o produto pelo SKU exato (sem diferenciar maiúsculas). Procura nos ativos e, se não
+ * achar, nos demais (um produto inativo ainda pode ter lote na prateleira). Devolve null se
+ * nenhum produto da Olist tiver esse SKU.
  */
-export async function buscarProdutoPorSkuOlist(accessToken: string, sku: string): Promise<ProdutoLoteOlist | null> {
+export async function acharProdutoPorSkuOlist(accessToken: string, sku: string): Promise<ProdutoAchadoOlist | null> {
   const alvo = sku.trim().toLowerCase()
   const listar = async (situacao?: 'A') => {
     const params = new URLSearchParams({ codigo: sku.trim(), limit: String(POR_PAGINA) })
@@ -399,11 +409,8 @@ export async function buscarProdutoPorSkuOlist(accessToken: string, sku: string)
   if (iguais.length === 0) iguais = await listar()
   // Produto "pai" de variações não tem estoque próprio: prefere o item vendável.
   const achado = iguais.find((p) => p.tipoVariacao !== 'P') ?? iguais[0]
-  return achado ? obterProdutoLoteOlist(accessToken, achado.id) : null
+  return achado ? paraAchado(achado) : null
 }
-
-/** Produto da Olist achado pelo código de barras (só o que a listagem traz). */
-export type ProdutoGtinOlist = { id: number; sku: string | null; nome: string; ativo: boolean }
 
 /** Só os dígitos, sem zeros à esquerda: "0012345678905" e "12345678905" são o mesmo código. */
 const normalizarGtin = (codigo: string) => codigo.replace(/\D/g, '').replace(/^0+/, '')
@@ -414,16 +421,14 @@ const normalizarGtin = (codigo: string) => codigo.replace(/\D/g, '').replace(/^0
  * frente); a conferência aqui repete essa regra. Excluídos ficam de fora; produto "pai" de
  * variações só entra se não houver o item vendável. Uma chamada só.
  */
-export async function buscarProdutosPorGtinOlist(accessToken: string, gtin: string): Promise<ProdutoGtinOlist[]> {
+export async function buscarProdutosPorGtinOlist(accessToken: string, gtin: string): Promise<ProdutoAchadoOlist[]> {
   const alvo = normalizarGtin(gtin)
   if (!alvo) return []
   const params = new URLSearchParams({ gtin: gtin.replace(/\D/g, ''), limit: String(POR_PAGINA) })
   const pagina = (await requisicao(`/produtos?${params}`, accessToken, { esperarLimite: false })) as { itens?: ProdutoListadoOlist[] } | null
   const iguais = (pagina?.itens ?? []).filter((p) => typeof p.id === 'number' && p.situacao !== 'E' && normalizarGtin(p.gtin ?? '') === alvo)
   const vendaveis = iguais.filter((p) => p.tipoVariacao !== 'P')
-  return (vendaveis.length ? vendaveis : iguais)
-    .map((p) => ({ id: p.id, sku: p.sku?.trim() || null, nome: p.descricao?.trim() || `Produto ${p.id}`, ativo: p.situacao === 'A' }))
-    .sort((a, b) => Number(b.ativo) - Number(a.ativo))
+  return (vendaveis.length ? vendaveis : iguais).map(paraAchado).sort((a, b) => Number(b.ativo) - Number(a.ativo))
 }
 
 export async function obterEstoqueOlist(accessToken: string, id: number, opcoes: { esperarLimite?: boolean } = {}): Promise<EstoqueOlist> {

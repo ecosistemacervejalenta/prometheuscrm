@@ -5,7 +5,7 @@ import { after } from 'next/server'
 import { envServidor } from '@/lib/env.server'
 import { urlDaRequisicao } from '@/lib/url'
 
-import type { ProdutoGtinOlist, ProdutoLoteOlist, ProdutoOlist } from './api'
+import type { ProdutoAchadoOlist, ProdutoLoteOlist, ProdutoOlist } from './api'
 import type { DetalheBuscaOlist, PaginaBuscaComEstoque } from './estoque'
 
 /**
@@ -29,7 +29,8 @@ export type RespostaRotinaEstoque =
   | { ok: true; produto: ProdutoOlist }
   | { ok: true; detalhes: DetalheBuscaOlist[] }
   | { ok: true; produtoLote: ProdutoLoteOlist | null }
-  | { ok: true; produtosGtin: ProdutoGtinOlist[] }
+  | { ok: true; produtoAchado: ProdutoAchadoOlist | null }
+  | { ok: true; produtosGtin: ProdutoAchadoOlist[] }
   | { ok: boolean; mensagem: string }
 
 export async function pedirARotinaEstoque(pedido: PedidoRotinaEstoque, site?: string): Promise<RespostaRotinaEstoque> {

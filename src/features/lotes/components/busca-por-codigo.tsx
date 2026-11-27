@@ -6,16 +6,17 @@ import { ScanBarcode, Search } from 'lucide-react'
 import { ActionForm, SubmitButton, useFormulario } from '@/components/form/action-form'
 import { Field, Input } from '@/components/form/fields'
 
-import { cadastrarCervejaPorCodigo } from '../actions'
+import { consultarCervejaPorCodigo } from '../actions'
 
 /**
- * Bipa o código de barras (EAN) ou digita o SKU → o CRM consulta a Olist, cadastra a cerveja e
- * abre a tela dos lotes dela. O leitor de código de barras "digita" o número e aperta Enter,
- * então bipar já faz a busca.
+ * Bipa o código de barras (EAN) ou digita o SKU → o CRM consulta a Olist e abre a cerveja: a
+ * tela dela, se já está no controle, ou a prévia com o formulário do lote (só entra no controle
+ * ao salvar). O leitor de código de barras "digita" o número e aperta Enter, então bipar já faz
+ * a busca.
  */
-export function CadastroPorCodigo() {
+export function BuscaPorCodigo() {
   return (
-    <ActionForm action={cadastrarCervejaPorCodigo} classeMensagem="mb-3">
+    <ActionForm action={consultarCervejaPorCodigo} classeMensagem="mb-3">
       <CampoDoCodigo />
     </ActionForm>
   )

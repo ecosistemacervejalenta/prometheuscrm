@@ -6,7 +6,7 @@ import { ActionButton } from '@/components/ui/action-button'
 import { ButtonLink } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
-import { atualizarCervejaDaOlist, removerCervejaDosLotes } from '@/features/lotes/actions'
+import { adicionarLotes, atualizarCervejaDaOlist, removerCervejaDosLotes } from '@/features/lotes/actions'
 import { HistoricoLotes } from '@/features/lotes/components/historico-lotes'
 import { FormularioNovosLotes, LinhaLote } from '@/features/lotes/components/lotes-da-cerveja'
 import { FREQUENCIA_LEITURA, quandoLeu } from '@/features/lotes/leitura'
@@ -135,7 +135,7 @@ export default async function PaginaLotesDaCerveja({ params, searchParams }: Pag
               descricao={lotes.length ? resumoLotes : 'Cadastre o lote e a validade desta cerveja. Dá para lançar vários lotes de uma vez.'}
             />
             <FormularioNovosLotes
-              cervejaId={id}
+              acao={adicionarLotes.bind(null, id)}
               temLotes={lotes.length > 0}
               estoqueOlist={cerveja.estoque_olist}
               semLote={semLote}

@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
       case 'lote-sku': {
         const sku = String(pedido.sku ?? '').trim().slice(0, 60)
         if (!sku) return NextResponse.json({ ok: false, mensagem: 'Informe o SKU.' }, { status: 400 })
-        resposta = { ok: true, produtoLote: await consultarSkuNaOlist(sku) }
+        resposta = { ok: true, produtoAchado: await consultarSkuNaOlist(sku) }
         break
       }
       case 'lote-gtin': {

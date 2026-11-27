@@ -12,7 +12,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Pagination } from '@/components/ui/pagination'
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table'
 import { testarAvisoNoGrupo } from '@/features/lotes/actions-avisos'
-import { CadastroPorCodigo } from '@/features/lotes/components/cadastro-por-codigo'
+import { BuscaPorCodigo } from '@/features/lotes/components/busca-por-codigo'
 import { PainelValidades } from '@/features/lotes/components/painel-validades'
 import { FREQUENCIA_LEITURA, quandoLeu, resumoLeituras } from '@/features/lotes/leitura'
 import { SeloValidade } from '@/features/lotes/components/selo-validade'
@@ -112,12 +112,12 @@ export default async function PaginaLotes({ searchParams }: PageProps<'/lotes'>)
       <Card className="mb-4 p-4 lg:mb-6 lg:p-5">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-center lg:gap-6">
           <div className="min-w-0">
-            <h2 className="tipo-h3 text-[16px] leading-6">Cadastrar cerveja pelo código de barras ou SKU</h2>
+            <h2 className="tipo-h3 text-[16px] leading-6">Buscar cerveja pelo código de barras ou SKU</h2>
             <p className="mt-0.5 text-sm text-suave">
-              Bipe o código de barras (EAN) com o leitor ou digite o SKU: o CRM consulta a Olist e traz foto, nome, SKU e estoque. Nada é enviado ou alterado lá.
+              Bipe o código de barras (EAN) com o leitor ou digite o SKU: o CRM consulta a Olist e mostra foto, nome, SKU e estoque. A cerveja só entra no controle quando você salvar o lote. Nada é enviado ou alterado na Olist.
             </p>
           </div>
-          <CadastroPorCodigo />
+          <BuscaPorCodigo />
         </div>
       </Card>
 

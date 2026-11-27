@@ -3,7 +3,7 @@
 import { Pencil, Plus, Trash2, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 
-import { ActionForm, SubmitButton } from '@/components/form/action-form'
+import { ActionForm, SubmitButton, type AcaoFormulario } from '@/components/form/action-form'
 import { Field, Input } from '@/components/form/fields'
 import { ActionButton } from '@/components/ui/action-button'
 import { Alert } from '@/components/ui/alert'
@@ -12,7 +12,7 @@ import { useAvisos } from '@/components/ui/toaster'
 import { formatarData, formatarNumero } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-import { adicionarLotes, editarLote, excluirLote } from '../actions'
+import { editarLote, excluirLote } from '../actions'
 import type { AvisoDoLote, LoteDaCerveja } from '../queries'
 import { MAX_LOTES_POR_VEZ } from '../schema'
 import { SituacaoDoAviso } from './avisos-grupo'
@@ -52,15 +52,17 @@ function TextoDaQuantidade({ temLotes, estoque, semLote }: { temLotes: boolean; 
  * Cadastro de um ou vários lotes de uma vez: cada linha é lote + quantidade + validade, "Outro
  * lote" abre mais uma linha e tudo é salvo junto. Quantidade em branco = as unidades da Olist
  * que ainda não estão em lote nenhum (só uma linha pode ficar em branco).
+ * `acao`: adicionarLotes (cerveja do controle) ou cadastrarCervejaComLotes (prévia da busca: a
+ * cerveja só entra no controle ao salvar).
  */
 export function FormularioNovosLotes({
-  cervejaId,
+  acao,
   temLotes,
   estoqueOlist,
   semLote,
   foco = false,
 }: {
-  cervejaId: string
+  acao: AcaoFormulario
   temLotes: boolean
   estoqueOlist: number | null
   /** Unidades da Olist ainda sem lote (null = não dá para saber). */
@@ -83,7 +85,7 @@ export function FormularioNovosLotes({
 
   return (
     <ActionForm
-      action={adicionarLotes.bind(null, cervejaId)}
+      action={acao}
       limparAoConcluir
       mostrarSucesso={false}
       aoConcluir={(estado) => {

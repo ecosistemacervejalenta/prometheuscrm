@@ -1,5 +1,7 @@
 import 'server-only'
 
+import type { ProdutoLoteOlist } from '@/features/olist/api'
+import { pedirARotinaEstoque } from '@/features/olist/rotina-estoque'
 import { exigirEquipe } from '@/lib/auth'
 
 import { SITUACOES_VALIDADE, situacaoValidade, type SituacaoValidade } from './validade'
@@ -81,6 +83,29 @@ export async function obterCervejaDosLotes(id: string): Promise<CervejaComLotes 
   const { supabase } = await exigirEquipe()
   const { data } = await supabase.from('lotes_cervejas').select(CAMPOS).eq('id', id).maybeSingle()
   return data ? paraCerveja(data) : null
+}
+
+export type PreviaDaCerveja =
+  /** Já está no controle: a tela abre o cadastro dela. */
+  | { tipo: 'no-controle'; id: string }
+  | { tipo: 'olist'; produto: ProdutoLoteOlist }
+  | { tipo: 'erro'; mensagem: string }
+
+/**
+ * Prévia de uma cerveja da Olist que ainda não está no controle: lê o produto na hora (foto,
+ * nome, SKU e estoque). SÓ CONSULTA — nada é gravado no CRM nem na Olist; a cerveja só entra no
+ * controle quando o primeiro lote é salvo.
+ */
+export async function previaDaCervejaDaOlist(olistId: number): Promise<PreviaDaCerveja> {
+  const { supabase } = await exigirEquipe()
+  const { data } = await supabase.from('lotes_cervejas').select('id').eq('olist_id', olistId).maybeSingle()
+  if (data) return { tipo: 'no-controle', id: data.id }
+
+  const resposta = await pedirARotinaEstoque({ acao: 'lote-produto', id: olistId })
+  if ('produtoLote' in resposta) {
+    return resposta.produtoLote ? { tipo: 'olist', produto: resposta.produtoLote } : { tipo: 'erro', mensagem: 'Este produto não existe mais na Olist.' }
+  }
+  return { tipo: 'erro', mensagem: 'mensagem' in resposta ? resposta.mensagem : 'Não foi possível consultar a Olist. Tente de novo em instantes.' }
 }
 
 /**

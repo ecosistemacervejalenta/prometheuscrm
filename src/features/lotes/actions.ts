@@ -3,9 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
-import type { ProdutoLoteOlist } from '@/features/olist/api'
 import { copiarFotoDaOlist } from '@/features/olist/foto'
-import { pedirARotinaEstoque, type PedidoRotinaEstoque } from '@/features/olist/rotina-estoque'
+import { pedirARotinaEstoque } from '@/features/olist/rotina-estoque'
 import { errosDeValidacao, falha, sucesso, traduzirErro, type EstadoAcao } from '@/lib/acoes'
 import { exigirEquipe } from '@/lib/auth'
 import { formatarNumero } from '@/lib/format'
@@ -26,29 +25,44 @@ const BUCKET_FOTOS = 'produtos'
 
 const SEM_RESPOSTA_DA_OLIST = 'Não foi possível consultar a Olist. Tente de novo em instantes.'
 
-/** Consulta um produto na Olist pela rotina do estoque (a tela não lê os tokens). */
-async function consultarOlist(pedido: Extract<PedidoRotinaEstoque, { acao: 'lote-sku' | 'lote-produto' }>) {
+type RespostaDaRotina = Awaited<ReturnType<typeof pedirARotinaEstoque>>
+const erroDaRotina = (resposta: RespostaDaRotina) => ({ ok: false as const, mensagem: 'mensagem' in resposta ? resposta.mensagem : SEM_RESPOSTA_DA_OLIST })
+
+/** Lê um produto na Olist pelo id, pela rotina do estoque (a tela não lê os tokens). */
+async function consultarOlist(pedido: { acao: 'lote-produto'; id: number }) {
   const resposta = await pedirARotinaEstoque(pedido)
   if ('produtoLote' in resposta) return { ok: true as const, produto: resposta.produtoLote }
-  return { ok: false as const, mensagem: 'mensagem' in resposta ? resposta.mensagem : SEM_RESPOSTA_DA_OLIST }
+  return erroDaRotina(resposta)
+}
+
+/** Qual produto da Olist tem este SKU (só a listagem, sem o detalhe). */
+async function acharSkuNaOlist(sku: string) {
+  const resposta = await pedirARotinaEstoque({ acao: 'lote-sku', sku })
+  if ('produtoAchado' in resposta) return { ok: true as const, produto: resposta.produtoAchado }
+  return erroDaRotina(resposta)
 }
 
 /** Produtos da Olist com este código de barras (EAN), ativos primeiro. */
 async function consultarGtinNaOlist(gtin: string) {
   const resposta = await pedirARotinaEstoque({ acao: 'lote-gtin', gtin })
   if ('produtosGtin' in resposta) return { ok: true as const, produtos: resposta.produtosGtin }
-  return { ok: false as const, mensagem: 'mensagem' in resposta ? resposta.mensagem : SEM_RESPOSTA_DA_OLIST }
+  return erroDaRotina(resposta)
 }
 
 const listaDeSkus = (itens: Array<{ sku: string | null }>) => itens.map((i) => i.sku ?? '—').join(', ')
 
+/** Prévia de uma cerveja da Olist que ainda não está no controle (consultar não grava nada). */
+const enderecoDaPrevia = (olistId: number, codigo: string) => `/lotes/novo?${new URLSearchParams({ produto: String(olistId), codigo })}`
+
 /**
- * Puxa a cerveja da Olist pelo código de barras (EAN, bipado no leitor) ou pelo SKU e a cadastra
- * no controle (foto principal, nome, SKU e unidades em estoque). Se ela já estiver cadastrada,
- * só abre o cadastro. Código com cara de EAN (só dígitos: 8, 12, 13 ou 14) é procurado primeiro
- * pelo código de barras e, se nenhum produto tiver esse EAN, pelo SKU (há SKUs só com números).
+ * Procura a cerveja na Olist pelo código de barras (EAN, bipado no leitor) ou pelo SKU. SÓ
+ * CONSULTA: se ela já está no controle, abre o cadastro dela; se não, abre a prévia (foto, nome,
+ * SKU e estoque) com o formulário do lote — ela só entra no controle quando o lote é salvo
+ * (cadastrarCervejaComLotes). Código com cara de EAN (só dígitos: 8, 12, 13 ou 14) é procurado
+ * primeiro pelo código de barras e, se nenhum produto tiver esse EAN, pelo SKU (há SKUs só com
+ * números).
  */
-export async function cadastrarCervejaPorCodigo(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
+export async function consultarCervejaPorCodigo(_: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
   const { supabase } = await exigirEquipe()
   const dados = esquemaCodigo.safeParse(formParaObjeto(formData))
   if (!dados.success) return errosDeValidacao(dados.error)
@@ -63,7 +77,6 @@ export async function cadastrarCervejaPorCodigo(_: EstadoAcao, formData: FormDat
     const consulta = await consultarGtinNaOlist(gtin)
     if (!consulta.ok) return falha(consulta.mensagem)
     if (consulta.produtos.length) {
-      // Já está no controle: abre direto (sem a 2ª chamada à Olist).
       const ids = consulta.produtos.map((p) => p.id)
       const { data: noControle } = await supabase.from('lotes_cervejas').select('id, sku').in('olist_id', ids)
       if (noControle?.length === 1) redirect(`/lotes/${noControle[0].id}`)
@@ -79,14 +92,11 @@ export async function cadastrarCervejaPorCodigo(_: EstadoAcao, formData: FormDat
           `${opcoes.length} produtos da Olist têm o código de barras ${gtin}: ${opcoes.map((p) => `${p.nome} (SKU ${p.sku ?? '—'})`).join('; ')}. Digite o SKU da cerveja certa.`,
         )
       }
-      const produto = await consultarOlist({ acao: 'lote-produto', id: opcoes[0].id })
-      if (!produto.ok) return falha(produto.mensagem)
-      if (!produto.produto) return falha(`O produto do código de barras ${gtin} não foi encontrado na Olist. Tente de novo em instantes.`)
-      return cadastrarProdutoDaOlist(supabase, produto.produto, codigo)
+      redirect(enderecoDaPrevia(opcoes[0].id, codigo))
     }
   }
 
-  const consulta = await consultarOlist({ acao: 'lote-sku', sku: codigo })
+  const consulta = await acharSkuNaOlist(codigo)
   if (!consulta.ok) return falha(consulta.mensagem)
   if (!consulta.produto) {
     return falha(
@@ -95,33 +105,11 @@ export async function cadastrarCervejaPorCodigo(_: EstadoAcao, formData: FormDat
         : `Nenhum produto com o SKU “${codigo}” na Olist. Confira o código (SKU) no cadastro do produto lá.`,
     )
   }
-  return cadastrarProdutoDaOlist(supabase, consulta.produto, codigo)
-}
 
-/** Grava a cerveja consultada na Olist e abre a tela dos lotes dela. */
-async function cadastrarProdutoDaOlist(supabase: Supabase, produto: ProdutoLoteOlist, codigoDigitado: string): Promise<EstadoAcao> {
   // Mesmo produto cadastrado com o SKU escrito de outro jeito (ou trocado na Olist).
-  const { data: peloProduto } = await supabase.from('lotes_cervejas').select('id').eq('olist_id', produto.id).maybeSingle()
+  const { data: peloProduto } = await supabase.from('lotes_cervejas').select('id').eq('olist_id', consulta.produto.id).maybeSingle()
   if (peloProduto) redirect(`/lotes/${peloProduto.id}`)
-
-  const foto = produto.foto ? await copiarFotoDaOlist(supabase, produto.foto) : null
-  const { data: cerveja, error } = await supabase
-    .from('lotes_cervejas')
-    .insert({
-      sku: (produto.sku ?? codigoDigitado).slice(0, 60),
-      olist_id: produto.id,
-      nome: produto.nome.slice(0, 200),
-      foto_url: foto,
-      estoque_olist: produto.estoque,
-      estoque_lido_em: new Date().toISOString(),
-      estoque_origem: 'cadastro',
-    })
-    .select('id')
-    .single()
-  if (error) return falha(traduzirErro(error))
-
-  revalidatePath('/lotes', 'layout')
-  redirect(`/lotes/${cerveja.id}`)
+  redirect(enderecoDaPrevia(consulta.produto.id, codigo))
 }
 
 /** Relê nome, SKU e estoque da cerveja na Olist (e a foto, se ainda não houver). */
@@ -244,51 +232,53 @@ export async function removerCervejaDosLotes(id: string): Promise<EstadoAcao> {
   const { data: removida, error } = await supabase.from('lotes_cervejas').delete().eq('id', id).select('foto_url').maybeSingle()
   if (error) return falha(traduzirErro(error))
 
-  // A foto copiada da Olist era só deste cadastro.
-  const caminho = removida?.foto_url?.split(`/object/public/${BUCKET_FOTOS}/`)[1]
-  if (caminho) {
-    const { error: erroFoto } = await supabase.storage.from(BUCKET_FOTOS).remove([decodeURIComponent(caminho)])
-    if (erroFoto) console.error('[lotes] foto não removida', erroFoto.message)
-  }
+  await apagarFotoCopiada(supabase, removida?.foto_url)
 
   revalidatePath('/lotes', 'layout')
   redirect('/lotes')
 }
 
+/** Apaga do Storage a foto copiada da Olist (ela era só deste cadastro). */
+async function apagarFotoCopiada(supabase: Supabase, url: string | null | undefined) {
+  const caminho = url?.split(`/object/public/${BUCKET_FOTOS}/`)[1]
+  if (!caminho) return
+  const { error } = await supabase.storage.from(BUCKET_FOTOS).remove([decodeURIComponent(caminho)])
+  if (error) console.error('[lotes] foto não removida', error.message)
+}
+
+type LoteNovo = { indice: number; lote: string; quantidade: number | null; validade: string }
+
 /**
- * Cadastra um ou vários lotes da cerveja de uma vez (campos "lotes.0.lote", "lotes.0.quantidade",
- * "lotes.0.validade", "lotes.1.lote"...). Linhas totalmente em branco são ignoradas; se alguma
- * linha tiver problema, nada é salvo e o erro aparece no campo dela.
- *
- * Quantidade: lê o estoque da Olist na hora. Os lotes novos dividem as unidades que ainda não
- * estão em lote nenhum; um deles pode ficar em branco e recebe o restante. Nenhum lote passa do
- * que a Olist tem.
+ * Lê as linhas do formulário ("lotes.0.lote", "lotes.0.quantidade", "lotes.0.validade",
+ * "lotes.1.lote"...). Linhas totalmente em branco são ignoradas; se alguma linha tiver problema,
+ * volta o erro no campo dela.
  */
-export async function adicionarLotes(cervejaId: string, _: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
-  const { supabase } = await exigirEquipe()
+function lerLotesDoFormulario(formData: FormData): { novos: LoteNovo[] } | { erro: EstadoAcao } {
   const texto = (valor: unknown) => (typeof valor === 'string' ? valor.trim() : '')
   const linhas = agruparLista(formParaObjeto(formData), 'lotes').lotes.slice(0, MAX_LOTES_POR_VEZ)
   const preenchidas = linhas.map((linha, indice) => ({ linha, indice })).filter(({ linha }) => texto(linha.lote) || texto(linha.quantidade) || texto(linha.validade))
   if (preenchidas.length === 0) {
-    return { ok: false, mensagem: 'Informe o lote e a validade.', erros: { 'lotes.0.lote': ['Informe o lote.'], 'lotes.0.validade': ['Informe a validade.'] } }
+    return { erro: { ok: false, mensagem: 'Informe o lote e a validade.', erros: { 'lotes.0.lote': ['Informe o lote.'], 'lotes.0.validade': ['Informe a validade.'] } } }
   }
 
-  const { data: cerveja } = await supabase.from('lotes_cervejas').select('id, olist_id').eq('id', cervejaId).maybeSingle()
-  if (!cerveja) return falha('Esta cerveja não está mais no controle de lotes.')
-
   const erros: Record<string, string[]> = {}
-  const novos: Array<{ indice: number; lote: string; quantidade: number | null; validade: string }> = []
+  const novos: LoteNovo[] = []
   for (const { linha, indice } of preenchidas) {
     const dados = esquemaLoteNovo.safeParse(linha)
     if (dados.success) novos.push({ indice, ...dados.data })
     else for (const problema of dados.error.issues) (erros[`lotes.${indice}.${String(problema.path[0])}`] ??= []).push(problema.message)
   }
-  if (Object.keys(erros).length) return { ok: false, mensagem: 'Revise os campos destacados.', erros }
+  if (Object.keys(erros).length) return { erro: { ok: false, mensagem: 'Revise os campos destacados.', erros } }
+  return { novos }
+}
 
-  // Estoque da Olist de agora (se caiu, o banco já baixou dos lotes antes da conta).
-  await lerEstoqueAgora(supabase, cerveja)
-  const estado = await estadoDoEstoque(supabase, cervejaId)
-  if (!estado) return falha('Esta cerveja não está mais no controle de lotes.')
+/**
+ * Confere os lotes novos contra o estoque da Olist e os lotes que a cerveja já tem: código
+ * repetido, e nenhum lote passa do que a Olist tem sem lote. Um lote pode ficar em branco e
+ * recebe o restante (preenchido aqui, em `novos`). Devolve o erro, ou null se pode salvar.
+ */
+function conferirLotesNovos(novos: LoteNovo[], estado: EstadoDoEstoque): EstadoAcao | null {
+  const erros: Record<string, string[]> = {}
 
   // O mesmo código duas vezes na lista, ou já cadastrado nesta cerveja.
   const cadastrados = new Set(estado.lotes.map((l) => l.lote.toLowerCase()))
@@ -326,15 +316,104 @@ export async function adicionarLotes(cervejaId: string, _: EstadoAcao, formData:
       } else brancos[0].quantidade = resto
     }
   }
-  if (Object.keys(erros).length) return { ok: false, mensagem, erros }
+  return Object.keys(erros).length ? { ok: false, mensagem, erros } : null
+}
 
-  const { error } = await supabase.from('lotes').insert(novos.map(({ lote, quantidade, validade }) => ({ cerveja_id: cervejaId, lote, quantidade, validade })))
+const linhasParaGravar = (cervejaId: string, novos: LoteNovo[]) => novos.map(({ lote, quantidade, validade }) => ({ cerveja_id: cervejaId, lote, quantidade, validade }))
+
+/**
+ * Cadastra um ou vários lotes da cerveja de uma vez (campos "lotes.0.lote", "lotes.0.quantidade",
+ * "lotes.0.validade", "lotes.1.lote"...). Linhas totalmente em branco são ignoradas; se alguma
+ * linha tiver problema, nada é salvo e o erro aparece no campo dela.
+ *
+ * Quantidade: lê o estoque da Olist na hora. Os lotes novos dividem as unidades que ainda não
+ * estão em lote nenhum; um deles pode ficar em branco e recebe o restante. Nenhum lote passa do
+ * que a Olist tem.
+ */
+export async function adicionarLotes(cervejaId: string, _: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
+  const { supabase } = await exigirEquipe()
+  const lidos = lerLotesDoFormulario(formData)
+  if ('erro' in lidos) return lidos.erro
+  const { novos } = lidos
+
+  const { data: cerveja } = await supabase.from('lotes_cervejas').select('id, olist_id').eq('id', cervejaId).maybeSingle()
+  if (!cerveja) return falha('Esta cerveja não está mais no controle de lotes.')
+
+  // Estoque da Olist de agora (se caiu, o banco já baixou dos lotes antes da conta).
+  await lerEstoqueAgora(supabase, cerveja)
+  const estado = await estadoDoEstoque(supabase, cervejaId)
+  if (!estado) return falha('Esta cerveja não está mais no controle de lotes.')
+  const problema = conferirLotesNovos(novos, estado)
+  if (problema) return problema
+
+  const { error } = await supabase.from('lotes').insert(linhasParaGravar(cervejaId, novos))
   if (error) return falha(traduzirErro(error))
   await conciliar(supabase, cervejaId)
   revalidatePath('/lotes', 'layout')
 
-  const comQuantidade = (n: (typeof novos)[number]) => `${n.lote} (${n.quantidade === null ? '—' : `${formatarNumero(n.quantidade)} un.`})`
+  const comQuantidade = (n: LoteNovo) => `${n.lote} (${n.quantidade === null ? '—' : `${formatarNumero(n.quantidade)} un.`})`
   return sucesso(novos.length === 1 ? `Lote ${comQuantidade(novos[0])} cadastrado.` : `Lotes cadastrados: ${novos.map(comQuantidade).join(', ')}.`)
+}
+
+/**
+ * Primeiro lote de uma cerveja que ainda não está no controle (vem da prévia da busca): só aqui
+ * ela entra no controle, junto com o(s) lote(s). Lê o produto na Olist na hora (estoque de agora)
+ * e confere os lotes ANTES de gravar qualquer coisa; se mesmo assim os lotes não puderem ser
+ * gravados, a cerveja é desfeita (não fica cadastro pela metade).
+ * `codigo`: o que foi bipado/digitado, usado como SKU só se o produto não tiver SKU na Olist.
+ */
+export async function cadastrarCervejaComLotes(olistId: number, codigo: string, estadoAnterior: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
+  const { supabase } = await exigirEquipe()
+  if (!Number.isSafeInteger(olistId) || olistId <= 0) return falha('Produto inválido. Volte e busque a cerveja de novo.')
+  const lidos = lerLotesDoFormulario(formData)
+  if ('erro' in lidos) return lidos.erro
+  const { novos } = lidos
+
+  // Já entrou no controle (outra aba ou outra pessoa): os lotes vão para o cadastro que existe.
+  const { data: existente } = await supabase.from('lotes_cervejas').select('id').eq('olist_id', olistId).maybeSingle()
+  if (existente) {
+    const resultado = await adicionarLotes(existente.id, estadoAnterior, formData)
+    if (!resultado.ok) return resultado
+    redirect(`/lotes/${existente.id}`)
+  }
+
+  const consulta = await consultarOlist({ acao: 'lote-produto', id: olistId })
+  if (!consulta.ok) return falha(consulta.mensagem)
+  if (!consulta.produto) return falha('Este produto não existe mais na Olist. Volte e busque a cerveja de novo.')
+  const produto = consulta.produto
+  const estoque = produto.estoque === null ? null : Math.max(Math.floor(Number(produto.estoque)), 0)
+  const problema = conferirLotesNovos(novos, { estoque, lotes: [], nosLotes: 0 })
+  if (problema) return problema
+
+  const foto = produto.foto ? await copiarFotoDaOlist(supabase, produto.foto) : null
+  const { data: cerveja, error } = await supabase
+    .from('lotes_cervejas')
+    .insert({
+      sku: (produto.sku ?? (String(codigo ?? '').trim() || String(produto.id))).slice(0, 60),
+      olist_id: produto.id,
+      nome: produto.nome.slice(0, 200),
+      foto_url: foto,
+      estoque_olist: produto.estoque,
+      estoque_lido_em: new Date().toISOString(),
+      estoque_origem: 'cadastro',
+    })
+    .select('id')
+    .single()
+  if (error) {
+    await apagarFotoCopiada(supabase, foto)
+    return falha(traduzirErro(error))
+  }
+
+  const { error: erroLotes } = await supabase.from('lotes').insert(linhasParaGravar(cerveja.id, novos))
+  if (erroLotes) {
+    // Sem os lotes a cerveja não fica no controle (nem a foto copiada).
+    await supabase.from('lotes_cervejas').delete().eq('id', cerveja.id)
+    await apagarFotoCopiada(supabase, foto)
+    return falha(traduzirErro(erroLotes))
+  }
+  await conciliar(supabase, cerveja.id)
+  revalidatePath('/lotes', 'layout')
+  redirect(`/lotes/${cerveja.id}`)
 }
 
 /**
