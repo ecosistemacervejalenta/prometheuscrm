@@ -36,5 +36,7 @@ export const config: VercelConfig = {
     { path: '/api/cron/olist-estoque', schedule: '*/5 * * * *' },
     // Influenciadores: lê na Shopify os pedidos feitos com cupom e atualiza as comissões (a cada 15 min).
     { path: '/api/cron/influenciadores', schedule: '*/15 * * * *' },
+    // Clientes por estilo: lê na Shopify os pedidos (itens e comprador) e as collections (a cada 30 min).
+    { path: '/api/cron/clientes-por-estilo', schedule: '7,37 * * * *' },
   ],
 }

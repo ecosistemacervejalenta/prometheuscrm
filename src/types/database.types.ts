@@ -649,6 +649,11 @@ export type Database = {
           influ_regras: string | null
           influ_sincronizacao_erro: string | null
           influ_sincronizado_ate: string | null
+          compras_sincronizado_ate: string | null
+          compras_sincronizado_em: string | null
+          compras_sincronizacao_erro: string | null
+          compras_historico_completo: boolean
+          colecoes_lidas_em: string | null
           influ_sincronizado_em: string | null
           id: number
           lotes_aviso_grupo: boolean
@@ -681,6 +686,11 @@ export type Database = {
           influ_regras?: string | null
           influ_sincronizacao_erro?: string | null
           influ_sincronizado_ate?: string | null
+          compras_sincronizado_ate?: string | null
+          compras_sincronizado_em?: string | null
+          compras_sincronizacao_erro?: string | null
+          compras_historico_completo?: boolean
+          colecoes_lidas_em?: string | null
           influ_sincronizado_em?: string | null
           id?: number
           lotes_aviso_grupo?: boolean
@@ -713,6 +723,11 @@ export type Database = {
           influ_regras?: string | null
           influ_sincronizacao_erro?: string | null
           influ_sincronizado_ate?: string | null
+          compras_sincronizado_ate?: string | null
+          compras_sincronizado_em?: string | null
+          compras_sincronizacao_erro?: string | null
+          compras_historico_completo?: boolean
+          colecoes_lidas_em?: string | null
           influ_sincronizado_em?: string | null
           id?: number
           lotes_aviso_grupo?: boolean
@@ -2984,6 +2999,150 @@ export type Database = {
           },
         ]
       }
+      shopify_colecoes: {
+        Row: {
+          ativa: boolean
+          handle: string | null
+          id: string
+          lida_em: string
+          produtos: number
+          tipo: Database["public"]["Enums"]["tipo_colecao"]
+          tipo_manual: boolean
+          titulo: string
+        }
+        Insert: {
+          ativa?: boolean
+          handle?: string | null
+          id: string
+          lida_em?: string
+          produtos?: number
+          tipo?: Database["public"]["Enums"]["tipo_colecao"]
+          tipo_manual?: boolean
+          titulo: string
+        }
+        Update: {
+          ativa?: boolean
+          handle?: string | null
+          id?: string
+          lida_em?: string
+          produtos?: number
+          tipo?: Database["public"]["Enums"]["tipo_colecao"]
+          tipo_manual?: boolean
+          titulo?: string
+        }
+        Relationships: []
+      }
+      shopify_compra_itens: {
+        Row: {
+          compra_id: string
+          linha: number
+          produto_id: string | null
+          quantidade: number
+          titulo: string
+        }
+        Insert: {
+          compra_id: string
+          linha: number
+          produto_id?: string | null
+          quantidade: number
+          titulo: string
+        }
+        Update: {
+          compra_id?: string
+          linha?: number
+          produto_id?: string | null
+          quantidade?: number
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_compra_itens_compra_id_fkey"
+            columns: ["compra_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_compras"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopify_compras: {
+        Row: {
+          atualizado_em: string
+          cancelado: boolean
+          cliente_id: string | null
+          comprado_em: string
+          id: string
+          lida_em: string
+          numero: string | null
+          status_financeiro: string | null
+          teste: boolean
+          valida: boolean
+          valor: number
+        }
+        Insert: {
+          atualizado_em: string
+          cancelado?: boolean
+          cliente_id?: string | null
+          comprado_em: string
+          id: string
+          lida_em?: string
+          numero?: string | null
+          status_financeiro?: string | null
+          teste?: boolean
+          valor?: number
+        }
+        Update: {
+          atualizado_em?: string
+          cancelado?: boolean
+          cliente_id?: string | null
+          comprado_em?: string
+          id?: string
+          lida_em?: string
+          numero?: string | null
+          status_financeiro?: string | null
+          teste?: boolean
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_compras_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopify_compras_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "vw_clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopify_produtos: {
+        Row: {
+          colecao_ids: string[]
+          id: string
+          lido_em: string
+          marca: string | null
+          titulo: string
+        }
+        Insert: {
+          colecao_ids?: string[]
+          id: string
+          lido_em?: string
+          marca?: string | null
+          titulo: string
+        }
+        Update: {
+          colecao_ids?: string[]
+          id?: string
+          lido_em?: string
+          marca?: string | null
+          titulo?: string
+        }
+        Relationships: []
+      }
       produtos: {
         Row: {
           ativo: boolean
@@ -3618,6 +3777,18 @@ export type Database = {
       }
     }
     Views: {
+      vw_itens_comprados_loja: {
+        Row: {
+          cliente_id: string | null
+          colecao_ids: string[] | null
+          comprado_em: string | null
+          compra_id: string | null
+          produto_id: string | null
+          quantidade: number | null
+          titulo: string | null
+        }
+        Relationships: []
+      }
       vw_atendimentos: {
         Row: {
           atualizado_em: string | null
@@ -4260,6 +4431,72 @@ export type Database = {
       }
     }
     Functions: {
+      cliente_da_compra_shopify: {
+        Args: { p_cliente: Json }
+        Returns: Json
+      }
+      criar_lista_de_colecoes: {
+        Args: { p_colecoes: string[]; p_desde?: string; p_nome: string; p_sem_compra_dias?: number }
+        Returns: Json
+      }
+      gosto_do_cliente: {
+        Args: { p_cliente_id: string }
+        Returns: {
+          colecao_id: string
+          garrafas: number
+          pedidos: number
+          tipo: Database["public"]["Enums"]["tipo_colecao"]
+          titulo: string
+          ultima_compra: string
+        }[]
+      }
+      produtos_shopify_para_ler: {
+        Args: { p_horas?: number; p_limite?: number }
+        Returns: string[]
+      }
+      publico_por_colecoes: {
+        Args: { p_colecoes: string[]; p_desde?: string; p_sem_compra_dias?: number }
+        Returns: {
+          cidade: string | null
+          cliente_id: string
+          colecoes: string[]
+          email: string | null
+          garrafas: number
+          nome: string
+          pedidos: number
+          pedidos_na_loja: number
+          recebe_campanha: boolean
+          uf: string | null
+          ultima_compra: string
+          ultima_na_loja: string
+          whatsapp: string | null
+        }[]
+      }
+      ranking_colecoes: {
+        Args: { p_desde?: string }
+        Returns: {
+          colecao_id: string
+          compradores: number
+          garrafas: number
+          pedidos: number
+          produtos: number
+          tipo: Database["public"]["Enums"]["tipo_colecao"]
+          titulo: string
+          ultima_compra: string | null
+        }[]
+      }
+      registrar_colecoes_shopify: {
+        Args: { p_colecoes: Json }
+        Returns: number
+      }
+      registrar_compras_shopify: {
+        Args: { p_compras: Json }
+        Returns: Json
+      }
+      registrar_produtos_shopify: {
+        Args: { p_produtos: Json }
+        Returns: number
+      }
       ajustar_estoque_olist_item: {
         Args: {
           p_item_id: string
@@ -5035,6 +5272,7 @@ export type Database = {
       prioridade_tarefa: "baixa" | "media" | "alta" | "urgente"
       situacao_caixa: "aberta" | "fechada"
       situacao_frete: "vip" | "a_cotar" | "cotado"
+      tipo_colecao: "estilo" | "cervejaria" | "tema" | "ignorar"
       status_atendimento:
         | "fila"
         | "em_atendimento"
@@ -5224,6 +5462,7 @@ export const Constants = {
       prioridade_tarefa: ["baixa", "media", "alta", "urgente"],
       situacao_caixa: ["aberta", "fechada"],
       situacao_frete: ["vip", "a_cotar", "cotado"],
+      tipo_colecao: ["estilo", "cervejaria", "tema", "ignorar"],
       status_atendimento: [
         "fila",
         "em_atendimento",

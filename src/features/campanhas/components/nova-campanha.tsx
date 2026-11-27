@@ -244,12 +244,15 @@ function ResumoLeitura({ leitura }: { leitura: Leitura }) {
  */
 export function NovaCampanha({
   listas,
+  listaInicial,
   nomeLoja,
   limiteTier,
   preco,
   bloqueio,
 }: {
   listas: ListaParaCampanha[]
+  /** Lista já marcada ao abrir (ex.: "Criar campanha com esta lista" em Clientes › Por estilo). */
+  listaInicial?: string
   nomeLoja: string
   limiteTier: string | null
   /** Preço por mensagem de marketing entregue (medido na conta ou da tabela da Meta). */
@@ -258,13 +261,13 @@ export function NovaCampanha({
 }) {
   const router = useRouter()
   // Passo 1 — público
-  const [origem, setOrigem] = useState<Origem>('arquivo')
+  const [origem, setOrigem] = useState<Origem>(listaInicial ? 'leads' : 'arquivo')
   const [arquivo, setArquivo] = useState<{ nome: string; linhas: string[][] } | null>(null)
   const [mapaArquivo, setMapaArquivo] = useState<Mapeamento | null>(null)
   const [lendo, setLendo] = useState(false)
   const [arrastando, setArrastando] = useState(false)
   const [erroArquivo, setErroArquivo] = useState<string | null>(null)
-  const [listaIds, setListaIds] = useState<string[]>([])
+  const [listaIds, setListaIds] = useState<string[]>(listaInicial ? [listaInicial] : [])
   const [filtrarDdd, setFiltrarDdd] = useState(false)
   const [dddsMarcados, setDddsMarcados] = useState<string[]>([])
   const [textoColado, setTextoColado] = useState('')

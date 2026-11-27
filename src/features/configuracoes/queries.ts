@@ -36,6 +36,11 @@ const PADRAO: Configuracoes = {
   influ_sincronizado_ate: null,
   influ_sincronizado_em: null,
   influ_sincronizacao_erro: null,
+  compras_sincronizado_ate: null,
+  compras_sincronizado_em: null,
+  compras_sincronizacao_erro: null,
+  compras_historico_completo: false,
+  colecoes_lidas_em: null,
 }
 
 /** Configurações da loja (linha única). */

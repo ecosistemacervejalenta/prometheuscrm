@@ -12,6 +12,8 @@ import { Kpi } from '@/components/ui/kpi'
 import { HistoricoDePedidos } from '@/features/clientes/components/historico-pedidos'
 import { atividadesDoCliente, historicoDoCliente, obterCliente } from '@/features/clientes/queries'
 import { obterConfiguracoes } from '@/features/configuracoes/queries'
+import { ComprasNaLoja } from '@/features/estilos/components/compras-na-loja'
+import { comprasNaLoja } from '@/features/estilos/queries'
 import { listarPreVendasAtivas } from '@/features/pre-vendas/queries'
 import {
   formatarEndereco,
@@ -33,17 +35,27 @@ export async function generateMetadata({ params }: PageProps<'/clientes/[id]'>):
 
 export default async function PaginaCliente({ params }: PageProps<'/clientes/[id]'>) {
   const { id } = await params
-  const [cliente, { pedidos, totais }, atividades, preVendas, config] = await Promise.all([
+  const [cliente, { pedidos, totais }, atividades, preVendas, config, naLoja] = await Promise.all([
     obterCliente(id),
     historicoDoCliente(id),
     atividadesDoCliente(id),
     listarPreVendasAtivas(),
     obterConfiguracoes(),
+    comprasNaLoja(id),
   ])
   if (!cliente?.id) notFound()
 
-  const ticket = totais.pedidos > 0 ? totais.comprado / totais.pedidos : 0
-  const ultimo = pedidos.find((p) => p.status !== 'cancelado')?.criadoEm
+  // Compras pagas na loja da Shopify entram nos totais (pagas = sem nada em aberto).
+  const loja = naLoja.totais
+  const comprado = totais.comprado + loja.valor
+  const pago = totais.pago + loja.valor
+  const unidades = totais.unidades + loja.unidades
+  const qtdPedidos = totais.pedidos + loja.pedidos
+  const ticket = qtdPedidos > 0 ? comprado / qtdPedidos : 0
+  const ultimo = [pedidos.find((p) => p.status !== 'cancelado')?.criadoEm, loja.ultima]
+    .filter((d): d is string => Boolean(d))
+    .sort()
+    .at(-1)
   const endereco = formatarEndereco(cliente)
   const links = await Promise.all(
     preVendas.map(async (pv) => {
@@ -98,10 +110,10 @@ export default async function PaginaCliente({ params }: PageProps<'/clientes/[id
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi
           rotulo="Total comprado"
-          valor={formatarMoeda(totais.comprado)}
-          detalhe={`${formatarNumero(totais.unidades)} ${totais.unidades === 1 ? 'cerveja' : 'cervejas'}`}
+          valor={formatarMoeda(comprado)}
+          detalhe={`${formatarNumero(unidades)} ${unidades === 1 ? 'item' : 'itens'}${loja.pedidos > 0 ? ` · ${formatarMoeda(loja.valor)} na loja` : ''}`}
         />
-        <Kpi rotulo="Total pago" valor={formatarMoeda(totais.pago)} tendencia={totais.pago > 0 ? 'positiva' : 'neutra'} />
+        <Kpi rotulo="Total pago" valor={formatarMoeda(pago)} tendencia={pago > 0 ? 'positiva' : 'neutra'} />
         <Kpi
           rotulo="Em aberto"
           valor={formatarMoeda(totais.emAberto)}
@@ -110,23 +122,33 @@ export default async function PaginaCliente({ params }: PageProps<'/clientes/[id
         />
         <Kpi
           rotulo="Pedidos"
-          valor={formatarNumero(totais.pedidos)}
-          detalhe={totais.pedidos > 0 ? `ticket ${formatarMoeda(ticket)}${ultimo ? ` · último ${formatarRelativo(ultimo)}` : ''}` : undefined}
+          valor={formatarNumero(qtdPedidos)}
+          detalhe={
+            qtdPedidos > 0
+              ? `ticket ${formatarMoeda(ticket)}${ultimo ? ` · último ${formatarRelativo(ultimo)}` : ''}${loja.pedidos > 0 ? ` · ${formatarNumero(loja.pedidos)} na loja` : ''}`
+              : undefined
+          }
         />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <Card className="min-w-0 self-start">
-          <CardHeader
-            titulo="Histórico de compras"
-            descricao={
-              pedidos.length > 0
-                ? `${formatarNumero(pedidos.length)} ${pedidos.length === 1 ? 'pedido' : 'pedidos'}, do mais novo ao mais antigo — fica guardado mesmo se a pré-venda for excluída.`
-                : undefined
-            }
-          />
-          <HistoricoDePedidos pedidos={pedidos} clienteId={id} />
-        </Card>
+        <div className="min-w-0 space-y-6 self-start">
+          <ComprasNaLoja dados={naLoja} />
+
+          <Card className="min-w-0">
+            <CardHeader
+              titulo={loja.pedidos > 0 ? 'Pedidos pelo CRM' : 'Histórico de compras'}
+              descricao={
+                pedidos.length > 0
+                  ? `${formatarNumero(pedidos.length)} ${pedidos.length === 1 ? 'pedido' : 'pedidos'}, do mais novo ao mais antigo — fica guardado mesmo se a pré-venda for excluída.`
+                  : loja.pedidos > 0
+                    ? 'Pré-vendas e pedidos lançados pela equipe. As compras na loja estão acima.'
+                    : undefined
+              }
+            />
+            <HistoricoDePedidos pedidos={pedidos} clienteId={id} />
+          </Card>
+        </div>
 
         <div className="space-y-6">
           <Card>
