@@ -2407,6 +2407,60 @@ export type Database = {
           },
         ]
       }
+      ml_alertas: {
+        Row: {
+          chave: string
+          criado_em: string
+          criado_por: string | null
+          detalhes: Json
+          evento_id: string | null
+          id: string
+          link: string | null
+          recurso: string | null
+          tipo: string
+          titulo: string
+        }
+        Insert: {
+          chave: string
+          criado_em?: string
+          criado_por?: string | null
+          detalhes?: Json
+          evento_id?: string | null
+          id?: string
+          link?: string | null
+          recurso?: string | null
+          tipo: string
+          titulo: string
+        }
+        Update: {
+          chave?: string
+          criado_em?: string
+          criado_por?: string | null
+          detalhes?: Json
+          evento_id?: string | null
+          id?: string
+          link?: string | null
+          recurso?: string | null
+          tipo?: string
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ml_alertas_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ml_alertas_evento_id_fkey"
+            columns: ["evento_id"]
+            isOneToOne: false
+            referencedRelation: "eventos_integracao"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       movimentos_estoque_olist: {
         Row: {
           criado_em: string
@@ -5062,6 +5116,18 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      registrar_alerta_ml: {
+        Args: {
+          p_chave: string
+          p_criado_por?: string | null
+          p_link: string | null
+          p_payload: Json
+          p_recurso: string | null
+          p_tipo: string
+          p_titulo: string
+        }
+        Returns: string | null
       }
       registrar_evento: {
         Args: {

@@ -70,6 +70,26 @@ export function renovarTokens(clientId: string, segredo: string, refreshToken: s
   return pedirToken({ grant_type: 'refresh_token', client_id: clientId, client_secret: segredo, refresh_token: refreshToken })
 }
 
+/**
+ * GET autenticado na API (caminho começando com "/"). Devolve nulo quando o recurso não existe
+ * ou não é desta conta (404/403); outros erros sobem com o motivo.
+ */
+export async function consultar<T>(accessToken: string, caminho: string): Promise<T | null> {
+  const resposta = await fetch(`${API}${caminho}`, {
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+    cache: 'no-store',
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (resposta.status === 404 || resposta.status === 403) return null
+  const dados = (await resposta.json().catch(() => null)) as T | { message?: string; error?: string } | null
+  if (!resposta.ok) {
+    const motivo = (dados as { message?: string; error?: string } | null)?.message ?? `HTTP ${resposta.status}`
+    if (resposta.status === 401) throw new AutorizacaoExpirada(`O Mercado Livre recusou o acesso (${motivo}).`)
+    throw new Error(`O Mercado Livre respondeu com erro em ${caminho.split('?')[0]} (${motivo}).`)
+  }
+  return dados as T
+}
+
 /** Conta autorizada (id e apelido de vendedor). */
 export async function buscarConta(accessToken: string): Promise<{ id: string; nome: string }> {
   const resposta = await fetch(`${API}/users/me`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: 'no-store' })

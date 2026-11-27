@@ -19,6 +19,7 @@ export function SecaoMarketplace({
   ehAdmin,
   retorno,
   guia,
+  extra,
 }: {
   canal: IdMarketplace
   status: StatusMarketplace
@@ -28,6 +29,8 @@ export function SecaoMarketplace({
   /** Resultado da autorização (?status=...), quando a pessoa volta do marketplace. */
   retorno?: string
   guia: ReactNode
+  /** Quadro próprio do canal, logo abaixo da conexão (ex.: alertas do Mercado Livre no grupo). */
+  extra?: ReactNode
 }) {
   const { nome, slug } = MARKETPLACES[canal]
   const aviso = retorno ? AVISOS_MARKETPLACE[retorno] : undefined
@@ -39,6 +42,8 @@ export function SecaoMarketplace({
         {aviso && <Alert tom={aviso.tom}>{aviso.texto(nome)}</Alert>}
 
         <ConexaoMarketplace canal={canal} status={status} descricao={descricao} ehAdmin={ehAdmin} />
+
+        {extra}
 
         {ehAdmin &&
           (status.configurado ? (

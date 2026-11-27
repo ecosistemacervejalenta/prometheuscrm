@@ -29,6 +29,8 @@ export const config: VercelConfig = {
     { path: '/api/cron/campanhas', schedule: '*/5 * * * *' },
     // Mercado Livre e Shopee: renova o acesso e confere as contas, 1x/dia (o refresh da Shopee vence em 30 dias).
     { path: '/api/cron/marketplaces', schedule: '20 10 * * *' },
+    // Mercado Livre: confere reclamações e perguntas que não viraram alerta no grupo (a cada 10 min).
+    { path: '/api/cron/marketplaces?modo=alertas', schedule: '3,13,23,33,43,53 * * * *' },
     // Mercado Pago: confere os PIX pendentes caso algum aviso do webhook se perca (a cada 10 min).
     { path: '/api/cron/mercado-pago', schedule: '*/10 * * * *' },
     // Estoque da Olist nas pré-vendas: envia as baixas/devoluções que ficaram na fila, cancela

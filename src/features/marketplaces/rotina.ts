@@ -122,10 +122,24 @@ async function acessoValido(supabase: Admin, canal: IdMarketplace, cred: NonNull
   const vence = cred.access_expira_em ? new Date(cred.access_expira_em).getTime() : 0
   if (cred.access_token && vence - Date.now() > MARGEM_RENOVACAO_MS) return cred.access_token
 
-  const tokens =
-    canal === 'mercado_livre'
-      ? await mercadoLivre.renovarTokens(cred.client_id, cred.segredo, cred.refresh_token)
-      : await shopee.renovarTokens(cred.client_id, cred.segredo, cred.refresh_token, cred.conta_id)
+  let tokens
+  try {
+    tokens =
+      canal === 'mercado_livre'
+        ? await mercadoLivre.renovarTokens(cred.client_id, cred.segredo, cred.refresh_token)
+        : await shopee.renovarTokens(cred.client_id, cred.segredo, cred.refresh_token, cred.conta_id)
+  } catch (erro) {
+    // Duas notificações juntas podem renovar ao mesmo tempo: o refresh token é de uso único e a
+    // segunda troca é recusada. Se outra execução já gravou um acesso novo, usa o dela.
+    if (ehExpirada(erro)) {
+      const atual = await credenciais(supabase, canal)
+      const venceAtual = atual?.access_expira_em ? new Date(atual.access_expira_em).getTime() : 0
+      if (atual?.access_token && atual.refresh_token !== cred.refresh_token && venceAtual - Date.now() > 60_000) {
+        return atual.access_token
+      }
+    }
+    throw erro
+  }
   await registrar(supabase, canal, {
     access_token: tokens.accessToken,
     refresh_token: tokens.refreshToken,
@@ -162,6 +176,24 @@ export async function verificarConexao(supabase: Admin, canal: IdMarketplace): P
     if (ehExpirada(erro)) await marcarExpirada(supabase, canal, mensagemDe(erro)).catch(() => undefined)
     else await registrar(supabase, canal, { ultimo_erro: mensagemDe(erro) }).catch(() => undefined)
     return { ok: false, mensagem: mensagemDe(erro) }
+  }
+}
+
+/**
+ * Acesso à API do Mercado Livre para quem processa as notificações (alertas no grupo). Nulo
+ * quando a conta não está conectada. Autorização perdida fica registrada para a tela pedir
+ * "Reconectar", como no teste de conexão.
+ */
+export async function acessoMercadoLivre(supabase: Admin): Promise<{ acesso: string; contaId: string; clientId: string } | null> {
+  const cred = await credenciais(supabase, 'mercado_livre')
+  if (!cred?.client_id || !cred.segredo || !cred.refresh_token) return null
+  try {
+    const acesso = await acessoValido(supabase, 'mercado_livre', cred)
+    return { acesso, contaId: cred.conta_id ?? '', clientId: cred.client_id }
+  } catch (erro) {
+    if (ehExpirada(erro)) await marcarExpirada(supabase, 'mercado_livre', mensagemDe(erro)).catch(() => undefined)
+    else await registrar(supabase, 'mercado_livre', { ultimo_erro: mensagemDe(erro) }).catch(() => undefined)
+    throw erro
   }
 }
 

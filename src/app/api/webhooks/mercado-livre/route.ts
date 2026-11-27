@@ -1,21 +1,22 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { after, NextResponse, type NextRequest } from 'next/server'
 
+import { processarNotificacaoMercadoLivre, type NotificacaoMercadoLivre } from '@/features/marketplaces/alertas-mercado-livre'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
- * Notificações do Mercado Livre (URL de retorno de notificações do app, tópico Orders).
- * Por enquanto só registra que chegaram — a tela mostra o passo como concluído. O
- * Mercado Livre exige resposta 200 rápida; avisos de outro app são ignorados.
+ * Notificações do Mercado Livre (URL de retorno de notificações do app).
+ * O Mercado Livre exige HTTP 200 em até 500 ms — senão repete e pode desligar os tópicos —,
+ * então a resposta sai na hora e o trabalho (buscar a pergunta/mensagem/reclamação e avisar o
+ * grupo da equipe) roda depois, com after(). Avisos de outro app são ignorados lá dentro.
  */
 export async function POST(request: NextRequest) {
-  const aviso = (await request.json().catch(() => null)) as { application_id?: number | string } | null
-  const supabase = createAdminClient()
-  const { data } = await supabase.from('integracao_marketplace').select('client_id').eq('canal', 'mercado_livre').maybeSingle()
-  if (aviso?.application_id && data?.client_id && String(aviso.application_id) === data.client_id) {
-    await supabase
-      .from('integracao_marketplace')
-      .update({ notificacao_recebida_em: new Date().toISOString() })
-      .eq('canal', 'mercado_livre')
-  }
+  const aviso = (await request.json().catch(() => null)) as NotificacaoMercadoLivre | null
+  after(async () => {
+    try {
+      await processarNotificacaoMercadoLivre(createAdminClient(), aviso)
+    } catch (erro) {
+      console.error('[mercado-livre] notificação não processada', aviso?.topic, aviso?.resource, erro)
+    }
+  })
   return NextResponse.json({ ok: true })
 }

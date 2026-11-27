@@ -1,7 +1,7 @@
 import { Alert } from '@/components/ui/alert'
 
 import { caminhoCallback, type StatusMarketplace } from '../canais'
-import { CampoCopiavel, Codigo, Lista, Respostas, TextoPronto } from './blocos-guia'
+import { CampoCopiavel, Lista, Respostas, TextoPronto } from './blocos-guia'
 import { GuiaPassos, type Passo } from './guia-passos'
 
 const DESCRICAO_APP =
@@ -67,19 +67,36 @@ export function GuiaMercadoLivre({ status, site }: { status: StatusMarketplace; 
           <Respostas
             itens={[
               { campo: 'Logo', resposta: <>O logotipo da loja (botão “Baixar logotipo” abaixo).</> },
-              { campo: 'PKCE', resposta: <><strong className="text-ink">Sim</strong> (ativado) — o CRM já usa essa proteção.</> },
-              { campo: 'Device Grant', resposta: 'Deixe desligado.' },
               {
-                campo: 'Escopos / permissões',
+                campo: 'Fluxos OAuth',
                 resposta: (
                   <>
-                    <strong className="text-ink">Leitura</strong> basta (o CRM não altera nada). Se a tela pedir por área, dê leitura em
-                    usuários, vendas/pedidos, envios, faturamento e métricas. Se aparecer <Codigo>offline_access</Codigo> (acesso
-                    offline), marque: é o que deixa o CRM renovar o acesso sozinho.
+                    <strong className="text-ink">Authorization Code</strong> e <strong className="text-ink">Refresh Token</strong>. Sem o
+                    Refresh Token o acesso cai em 6 horas e os alertas param.
                   </>
                 ),
               },
-              { campo: 'Tópicos', resposta: <>Marque só <strong className="text-ink">Orders</strong> (pedidos).</> },
+              { campo: 'PKCE', resposta: <><strong className="text-ink">Sim</strong> (ativado) — o CRM já usa essa proteção.</> },
+              {
+                campo: 'Permissões',
+                resposta: (
+                  <>
+                    <strong className="text-ink">Leitura</strong> basta (o CRM não altera nada). Precisam estar em Leitura pelo menos{' '}
+                    <strong className="text-ink">Comunicações pré e pós-vendas</strong> (perguntas e mensagens) e{' '}
+                    <strong className="text-ink">Venda e envios de um produto</strong> (pedidos e reclamações).
+                  </>
+                ),
+              },
+              {
+                campo: 'Tópicos',
+                resposta: (
+                  <>
+                    <strong className="text-ink">Orders</strong> › orders_v2 · <strong className="text-ink">Messages</strong> › Messages e
+                    Created (não marque Read) · <strong className="text-ink">Items</strong> › Questions ·{' '}
+                    <strong className="text-ink">Post Purchase</strong> › Claims e Claims Actions. São eles que disparam os alertas no grupo.
+                  </>
+                ),
+              },
             ]}
           />
           <CampoCopiavel rotulo="URL de retorno de notificações" valor={urlNotificacoes} />
@@ -142,14 +159,15 @@ export function GuiaMercadoLivre({ status, site }: { status: StatusMarketplace; 
     },
     {
       chave: 'notificacoes',
-      titulo: 'Primeiro aviso de venda',
-      resumo: 'Confirma que o Mercado Livre está avisando o CRM a cada pedido.',
+      titulo: 'Primeira notificação',
+      resumo: 'Confirma que o Mercado Livre está avisando o CRM (venda, pergunta, mensagem ou reclamação).',
       confirmado: Boolean(status.notificacao_recebida_em),
-      dicaConfirmacao: 'Fica verde sozinho na próxima venda (é preciso ter marcado o tópico Orders no passo 2).',
+      dicaConfirmacao: 'Fica verde sozinho no próximo aviso (é preciso ter marcado os tópicos do passo 2).',
       conteudo: (
         <p>
-          Nada a fazer: quando entrar a próxima venda, o Mercado Livre manda um aviso para a URL de notificações do passo 2 e este
-          passo fica verde.
+          Nada a fazer: na próxima venda, pergunta ou mensagem, o Mercado Livre manda um aviso para a URL de notificações do passo 2 e
+          este passo fica verde. Para conferir o caminho até o grupo do WhatsApp sem esperar, use “Enviar alerta de teste” no quadro
+          de alertas.
         </p>
       ),
     },
