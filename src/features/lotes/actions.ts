@@ -10,11 +10,21 @@ import { exigirEquipe } from '@/lib/auth'
 import { formatarNumero } from '@/lib/format'
 import { agruparLista, formParaObjeto } from '@/lib/validacao'
 
-import { codigoDeBarras, esquemaCodigo, esquemaLoteEditado, esquemaLoteNovo, MAX_LOTES_POR_VEZ } from './schema'
+import {
+  codigoDeBarras,
+  esquemaCodigo,
+  esquemaContagemDoLote,
+  esquemaLoteEditado,
+  esquemaLoteNovo,
+  esquemaLoteNovoNoBalanco,
+  MAX_BALANCO,
+  MAX_LOTES_POR_VEZ,
+} from './schema'
 
 /**
- * Lotes e validades. A Olist é só consultada (nome, SKU, foto e estoque do produto):
- * nenhuma ação daqui envia lote, validade ou estoque para lá.
+ * Lotes e validades. A Olist é só consultada (nome, SKU, foto e estoque do produto), com UMA
+ * exceção: o balanço de estoque (lancarBalanco / lancarBalancoDeCervejaNova, no fim do arquivo),
+ * que troca o estoque da cerveja na Olist pelo total contado. As outras ações não enviam nada.
  *
  * Regra que o banco garante: soma dos lotes ≤ estoque da Olist. Quando o estoque lido cai, o
  * banco baixa a diferença do lote que vence primeiro (conciliar_lotes_da_cerveja). Aqui, ao
@@ -304,15 +314,15 @@ function conferirLotesNovos(novos: LoteNovo[], estado: EstadoDoEstoque): EstadoA
       for (const n of novos) if (n.quantidade !== null) erros[`lotes.${n.indice}.quantidade`] ??= ['Passa do que a Olist tem sem lote.']
       mensagem =
         `A Olist tem ${formatarNumero(estado.estoque)} un. desta cerveja e ${formatarNumero(estado.nosLotes)} já estão nos lotes: sobram ` +
-        `${formatarNumero(semLote)} un. sem lote, e os lotes novos somam ${formatarNumero(digitado)}. Se chegou mercadoria, dê entrada na ` +
-        'Olist primeiro; se algum lote está com quantidade a mais, corrija-o.'
+        `${formatarNumero(semLote)} un. sem lote, e os lotes novos somam ${formatarNumero(digitado)}. Se chegou mercadoria ou a contagem não ` +
+        'bate com a Olist, use o Balanço de estoque; se algum lote está com quantidade a mais, corrija-o.'
     } else if (brancos.length) {
       const resto = semLote - digitado
       if (resto <= 0) {
         erros[`lotes.${brancos[0].indice}.quantidade`] ??= ['Não sobra unidade da Olist para este lote.']
         mensagem =
-          `Todas as ${formatarNumero(estado.estoque)} un. da Olist já estão nos lotes. Se chegou mercadoria, dê entrada na Olist primeiro ` +
-          '(o CRM lê o estoque na hora de salvar); se algum lote está com quantidade a mais, corrija-o.'
+          `Todas as ${formatarNumero(estado.estoque)} un. da Olist já estão nos lotes. Se chegou mercadoria ou a contagem não bate com a ` +
+          'Olist, use o Balanço de estoque; se algum lote está com quantidade a mais, corrija-o.'
       } else brancos[0].quantidade = resto
     }
   }
@@ -385,6 +395,24 @@ export async function cadastrarCervejaComLotes(olistId: number, codigo: string, 
   const problema = conferirLotesNovos(novos, { estoque, lotes: [], nosLotes: 0 })
   if (problema) return problema
 
+  const cerveja = await inserirCervejaDaOlist(supabase, produto, codigo)
+  if ('erro' in cerveja) return falha(cerveja.erro)
+
+  const { error: erroLotes } = await supabase.from('lotes').insert(linhasParaGravar(cerveja.id, novos))
+  if (erroLotes) {
+    // Sem os lotes a cerveja não fica no controle (nem a foto copiada).
+    await desfazerCervejaNova(supabase, cerveja)
+    return falha(traduzirErro(erroLotes))
+  }
+  await conciliar(supabase, cerveja.id)
+  revalidatePath('/lotes', 'layout')
+  redirect(`/lotes/${cerveja.id}`)
+}
+
+type ProdutoDaOlist = { id: number; sku: string | null; nome: string; foto: string | null; estoque: number | null }
+
+/** Põe no controle a cerveja lida na Olist (com a foto copiada). `codigo` vira o SKU só se o produto não tiver SKU lá. */
+async function inserirCervejaDaOlist(supabase: Supabase, produto: ProdutoDaOlist, codigo: string): Promise<{ id: string; foto: string | null } | { erro: string }> {
   const foto = produto.foto ? await copiarFotoDaOlist(supabase, produto.foto) : null
   const { data: cerveja, error } = await supabase
     .from('lotes_cervejas')
@@ -401,19 +429,15 @@ export async function cadastrarCervejaComLotes(olistId: number, codigo: string, 
     .single()
   if (error) {
     await apagarFotoCopiada(supabase, foto)
-    return falha(traduzirErro(error))
+    return { erro: traduzirErro(error) }
   }
+  return { id: cerveja.id, foto }
+}
 
-  const { error: erroLotes } = await supabase.from('lotes').insert(linhasParaGravar(cerveja.id, novos))
-  if (erroLotes) {
-    // Sem os lotes a cerveja não fica no controle (nem a foto copiada).
-    await supabase.from('lotes_cervejas').delete().eq('id', cerveja.id)
-    await apagarFotoCopiada(supabase, foto)
-    return falha(traduzirErro(erroLotes))
-  }
-  await conciliar(supabase, cerveja.id)
-  revalidatePath('/lotes', 'layout')
-  redirect(`/lotes/${cerveja.id}`)
+/** Tira do controle a cerveja que acabou de entrar (o salvar não se completou), com a foto copiada. */
+async function desfazerCervejaNova(supabase: Supabase, cerveja: { id: string; foto: string | null }) {
+  await supabase.from('lotes_cervejas').delete().eq('id', cerveja.id)
+  await apagarFotoCopiada(supabase, cerveja.foto)
 }
 
 /**
@@ -461,4 +485,131 @@ export async function excluirLote(id: string): Promise<EstadoAcao> {
   if (error) return falha(traduzirErro(error))
   revalidatePath('/lotes', 'layout')
   return sucesso('Lote excluído.')
+}
+
+// -----------------------------------------------------------------------------
+// Balanço de estoque — a contagem do CRM vira o estoque da Olist
+// -----------------------------------------------------------------------------
+
+type ContagemDoBalanco = {
+  lotes: Array<{ id: string; quantidade: number }>
+  novos: Array<{ lote: string; validade: string; quantidade: number }>
+}
+
+/**
+ * Lê a contagem do formulário do balanço: "contagem.0.id" + "contagem.0.quantidade" para cada
+ * lote que já existe e "novos.0.lote" / "novos.0.quantidade" / "novos.0.validade" para lotes
+ * novos (linha toda em branco é ignorada). O balanço só segue com "confirmado=sim", que a tela
+ * envia depois da janela de conferência.
+ */
+function lerContagemDoBalanco(formData: FormData): { contagem: ContagemDoBalanco; total: number } | { erro: EstadoAcao } {
+  const objeto = formParaObjeto(formData)
+  if (objeto.confirmado !== 'sim') return { erro: falha('Confira os números na janela de confirmação antes de enviar o balanço.') }
+  const texto = (valor: unknown) => (typeof valor === 'string' ? valor.trim() : '')
+  const erros: Record<string, string[]> = {}
+  const anotar = (prefixo: string, problemas: Array<{ path: PropertyKey[]; message: string }>) => {
+    for (const problema of problemas) (erros[`${prefixo}.${String(problema.path[0])}`] ??= []).push(problema.message)
+  }
+
+  const lotes: ContagemDoBalanco['lotes'] = []
+  agruparLista(objeto, 'contagem').contagem.forEach((linha, indice) => {
+    const dados = esquemaContagemDoLote.safeParse(linha)
+    if (dados.success) lotes.push(dados.data)
+    else anotar(`contagem.${indice}`, dados.error.issues)
+  })
+
+  const novos: ContagemDoBalanco['novos'] = []
+  agruparLista(objeto, 'novos')
+    .novos.slice(0, MAX_LOTES_POR_VEZ)
+    .forEach((linha, indice) => {
+      if (!texto(linha.lote) && !texto(linha.quantidade) && !texto(linha.validade)) return
+      const dados = esquemaLoteNovoNoBalanco.safeParse(linha)
+      if (dados.success) novos.push(dados.data)
+      else anotar(`novos.${indice}`, dados.error.issues)
+    })
+
+  if (Object.keys(erros).length) return { erro: { ok: false, mensagem: 'Revise os campos destacados.', erros } }
+  if (lotes.length + novos.length === 0) return { erro: falha('Informe ao menos um lote com a quantidade contada.') }
+  const total = [...lotes, ...novos].reduce((soma, l) => soma + l.quantidade, 0)
+  if (total > MAX_BALANCO) {
+    return { erro: falha(`O total contado (${formatarNumero(total)} un.) passa do limite de ${formatarNumero(MAX_BALANCO)} unidades por cerveja. Confira os números.`) }
+  }
+  return { contagem: { lotes, novos }, total }
+}
+
+type ResultadoDoEnvio = { situacao: 'concluido'; balancoId: number } | { situacao: 'recusado' | 'conferir'; mensagem: string }
+
+/**
+ * Registra a contagem (banco) e pede ao servidor que lance o balanço na Olist. O registro nasce
+ * ANTES do envio, com quem contou e a contagem; o servidor só lança a partir dele, confere o saldo
+ * na Olist e grava os lotes iguais à contagem, tudo com histórico.
+ */
+async function enviarBalanco(supabase: Supabase, cervejaId: string, contagem: ContagemDoBalanco): Promise<ResultadoDoEnvio> {
+  const { data: registro, error } = await supabase.rpc('iniciar_balanco_dos_lotes', { p_cerveja_id: cervejaId, p_contagem: contagem })
+  if (error) return { situacao: 'recusado', mensagem: traduzirErro(error) }
+  const balancoId = Number((registro as { id?: unknown } | null)?.id)
+  if (!Number.isSafeInteger(balancoId) || balancoId <= 0) return { situacao: 'recusado', mensagem: 'Não foi possível registrar o balanço. Nada foi alterado.' }
+
+  const resposta = await pedirARotinaEstoque({ acao: 'lote-balanco', balanco: balancoId })
+  revalidatePath('/lotes', 'layout')
+  if (!('balanco' in resposta)) {
+    // O servidor não respondeu: não dá para saber se o lançamento chegou à Olist.
+    const motivo = 'mensagem' in resposta ? resposta.mensagem : 'sem resposta do servidor'
+    return {
+      situacao: 'conferir',
+      mensagem: `Não deu para confirmar o balanço (${motivo}). Espere alguns minutos e confira o histórico desta cerveja e o estoque na Olist antes de tentar de novo.`,
+    }
+  }
+  if (resposta.balanco.situacao !== 'concluido') return { situacao: resposta.balanco.situacao, mensagem: resposta.balanco.mensagem }
+  return { situacao: 'concluido', balancoId }
+}
+
+/**
+ * BALANÇO DE ESTOQUE de uma cerveja do controle — escreve na Olist. A equipe informa quanto
+ * contou de cada lote (e os lotes novos, se chegou mercadoria); a soma vira o estoque da cerveja
+ * na Olist, exatamente esse número, e os lotes do CRM ficam iguais à contagem. Só o número do
+ * estoque muda na Olist. No fim, abre a cerveja com o resultado do balanço.
+ */
+export async function lancarBalanco(cervejaId: string, _: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
+  const { supabase } = await exigirEquipe()
+  const lida = lerContagemDoBalanco(formData)
+  if ('erro' in lida) return lida.erro
+
+  const envio = await enviarBalanco(supabase, cervejaId, lida.contagem)
+  if (envio.situacao !== 'concluido') return falha(envio.mensagem)
+  redirect(`/lotes/${cervejaId}?balanco=${envio.balancoId}`)
+}
+
+/**
+ * Balanço de uma cerveja que ainda NÃO está no controle (vem da prévia da busca; por exemplo,
+ * mercadoria nova com estoque zerado na Olist): a cerveja entra no controle e o balanço lança na
+ * Olist os lotes informados. Se a Olist recusar (nada mudou lá), a cerveja sai do controle de
+ * novo. `codigo`: o que foi bipado/digitado, usado como SKU só se o produto não tiver SKU na Olist.
+ */
+export async function lancarBalancoDeCervejaNova(olistId: number, codigo: string, estadoAnterior: EstadoAcao, formData: FormData): Promise<EstadoAcao> {
+  const { supabase } = await exigirEquipe()
+  if (!Number.isSafeInteger(olistId) || olistId <= 0) return falha('Produto inválido. Volte e busque a cerveja de novo.')
+  const lida = lerContagemDoBalanco(formData)
+  if ('erro' in lida) return lida.erro
+
+  // Entrou no controle enquanto a tela estava aberta: o balanço é o da cerveja (com os lotes dela).
+  const { data: existente } = await supabase.from('lotes_cervejas').select('id').eq('olist_id', olistId).maybeSingle()
+  if (existente) redirect(`/lotes/${existente.id}/balanco`)
+
+  const consulta = await consultarOlist({ acao: 'lote-produto', id: olistId })
+  if (!consulta.ok) return falha(consulta.mensagem)
+  if (!consulta.produto) return falha('Este produto não existe mais na Olist. Volte e busque a cerveja de novo.')
+  const cerveja = await inserirCervejaDaOlist(supabase, consulta.produto, codigo)
+  if ('erro' in cerveja) return falha(cerveja.erro)
+
+  const envio = await enviarBalanco(supabase, cerveja.id, lida.contagem)
+  if (envio.situacao === 'concluido') redirect(`/lotes/${cerveja.id}?balanco=${envio.balancoId}`)
+  if (envio.situacao === 'recusado') {
+    // Nada mudou na Olist: a cerveja não fica no controle pela metade.
+    await desfazerCervejaNova(supabase, cerveja)
+    revalidatePath('/lotes', 'layout')
+    return falha(envio.mensagem)
+  }
+  // Sem confirmação: a cerveja fica no controle, e a tela dela mostra o balanço a conferir.
+  redirect(`/lotes/${cerveja.id}`)
 }

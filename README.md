@@ -647,6 +647,18 @@ Como funciona:
 - O refresh token da Olist muda a cada uso: a renovação tem trava (`integracao_olist.renovando_token_desde`) e é compartilhada com a sincronização de vendas (`src/features/olist/token.ts`).
 - Código: `src/features/olist/estoque.ts` (fila, leituras, webhook), `rotina-estoque.ts` (pedidos da tela), `components/janela-olist.tsx`; migration `20261113180000_estoque_olist.sql`; testes no `npm run db:test`.
 
+#### 11.5.2 Balanço de estoque pelos lotes (a contagem vai para a Olist)
+
+Em **Lotes e validades**, o botão **Balanço de estoque** da cerveja abre a contagem por lote: a equipe informa quanto contou de cada lote (0 se acabou) e, se chegou mercadoria, os lotes novos. **A soma vira o estoque da cerveja na Olist — exatamente esse número** (lançamento do tipo "Balanço" da Olist), e os lotes do CRM ficam iguais à contagem. Cerveja que ainda não está no controle faz o balanço pela prévia da busca (`/lotes/novo/balanco`) e entra no controle junto.
+
+- **Só o número do estoque muda na Olist.** A trava de escrita (`conferirEscritaOlist`, em `src/features/olist/api.ts`) só deixa passar `POST /estoque/{id}` com os campos `tipo`, `quantidade`, `precoUnitario` (o custo médio atual) e `observacoes`: tipos S/E de 1 a 1.000 un. (pré-vendas) e tipo B de 0 a 100.000 un. (balanço). Cadastro, preços, custo, EAN e peso nunca são enviados. Testado no produto clone de teste: o cadastro fica idêntico, só o saldo muda. **Não afrouxe a trava.**
+- **Todo balanço nasce de um registro.** A tela chama `iniciar_balanco_dos_lotes` (banco), que valida a contagem e grava em `lotes_balancos` quem contou, a contagem de cada lote e o total. O servidor (`enviarBalancoParaOlist`, em `src/features/lotes/olist.ts`, pela rota `/api/cron/olist-estoque` com `{ acao: 'lote-balanco', balanco }`) só lança a partir desse registro, uma vez só e logo depois de criado: lê o saldo, lança, lê de novo para conferir e chama `concluir_balanco_dos_lotes`, que numa transação deixa os lotes iguais à contagem e registra tudo no histórico do produto (`lote_movimentos`: evento `balanco` + o ajuste de cada lote, com o autor).
+- **Falhas ficam registradas.** A Olist recusou (4xx) → `recusado`: nada mudou lá nem nos lotes. Sem resposta, ou a Olist mudou e os lotes não foram gravados → `conferir`: a tela da cerveja avisa, e refazer o balanço com os mesmos números resolve (o balanço troca o saldo pelo número, então repetir não soma nada). Os dois viram `falha_balanco` no histórico.
+- **Observação na Olist:** `BALANÇO PELO CRM #id · contado N un. (a Olist tinha M) · por Fulano · lotes: L1 q1, L2 q2…` (até 250 caracteres).
+- **Caixa VIP:** a cerveja que entra numa Caixa VIP já saiu do estoque da Olist, mas a garrafa fica na prateleira até a caixa ser separada. O balanço envia o número exato e **avisa** quantas unidades estão nessa situação (`caixa_vip_do_produto_olist`), para a equipe não contar essas garrafas.
+- **Salvar lote não é balanço.** O formulário "Salvar lote" só organiza em lotes as unidades que já estão na Olist (não envia nada, e não deixa passar do estoque de lá). Para lançar mercadoria nova ou corrigir o número, é o balanço.
+- Código: `src/features/lotes/` (`actions.ts` → `lancarBalanco`, `components/formulario-balanco.tsx`), migration `20261127120000_balanco_de_estoque_dos_lotes.sql`; teste: `node scripts/testar-balanco.mjs`.
+
 ### 11.6 Banco de Leads (importação de listas)
 
 - **Onde:** menu **Banco de Leads** → pastas (ex.: "Central da Cerveja") → listas (ex.: "Grupo VIP").

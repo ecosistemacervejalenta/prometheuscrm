@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { Beer, RefreshCw, SearchX } from 'lucide-react'
+import { Beer, ClipboardCheck, RefreshCw, SearchX } from 'lucide-react'
 
 import { ButtonLink } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
@@ -20,6 +20,8 @@ const VOLTAR = { href: '/lotes', rotulo: 'Lotes e validades' }
  * Prévia da cerveja buscada (bipada ou pelo SKU) que ainda não está no controle. SÓ CONSULTA:
  * mostra o que veio da Olist e o formulário do lote; a cerveja só entra no controle quando o lote
  * é salvo. Sair desta tela sem salvar não deixa nada gravado.
+ * Dois caminhos a partir daqui: cadastrar o lote das unidades que JÁ estão na Olist (não muda nada
+ * lá) ou fazer o balanço de estoque (mercadoria nova / contagem: o total vai para a Olist).
  */
 export default async function PaginaPreviaDaCerveja({ searchParams }: PageProps<'/lotes/novo'>) {
   const busca = await searchParams
@@ -51,6 +53,7 @@ export default async function PaginaPreviaDaCerveja({ searchParams }: PageProps<
 
   const { produto } = previa
   const estoque = produto.estoque === null ? null : Math.max(Math.floor(produto.estoque), 0)
+  const balanco = `/lotes/novo/balanco?${new URLSearchParams({ produto: String(olistId), codigo })}`
 
   return (
     <>
@@ -85,13 +88,36 @@ export default async function PaginaPreviaDaCerveja({ searchParams }: PageProps<
           </dl>
         </Card>
 
-        <Card>
-          <CardHeader
-            titulo="Lotes e validades"
-            descricao="Preencha o lote e a validade e salve: só então a cerveja entra no controle. Dá para lançar vários lotes de uma vez."
-          />
-          <FormularioNovosLotes acao={cadastrarCervejaComLotes.bind(null, olistId, codigo)} temLotes={false} estoqueOlist={estoque} semLote={estoque} foco />
-        </Card>
+        {estoque === 0 ? (
+          <Card>
+            <CardHeader
+              titulo="Sem estoque na Olist"
+              descricao="A Olist está com 0 un. desta cerveja, então não há unidades para separar em lotes. Se a mercadoria chegou, lance o estoque pelo balanço: você informa lote, quantidade e validade, e o total vai para a Olist."
+            />
+            <div className="px-4 pb-4 lg:px-5 lg:pb-5">
+              <ButtonLink href={balanco} variante="primario" tamanho="md">
+                <ClipboardCheck /> Lançar estoque (balanço)
+              </ButtonLink>
+            </div>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader
+              titulo="Lotes e validades"
+              descricao="Preencha o lote e a validade das unidades que já estão na Olist e salve: só então a cerveja entra no controle. Dá para lançar vários lotes de uma vez."
+              acoes={
+                <ButtonLink href={balanco} tamanho="sm">
+                  <ClipboardCheck /> Balanço de estoque
+                </ButtonLink>
+              }
+            />
+            <FormularioNovosLotes acao={cadastrarCervejaComLotes.bind(null, olistId, codigo)} temLotes={false} estoqueOlist={estoque} semLote={estoque} foco />
+            <p className="border-t border-linha px-4 py-3 text-[13px] text-suave lg:px-5">
+              Chegou mercadoria ou o número da Olist não bate com a prateleira? Use o <strong>Balanço de estoque</strong>: ele manda o total contado para a
+              Olist.
+            </p>
+          </Card>
+        )}
       </div>
     </>
   )

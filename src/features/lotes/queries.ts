@@ -85,6 +85,84 @@ export async function obterCervejaDosLotes(id: string): Promise<CervejaComLotes 
   return data ? paraCerveja(data) : null
 }
 
+// Balanço de estoque -----------------------------------------------------------------------------
+
+export type CaixaVipDoProduto = {
+  /** Unidades em pedidos de pré-venda ainda não separados, com a baixa já lançada na Olist. */
+  naOlist: number
+  /** Idem, com a baixa ainda não enviada à Olist (vai descontar depois do balanço). */
+  aCaminho: number
+}
+
+/**
+ * Unidades desta cerveja que estão em Caixas VIP ainda não separadas (a garrafa segue na
+ * prateleira, mas já está vendida). É o aviso do balanço: quem conta essas garrafas junto devolve
+ * à venda cerveja já vendida. Se a consulta falhar, a tela segue sem o aviso (e registra o erro).
+ */
+export async function caixaVipDoProduto(olistId: number): Promise<CaixaVipDoProduto> {
+  const { supabase } = await exigirEquipe()
+  const { data, error } = await supabase.rpc('caixa_vip_do_produto_olist', { p_olist_id: olistId })
+  if (error) console.error('[lotes] caixa VIP do produto', error.message)
+  return { naOlist: data?.[0]?.na_olist ?? 0, aCaminho: data?.[0]?.a_caminho ?? 0 }
+}
+
+/**
+ * Estoque da cerveja na Olist lido AGORA (para a tela do balanço mostrar o número de lá na hora
+ * da contagem). Só consulta. Devolve `lidoAgora: false` se a Olist não respondeu — a tela cai na
+ * última leitura guardada.
+ */
+export async function estoqueAgoraNaOlist(olistId: number): Promise<{ estoque: number | null; lidoAgora: boolean }> {
+  await exigirEquipe()
+  const resposta = await pedirARotinaEstoque({ acao: 'lote-produto', id: olistId })
+  if (!('produtoLote' in resposta) || !resposta.produtoLote) return { estoque: null, lidoAgora: false }
+  const { estoque } = resposta.produtoLote
+  // Sem arredondar para zero: saldo negativo na Olist existe, e o balanço serve justamente para corrigir.
+  return { estoque: estoque === null ? null : Math.floor(estoque), lidoAgora: true }
+}
+
+export type SituacaoDoBalanco = 'enviando' | 'concluido' | 'recusado' | 'conferir'
+
+export type BalancoDoProduto = {
+  id: number
+  situacao: SituacaoDoBalanco
+  /** O número enviado à Olist. */
+  total: number
+  /** Saldo da Olist logo antes e logo depois do lançamento (nulos se não chegou a ler). */
+  estoqueAntes: number | null
+  estoqueDepois: number | null
+  idLancamento: number | null
+  erro: string | null
+  autor: string | null
+  criadoEm: string
+}
+
+/**
+ * O balanço `id` (se for deste produto) e o balanço mais recente dele. A tela da cerveja mostra o
+ * resultado do balanço que acabou de ser feito e avisa quando o último ficou sem confirmação.
+ */
+export async function balancosDoProduto(olistId: number, id?: number): Promise<{ pedido: BalancoDoProduto | null; ultimo: BalancoDoProduto | null }> {
+  const { supabase } = await exigirEquipe()
+  const campos = 'id, status, total, estoque_antes, estoque_depois, id_lancamento, erro, criado_em, perfis(nome)'
+  const [ultimo, pedido] = await Promise.all([
+    supabase.from('lotes_balancos').select(campos).eq('olist_id', olistId).order('id', { ascending: false }).limit(1).maybeSingle(),
+    id ? supabase.from('lotes_balancos').select(campos).eq('olist_id', olistId).eq('id', id).maybeSingle() : null,
+  ])
+  // Sem a tabela (migration ainda não aplicada) a tela da cerveja continua funcionando.
+  if (ultimo.error) console.error('[lotes] balanços', ultimo.error.message)
+  const paraBalanco = (b: NonNullable<typeof ultimo.data>): BalancoDoProduto => ({
+    id: b.id,
+    situacao: b.status as SituacaoDoBalanco,
+    total: b.total,
+    estoqueAntes: b.estoque_antes === null ? null : Number(b.estoque_antes),
+    estoqueDepois: b.estoque_depois === null ? null : Number(b.estoque_depois),
+    idLancamento: b.id_lancamento,
+    erro: b.erro,
+    autor: b.perfis?.nome ?? null,
+    criadoEm: b.criado_em,
+  })
+  return { ultimo: ultimo.data ? paraBalanco(ultimo.data) : null, pedido: pedido?.data ? paraBalanco(pedido.data) : null }
+}
+
 export type PreviaDaCerveja =
   /** Já está no controle: a tela abre o cadastro dela. */
   | { tipo: 'no-controle'; id: string }
@@ -193,6 +271,8 @@ export type TipoMovimento =
   | 'cerveja_removida'
   | 'alerta_grupo'
   | 'tratativa'
+  | 'balanco'
+  | 'falha_balanco'
 
 export type MovimentoDoLote = {
   id: number
@@ -202,7 +282,7 @@ export type MovimentoDoLote = {
   saldo: number | null
   estoque_antes: number | null
   estoque_depois: number | null
-  /** rotina | aviso_olist | botao | salvar_lote | cadastro | conferencia | manual | alteracao_direta */
+  /** rotina | aviso_olist | botao | salvar_lote | cadastro | conferencia | manual | alteracao_direta | balanco */
   origem: string | null
   /** O que mudou, campo a campo, e outras informações do evento. */
   detalhes: Record<string, unknown>

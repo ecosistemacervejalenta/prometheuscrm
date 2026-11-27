@@ -43,7 +43,8 @@ function TextoDaQuantidade({ temLotes, estoque, semLote }: { temLotes: boolean; 
   }
   return (
     <>
-      Todas as {un(estoque)} da Olist já estão nos lotes. Se chegou mercadoria, dê entrada na Olist primeiro: o CRM lê o estoque na hora de salvar.
+      Todas as {un(estoque)} da Olist já estão nos lotes. Se chegou mercadoria ou a contagem não bate, use o Balanço de estoque: ele manda o número
+      contado para a Olist.
     </>
   )
 }
@@ -151,7 +152,7 @@ export function FormularioNovosLotes({
       </div>
       <Alert tom="info" titulo="Quantidade" className="mt-3">
         <TextoDaQuantidade temLotes={temLotes} estoque={estoqueOlist} semLote={semLote} />{' '}
-        Depois, cada venda na Olist baixa sozinha do lote que vence primeiro.
+        Salvar aqui não muda nada na Olist. Depois, cada venda na Olist baixa sozinha do lote que vence primeiro.
       </Alert>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <Button variante="secundario" onClick={abrirLinha} disabled={linhas.length >= MAX_LOTES_POR_VEZ}>

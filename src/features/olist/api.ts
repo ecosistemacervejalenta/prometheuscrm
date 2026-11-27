@@ -89,12 +89,16 @@ type OpcoesRequisicao = {
 
 /**
  * TRAVA DE ESCRITA — a Olist é o ERP da empresa. O CRM só LÊ a Olist, com UMA exceção: lançar
- * entrada/saída de estoque (POST /estoque/{id}, o mesmo que "Lançar estoque" na tela da Olist).
+ * estoque (POST /estoque/{id}, o mesmo que "Lançar estoque" na tela da Olist): entrada e saída
+ * (pré-vendas) e balanço (contagem do módulo Lotes e validades — autorizado pelo dono da loja em
+ * 2026-11-27; testado no produto clone: troca só o saldo, o cadastro fica idêntico).
  * Nada de cadastro de produto (descrição, peso, EAN, preços, custo...), pedidos ou notas.
  * Qualquer outra escrita é barrada aqui, antes de sair do servidor. Não afrouxe esta trava.
  */
 const ESCRITA_PERMITIDA = /^\/estoque\/\d+$/
 const CAMPOS_DO_LANCAMENTO = new Set(['tipo', 'quantidade', 'precoUnitario', 'observacoes'])
+/** Teto de um balanço (o total contado de uma cerveja): acima disso é erro de digitação. */
+export const MAX_BALANCO_OLIST = 100_000
 
 export class EscritaBloqueadaOlist extends Error {}
 
@@ -111,10 +115,12 @@ function conferirEscritaOlist(metodo: string, caminho: string, corpo: unknown) {
   const dados = corpo as Record<string, unknown>
   const extras = Object.keys(dados).filter((campo) => !CAMPOS_DO_LANCAMENTO.has(campo))
   if (extras.length) bloquear(`campo não permitido: ${extras.join(', ')}.`)
-  // "B" (balanço) troca o saldo inteiro por um número: proibido. Só entrada ou saída.
-  if (dados.tipo !== 'S' && dados.tipo !== 'E') bloquear('tipo precisa ser S (saída) ou E (entrada).')
+  // S (saída) e E (entrada): de 1 a 1.000 unidades. B (balanço) troca o saldo inteiro pelo número
+  // contado — só lancarBalancoEstoqueOlist usa —, de 0 a MAX_BALANCO_OLIST.
+  if (dados.tipo !== 'S' && dados.tipo !== 'E' && dados.tipo !== 'B') bloquear('tipo precisa ser S (saída), E (entrada) ou B (balanço).')
   const { quantidade, precoUnitario } = dados
-  if (typeof quantidade !== 'number' || !Number.isInteger(quantidade) || quantidade <= 0 || quantidade > 1000) bloquear('quantidade inválida.')
+  const [minimo, maximo] = dados.tipo === 'B' ? [0, MAX_BALANCO_OLIST] : [1, 1000]
+  if (typeof quantidade !== 'number' || !Number.isInteger(quantidade) || quantidade < minimo || quantidade > maximo) bloquear('quantidade inválida.')
   if (typeof precoUnitario !== 'number' || !Number.isFinite(precoUnitario) || precoUnitario < 0) bloquear('preço unitário inválido.')
 }
 
@@ -451,7 +457,7 @@ export async function obterEstoqueOlist(accessToken: string, id: number, opcoes:
  * saída da venda, nem na entrada da devolução). Nunca usar o preço de custo nem o de venda aqui:
  * com média 0, uma entrada pelo preço de custo puxaria a média para cima.
  */
-async function custoUnitarioOlist(accessToken: string, id: number): Promise<number> {
+export async function custoUnitarioOlist(accessToken: string, id: number): Promise<number> {
   const p = (await requisicao(`/produtos/${id}`, accessToken, { esperarLimite: false })) as {
     precos?: { precoCustoMedio?: number | null } | null
   } | null
@@ -477,6 +483,31 @@ export async function lancarEstoqueOlist(
       quantidade: lancamento.quantidade,
       precoUnitario,
       observacoes: lancamento.observacoes.slice(0, 250),
+    },
+  })) as { idLancamento?: number } | null
+  return typeof r?.idLancamento === 'number' ? r.idLancamento : null
+}
+
+/**
+ * BALANÇO (tipo B): troca o saldo do produto na Olist pelo número contado — exatamente esse
+ * número, inclusive 0. Só o balanço do módulo Lotes e validades chama (lotes/olist.ts, a partir
+ * de um registro em lotes_balancos). Não toca em mais nada do produto. Devolve o id do lançamento.
+ * `precoUnitario`: SEMPRE o de custoUnitarioOlist (o custo médio atual), lido antes pelo chamador
+ * — assim, um erro daqui é sempre do envio em si (e não de uma leitura anterior a ele).
+ */
+export async function lancarBalancoEstoqueOlist(
+  accessToken: string,
+  id: number,
+  balanco: { quantidade: number; precoUnitario: number; observacoes: string },
+): Promise<number | null> {
+  const r = (await requisicao(`/estoque/${id}`, accessToken, {
+    metodo: 'POST',
+    esperarLimite: false,
+    corpo: {
+      tipo: 'B',
+      quantidade: balanco.quantidade,
+      precoUnitario: balanco.precoUnitario,
+      observacoes: balanco.observacoes.slice(0, 250),
     },
   })) as { idLancamento?: number } | null
   return typeof r?.idLancamento === 'number' ? r.idLancamento : null

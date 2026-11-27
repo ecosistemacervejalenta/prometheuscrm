@@ -4,6 +4,7 @@ import {
   CircleCheck,
   ArrowUpRight,
   CircleAlert,
+  ClipboardCheck,
   Info,
   PackagePlus,
   PackageX,
@@ -39,6 +40,8 @@ const VISUAL: Record<TipoMovimento, { icone: LucideIcon; classe: string }> = {
   cerveja_removida: { icone: PackageX, classe: 'bg-perigo-50 text-perigo' },
   alerta_grupo: { icone: BellRing, classe: 'bg-alerta-50 text-alerta' },
   tratativa: { icone: CircleCheck, classe: 'bg-sucesso-50 text-sucesso' },
+  balanco: { icone: ClipboardCheck, classe: 'bg-ink text-white' },
+  falha_balanco: { icone: CircleAlert, classe: 'bg-perigo-50 text-perigo' },
 }
 
 const FAIXAS: Record<string, string> = { alerta: 'Alerta (16 a 30 dias)', atencao: 'Atenção (8 a 15 dias)', critico: 'Crítico (até 7 dias)' }
@@ -53,6 +56,7 @@ const ORIGENS: Record<string, string> = {
   manual: 'mudança da equipe',
   alteracao_direta: 'alteração direta no banco (fora do CRM)',
   leitura: 'leitura da Olist',
+  balanco: 'balanço de estoque',
 }
 
 const un = (n: number) => `${formatarNumero(n)} un.`
@@ -146,6 +150,49 @@ function descrever(m: MovimentoDoLote): { titulo: string; complemento?: string; 
     }
     case 'tratativa':
       return { titulo: `Tratativa do lote ${lote} registrada`, complemento: texto(d.texto) ?? undefined }
+    case 'balanco': {
+      const antes = m.estoque_antes
+      const depois = m.estoque_depois
+      const lotes = Array.isArray(d.lotes) ? (d.lotes as Array<Record<string, unknown>>) : []
+      const lancamento = numero(d.id_lancamento)
+      const conferido = numero(d.conferido_na_olist)
+      const contagem = lotes
+        .map((l) => {
+          const contado = numero(l.contado)
+          const quantoHavia = numero(l.antes)
+          const comoEra = l.novo ? 'lote novo' : quantoHavia === null ? 'sem quantidade antes' : quantoHavia === contado ? 'igual' : `eram ${formatarNumero(quantoHavia)}`
+          return `${texto(l.lote)} ${contado === null ? '—' : formatarNumero(contado)} (${comoEra})`
+        })
+        .join('; ')
+      return {
+        titulo:
+          depois === null
+            ? 'Balanço de estoque enviado à Olist'
+            : antes === null
+              ? `Balanço de estoque: a Olist ficou com ${un(depois)}`
+              : antes === depois
+                ? `Balanço de estoque: a Olist continua com ${un(depois)}`
+                : `Balanço de estoque: a Olist passou de ${formatarNumero(antes)} para ${un(depois)} (${comSinal(depois - antes)})`,
+        complemento: [
+          contagem ? `Contagem por lote: ${contagem}.` : null,
+          lancamento !== null ? `Lançamento ${lancamento} na Olist.` : null,
+          conferido !== null && depois !== null && conferido !== depois ? `Na conferência a Olist mostrou ${un(conferido)}.` : null,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      }
+    }
+    case 'falha_balanco': {
+      const total = numero(d.total)
+      return {
+        titulo:
+          texto(d.situacao) === 'recusado'
+            ? `Balanço de estoque não foi aceito${total === null ? '' : ` (seriam ${un(total)})`}: nada mudou na Olist`
+            : `Balanço de estoque sem confirmação${total === null ? '' : ` (seriam ${un(total)})`}: confira o estoque na Olist`,
+        complemento: texto(d.erro) ?? undefined,
+        destaque: 'erro',
+      }
+    }
     case 'cerveja_removida': {
       const lotes = Array.isArray(d.lotes) ? (d.lotes as Array<Record<string, unknown>>) : []
       return {

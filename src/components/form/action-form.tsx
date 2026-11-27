@@ -22,12 +22,15 @@ export function useFormulario() {
  * - Mantém os valores digitados quando a validação falha (não reseta o form).
  * - Exibe a mensagem geral no topo e os erros por campo via <Field name="...">.
  * - Em caso de sucesso, a action normalmente faz redirect(); ou use `aoConcluir`.
+ * - `antesDeEnviar` pode segurar o envio (devolvendo false) para pedir uma confirmação e mandar
+ *   de novo depois; também pode acrescentar campos aos dados.
  */
 export function ActionForm({
   action,
   children,
   className,
   aoConcluir,
+  antesDeEnviar,
   limparAoConcluir = false,
   mostrarSucesso = true,
   classeMensagem = 'mb-5',
@@ -36,6 +39,8 @@ export function ActionForm({
   children: ReactNode
   className?: string
   aoConcluir?: (estado: EstadoAcao) => void
+  /** Roda a cada envio, antes da action. Devolver false cancela este envio. */
+  antesDeEnviar?: (dados: FormData) => boolean
   limparAoConcluir?: boolean
   mostrarSucesso?: boolean
   /** Margens da mensagem geral (para formulários sem padding próprio, como os cartões de ajuste). */
@@ -64,6 +69,7 @@ export function ActionForm({
         onSubmit={(evento) => {
           evento.preventDefault()
           const dados = new FormData(evento.currentTarget)
+          if (antesDeEnviar && !antesDeEnviar(dados)) return
           startTransition(() => despachar(dados))
         }}
       >

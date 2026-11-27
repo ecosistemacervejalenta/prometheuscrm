@@ -2246,6 +2246,93 @@ export type Database = {
           },
         ]
       }
+      lotes_balancos: {
+        Row: {
+          autor_id: string | null
+          caixa_vip: number
+          caixa_vip_a_caminho: number
+          cerveja_id: string | null
+          concluido_em: string | null
+          contagem: Json
+          criado_em: string
+          envio_iniciado_em: string | null
+          erro: string | null
+          estoque_antes: number | null
+          estoque_crm_antes: number | null
+          estoque_depois: number | null
+          id: number
+          id_lancamento: number | null
+          nome: string | null
+          observacao: string | null
+          olist_id: number
+          sku: string | null
+          soma_antes: number | null
+          status: string
+          total: number
+        }
+        Insert: {
+          autor_id?: string | null
+          caixa_vip?: number
+          caixa_vip_a_caminho?: number
+          cerveja_id?: string | null
+          concluido_em?: string | null
+          contagem: Json
+          criado_em?: string
+          envio_iniciado_em?: string | null
+          erro?: string | null
+          estoque_antes?: number | null
+          estoque_crm_antes?: number | null
+          estoque_depois?: number | null
+          id?: number
+          id_lancamento?: number | null
+          nome?: string | null
+          observacao?: string | null
+          olist_id: number
+          sku?: string | null
+          soma_antes?: number | null
+          status?: string
+          total: number
+        }
+        Update: {
+          autor_id?: string | null
+          caixa_vip?: number
+          caixa_vip_a_caminho?: number
+          cerveja_id?: string | null
+          concluido_em?: string | null
+          contagem?: Json
+          criado_em?: string
+          envio_iniciado_em?: string | null
+          erro?: string | null
+          estoque_antes?: number | null
+          estoque_crm_antes?: number | null
+          estoque_depois?: number | null
+          id?: number
+          id_lancamento?: number | null
+          nome?: string | null
+          observacao?: string | null
+          olist_id?: number
+          sku?: string | null
+          soma_antes?: number | null
+          status?: string
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lotes_balancos_autor_id_fkey"
+            columns: ["autor_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lotes_balancos_cerveja_id_fkey"
+            columns: ["cerveja_id"]
+            isOneToOne: false
+            referencedRelation: "lotes_cervejas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lotes_cervejas: {
         Row: {
           atualizado_em: string
@@ -4348,6 +4435,39 @@ export type Database = {
       whatsapp_do_pedido: { Args: { p_pedido_id: string }; Returns: string }
       fechar_caixa: { Args: { p_pedido_id: string }; Returns: undefined }
       conciliar_lotes: { Args: { p_cerveja_id: string }; Returns: number }
+      caixa_vip_do_produto_olist: {
+        Args: { p_olist_id: number }
+        Returns: {
+          a_caminho: number
+          na_olist: number
+        }[]
+      }
+      concluir_balanco_dos_lotes: {
+        Args: {
+          p_estoque_antes: number | null
+          p_estoque_depois: number | null
+          p_id: number
+          p_id_lancamento: number | null
+          p_observacao: string | null
+        }
+        Returns: undefined
+      }
+      falhar_balanco_dos_lotes: {
+        Args: {
+          p_erro: string
+          p_estoque_antes?: number | null
+          p_estoque_depois?: number | null
+          p_id: number
+          p_id_lancamento?: number | null
+          p_observacao?: string | null
+          p_status: string
+        }
+        Returns: undefined
+      }
+      iniciar_balanco_dos_lotes: {
+        Args: { p_cerveja_id: string; p_contagem: Json }
+        Returns: Json
+      }
       enfileirar_aviso_lote: {
         Args: { p_alerta_id: string; p_payload: Json; p_tipo: string; p_tratativa_id: string | null }
         Returns: string

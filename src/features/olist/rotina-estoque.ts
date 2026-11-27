@@ -2,6 +2,7 @@ import 'server-only'
 
 import { after } from 'next/server'
 
+import type { ResultadoDoBalanco } from '@/features/lotes/olist'
 import { envServidor } from '@/lib/env.server'
 import { urlDaRequisicao } from '@/lib/url'
 
@@ -23,6 +24,9 @@ export type PedidoRotinaEstoque =
   | { acao: 'lote-sku'; sku: string }
   | { acao: 'lote-gtin'; gtin: string }
   | { acao: 'lote-produto'; id: number }
+  // Balanço de estoque (a única escrita dos lotes na Olist): pelo id do registro em lotes_balancos,
+  // nunca por um número avulso.
+  | { acao: 'lote-balanco'; balanco: number }
 
 export type RespostaRotinaEstoque =
   | ({ ok: true } & PaginaBuscaComEstoque)
@@ -31,6 +35,7 @@ export type RespostaRotinaEstoque =
   | { ok: true; produtoLote: ProdutoLoteOlist | null }
   | { ok: true; produtoAchado: ProdutoAchadoOlist | null }
   | { ok: true; produtosGtin: ProdutoAchadoOlist[] }
+  | { ok: true; balanco: ResultadoDoBalanco }
   | { ok: boolean; mensagem: string }
 
 export async function pedirARotinaEstoque(pedido: PedidoRotinaEstoque, site?: string): Promise<RespostaRotinaEstoque> {

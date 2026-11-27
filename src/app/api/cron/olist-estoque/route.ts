@@ -2,7 +2,13 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 import { verificarChave } from '@/features/integracoes/api-auth'
 import { processarAvisosDeValidade } from '@/features/lotes/avisos'
-import { atualizarEstoqueDasCervejasDosLotes, consultarGtinNaOlist, consultarProdutoLoteNaOlist, consultarSkuNaOlist } from '@/features/lotes/olist'
+import {
+  atualizarEstoqueDasCervejasDosLotes,
+  consultarGtinNaOlist,
+  consultarProdutoLoteNaOlist,
+  consultarSkuNaOlist,
+  enviarBalancoParaOlist,
+} from '@/features/lotes/olist'
 import { codigoDeBarras } from '@/features/lotes/schema'
 import { buscarNaOlist, detalhesNaOlist, prepararProdutoOlist, processarFilaEstoqueOlist, rotinaEstoqueOlist } from '@/features/olist/estoque'
 import type { PedidoRotinaEstoque, RespostaRotinaEstoque } from '@/features/olist/rotina-estoque'
@@ -19,7 +25,8 @@ export const maxDuration = 300
  *          algumas cervejas do módulo Lotes e validades (só consulta) e manda ao n8n os avisos de
  *          validade dos lotes (grupo da equipe), das 8h às 20h.
  *   POST → pedidos da tela: { acao: 'buscar', termo, offset? } | { acao: 'detalhes', ids } | { acao: 'produto', id } |
- *          { acao: 'processar' } | { acao: 'lote-sku', sku } | { acao: 'lote-gtin', gtin } | { acao: 'lote-produto', id }.
+ *          { acao: 'processar' } | { acao: 'lote-sku', sku } | { acao: 'lote-gtin', gtin } | { acao: 'lote-produto', id } |
+ *          { acao: 'lote-balanco', balanco } (envia à Olist o balanço registrado em lotes_balancos).
  */
 export async function GET(request: NextRequest) {
   const negado = verificarChave(request, envServidor.cronSecret, 'CRON_SECRET')
@@ -96,6 +103,10 @@ export async function POST(request: NextRequest) {
       case 'lote-produto':
         if (!Number.isSafeInteger(pedido.id) || pedido.id <= 0) return NextResponse.json({ ok: false, mensagem: 'Produto inválido.' }, { status: 400 })
         resposta = { ok: true, produtoLote: await consultarProdutoLoteNaOlist(pedido.id) }
+        break
+      case 'lote-balanco':
+        if (!Number.isSafeInteger(pedido.balanco) || pedido.balanco <= 0) return NextResponse.json({ ok: false, mensagem: 'Balanço inválido.' }, { status: 400 })
+        resposta = { ok: true, balanco: await enviarBalancoParaOlist(pedido.balanco) }
         break
       default:
         return NextResponse.json({ ok: false, mensagem: 'Pedido inválido.' }, { status: 400 })

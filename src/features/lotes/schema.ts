@@ -12,7 +12,7 @@ function dataValida(valor: string) {
 }
 
 /** "1200" ou "1.200" → 1200; vazio → null; outra coisa → undefined (inválido). */
-function lerQuantidade(v: unknown): number | null | undefined {
+export function lerQuantidade(v: unknown): number | null | undefined {
   const digitado = typeof v === 'string' ? v.trim().replace(/\./g, '') : ''
   if (digitado === '') return null
   return /^\d+$/.test(digitado) ? Number(digitado) : undefined
@@ -56,3 +56,20 @@ export const esquemaLoteNovo = z.object({ ...camposDoLote, quantidade: quantidad
 
 /** Edição: a quantidade é obrigatória e aceita zero (o lote acabou, mas o registro fica). */
 export const esquemaLoteEditado = z.object({ ...camposDoLote, quantidade: quantidadeObrigatoria })
+
+// Balanço de estoque -----------------------------------------------------------------------------
+
+/** Teto do total contado de uma cerveja num balanço (o mesmo da trava de escrita da Olist). */
+export const MAX_BALANCO = 100_000
+
+/** Balanço: a quantidade contada de um lote que já existe (obrigatória; zero = o lote acabou). */
+export const esquemaContagemDoLote = z.object({
+  id: z.uuid('Lote inválido. Recarregue a página.'),
+  quantidade: z.preprocess((v) => lerQuantidade(v) ?? undefined, unidades(0, 'Informe quanto contou.')),
+})
+
+/** Balanço: lote novo (mercadoria que chegou). A quantidade é obrigatória e maior que zero. */
+export const esquemaLoteNovoNoBalanco = z.object({
+  ...camposDoLote,
+  quantidade: z.preprocess((v) => lerQuantidade(v) ?? undefined, unidades(1, 'Informe a quantidade.')),
+})

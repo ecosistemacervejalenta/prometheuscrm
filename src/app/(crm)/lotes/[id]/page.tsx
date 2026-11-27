@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { Beer, RefreshCw, Trash2 } from 'lucide-react'
+import { Beer, ClipboardCheck, RefreshCw, ScanBarcode, Trash2 } from 'lucide-react'
 
 import { ActionButton } from '@/components/ui/action-button'
+import { Alert } from '@/components/ui/alert'
 import { ButtonLink } from '@/components/ui/button'
 import { Card, CardHeader } from '@/components/ui/card'
 import { PageHeader } from '@/components/ui/page-header'
@@ -10,22 +11,28 @@ import { adicionarLotes, atualizarCervejaDaOlist, removerCervejaDosLotes } from 
 import { HistoricoLotes } from '@/features/lotes/components/historico-lotes'
 import { FormularioNovosLotes, LinhaLote } from '@/features/lotes/components/lotes-da-cerveja'
 import { FREQUENCIA_LEITURA, quandoLeu } from '@/features/lotes/leitura'
-import { avisosDosLotes, HISTORICO_RESUMIDO, listarHistoricoDoProduto, obterCervejaDosLotes } from '@/features/lotes/queries'
+import { avisosDosLotes, balancosDoProduto, HISTORICO_RESUMIDO, listarHistoricoDoProduto, obterCervejaDosLotes } from '@/features/lotes/queries'
 import { situacaoValidade } from '@/features/lotes/validade'
-import { formatarNumero } from '@/lib/format'
+import { formatarDataHora, formatarNumero } from '@/lib/format'
 import { cn, param } from '@/lib/utils'
 
 export const metadata: Metadata = { title: 'Lotes da cerveja' }
 
 export default async function PaginaLotesDaCerveja({ params, searchParams }: PageProps<'/lotes/[id]'>) {
   const { id } = await params
-  const completo = param((await searchParams).historico) === 'completo'
+  const busca = await searchParams
+  const completo = param(busca.historico) === 'completo'
+  const balancoFeito = Number(param(busca.balanco))
   const cerveja = await obterCervejaDosLotes(id)
   if (!cerveja) notFound()
-  const [historico, avisos] = await Promise.all([
+  const [historico, avisos, balancos] = await Promise.all([
     listarHistoricoDoProduto(cerveja.olist_id, completo),
     avisosDosLotes(cerveja.lotes.map((l) => l.id)),
+    balancosDoProduto(cerveja.olist_id, Number.isSafeInteger(balancoFeito) && balancoFeito > 0 ? balancoFeito : undefined),
   ])
+  // O balanço que acabou de ser feito (a tela do balanço traz para cá) e o último sem confirmação.
+  const concluido = balancos.pedido?.situacao === 'concluido' ? balancos.pedido : null
+  const aConferir = balancos.ultimo && (balancos.ultimo.situacao === 'conferir' || balancos.ultimo.situacao === 'enviando') ? balancos.ultimo : null
 
   const { lotes, nosLotes, semLote } = cerveja
   // Lote esgotado (0 un.) não entra na conta de vencidos.
@@ -51,6 +58,9 @@ export default async function PaginaLotesDaCerveja({ params, searchParams }: Pag
         voltar={{ href: '/lotes', rotulo: 'Lotes e validades' }}
         acoes={
           <>
+            <ButtonLink href={`/lotes/${id}/balanco`} variante="escuro" tamanho="md">
+              <ClipboardCheck /> Balanço de estoque
+            </ButtonLink>
             <ActionButton acao={atualizarCervejaDaOlist.bind(null, id)} tamanho="md">
               <RefreshCw /> Atualizar da Olist
             </ActionButton>
@@ -69,6 +79,49 @@ export default async function PaginaLotesDaCerveja({ params, searchParams }: Pag
           </>
         }
       />
+
+      {concluido && (
+        <Alert tom="sucesso" titulo="Balanço concluído: o estoque da Olist foi atualizado" className="mb-4 lg:mb-6">
+          <p>
+            {concluido.estoqueAntes === null
+              ? `A Olist ficou com ${formatarNumero(concluido.total)} un.`
+              : concluido.estoqueAntes === concluido.total
+                ? `A Olist continua com ${formatarNumero(concluido.total)} un. (a contagem bateu).`
+                : `A Olist passou de ${formatarNumero(concluido.estoqueAntes)} para ${formatarNumero(concluido.total)} un.`}{' '}
+            Os lotes do CRM estão iguais à contagem.
+            {concluido.idLancamento ? ` Lançamento ${concluido.idLancamento} na Olist.` : ''} Feito por {concluido.autor ?? 'alguém da equipe'} em{' '}
+            {formatarDataHora(concluido.criadoEm)}.
+          </p>
+          {concluido.estoqueDepois !== null && concluido.estoqueDepois !== concluido.total && (
+            <p className="mt-1">
+              Na conferência, logo depois, a Olist mostrou {formatarNumero(concluido.estoqueDepois)} un. (pode ter saído uma venda no mesmo instante). O CRM
+              relê o estoque em até 5 minutos e registra no histórico.
+            </p>
+          )}
+          <p className="mt-2">
+            <ButtonLink href="/lotes" tamanho="sm">
+              <ScanBarcode /> Bipar a próxima cerveja
+            </ButtonLink>
+          </p>
+        </Alert>
+      )}
+      {aConferir && !concluido && (
+        <Alert
+          tom="alerta"
+          titulo={aConferir.situacao === 'conferir' ? 'O último balanço desta cerveja ficou sem confirmação' : 'Há um balanço desta cerveja em envio'}
+          className="mb-4 lg:mb-6"
+        >
+          <p>
+            {aConferir.situacao === 'conferir'
+              ? (aConferir.erro ?? 'Não foi possível confirmar o envio à Olist.')
+              : 'O envio começou e ainda não teve resposta. Se isto continuar por alguns minutos, confira o estoque na Olist antes de refazer o balanço.'}
+          </p>
+          <p className="mt-1 text-[12px]">
+            Balanço de {formatarNumero(aConferir.total)} un., por {aConferir.autor ?? 'alguém da equipe'}, em {formatarDataHora(aConferir.criadoEm)}. Confira
+            o estoque desta cerveja na Olist e refaça o balanço: enviar o mesmo número de novo não causa problema.
+          </p>
+        </Alert>
+      )}
 
       <div className="grid items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-6">
         <Card className="flex items-start gap-4 overflow-hidden p-4 lg:block lg:p-0">
@@ -123,7 +176,8 @@ export default async function PaginaLotesDaCerveja({ params, searchParams }: Pag
               <dd className="tipo-dado mt-1 break-all text-[14px]">{cerveja.sku}</dd>
             </div>
             <p className="border-t border-linha pt-3 text-[12px] leading-[18px] text-suave">
-              Cada venda na Olist baixa sozinha do lote que vence primeiro. Nada é enviado à Olist: lote e validade ficam só aqui no CRM.
+              Cada venda na Olist baixa sozinha do lote que vence primeiro. Lote e validade ficam só aqui no CRM; só o Balanço de estoque envia o número
+              contado para a Olist.
             </p>
           </dl>
         </Card>
@@ -132,7 +186,11 @@ export default async function PaginaLotesDaCerveja({ params, searchParams }: Pag
           <Card>
             <CardHeader
               titulo="Lotes e validades"
-              descricao={lotes.length ? resumoLotes : 'Cadastre o lote e a validade desta cerveja. Dá para lançar vários lotes de uma vez.'}
+              descricao={
+                lotes.length
+                  ? resumoLotes
+                  : 'Cadastre o lote e a validade das unidades que já estão na Olist. Para lançar estoque novo ou corrigir o número de lá, use o Balanço de estoque.'
+              }
             />
             <FormularioNovosLotes
               acao={adicionarLotes.bind(null, id)}
